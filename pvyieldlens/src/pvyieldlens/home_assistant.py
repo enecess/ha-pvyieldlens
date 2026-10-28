@@ -69,6 +69,8 @@ def parse_state(state: HAState, role: Literal['power', 'temperature', 'irradianc
 
 
 class HomeAssistantClient:
+    handshake_timeout = 20
+
     def __init__(self, base_url: str, token: str, http: httpx.AsyncClient | None = None):
         self.base_url = base_url.rstrip('/')
         parts = urlsplit(self.base_url)
@@ -107,7 +109,9 @@ class HomeAssistantClient:
         return states
 
     async def history(self, entities: list[str], start: float, end: float) -> list[HAState]:
-        stamp = datetime.fromtimestamp(start, timezone.utc).isoformat()
+        boundary = datetime.fromtimestamp(start, timezone.utc)
+        stamp = boundary.isoformat()
+        start = boundary.timestamp()
         result = TypeAdapter(list[list[HAState]]).validate_python(await self.request('GET', 'history/period/' + stamp, params={
             'filter_entity_id': ','.join(entities), 'end_time': datetime.fromtimestamp(end, timezone.utc).isoformat(),
             'significant_changes_only': '0',
@@ -120,17 +124,18 @@ class HomeAssistantClient:
 
     async def events(self):
         async with connect(self.websocket_url, open_timeout=20, max_size=8_388_608, proxy=None) as socket:
-            message = WSMessage.model_validate_json(await socket.recv())
-            if message.type != 'auth_required':
-                raise ValueError('ha_protocol_error')
-            await socket.send(json.dumps({'type': 'auth', 'access_token': self.token}))
-            message = WSMessage.model_validate_json(await socket.recv())
-            if message.type != 'auth_ok':
-                raise ValueError('ha_auth_failed')
-            await socket.send(json.dumps({'id': 1, 'type': 'subscribe_events', 'event_type': 'state_changed'}))
-            message = WSMessage.model_validate_json(await socket.recv())
-            if message.type != 'result' or not message.success:
-                raise ValueError('ha_subscription_failed')
+            async with asyncio.timeout(self.handshake_timeout):
+                message = WSMessage.model_validate_json(await socket.recv())
+                if message.type != 'auth_required':
+                    raise ValueError('ha_protocol_error')
+                await socket.send(json.dumps({'type': 'auth', 'access_token': self.token}))
+                message = WSMessage.model_validate_json(await socket.recv())
+                if message.type != 'auth_ok':
+                    raise ValueError('ha_auth_failed')
+                await socket.send(json.dumps({'id': 1, 'type': 'subscribe_events', 'event_type': 'state_changed'}))
+                message = WSMessage.model_validate_json(await socket.recv())
+                if message.type != 'result' or not message.success:
+                    raise ValueError('ha_subscription_failed')
             yield None
             async for raw in socket:
                 message = WSMessage.model_validate_json(raw)
@@ -163,7 +168,7 @@ def entity_payloads(snapshot):
         attributes = {
             'friendly_name': 'PVYieldLens ' + name.replace('_', ' ').title(),
             'unit_of_measurement': unit, 'state_class': 'total_increasing' if channel == 'energy' else 'measurement',
-            'calculated_at': snapshot['calculated_at'], 'configuration_revision': snapshot['revision'],
+            'calculated_at': snapshot['calculated_at'], 'configuration_revision': data.get('revision', snapshot['revision']),
             'sampling_method': 'state_hold',
             **{key: data[key] for key in ('start', 'end', 'valid_seconds', 'coverage_percent', 'quality', 'reason',
                                           'settled_until', 'day', 'timezone', 'daily_valid_seconds', 'total_valid_seconds') if key in data},

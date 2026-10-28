@@ -62,3 +62,17 @@ async def test_history_initial_state_keeps_original_age():
     history = await client.history(['sensor.power'], 1793145600, 1793146200)
     assert parse_state(history[0], 'power', historical=True)[0].at == 1793059200
     await http.aclose()
+
+
+async def test_fractional_history_boundary_does_not_create_a_fresh_sample():
+    initial = state(changed='2026-10-28T00:00:00.123457+00:00').model_dump(mode='json')
+    http = httpx.AsyncClient(transport=httpx.MockTransport(lambda request: httpx.Response(200,json=[[initial]])))
+    client = HomeAssistantClient('http://ha.test', 'secret', http=http)
+    assert await client.history(['sensor.power'], 1793145600.1234567, 1793145660) == []
+    await http.aclose()
+
+
+def test_statistics_keep_their_own_configuration_revision():
+    payloads = entity_payloads({'statistics':{'estimated_power':3720,'revision':1},
+        'realtime':None,'energy':{},'calculated_at':200,'revision':2})
+    assert payloads['sensor.pvyieldlens_estimated_power']['attributes']['configuration_revision'] == 1

@@ -79,6 +79,8 @@ REST 状态实体可供仪表盘和自动化引用，但没有完整设备／实
 
 历史补算修复本服务的曲线和累计值。REST 不能补写过去的 HA Recorder 时间戳，HA 会在重新发布时记录累计跃迁。HA 对 PR 的统计平均不是按电量加权的日 PR。
 
+断线期间修改统计参数会保存新的生效边界，恢复后按各时段对应的参数结算。切换 HA 地址会隔离同名实体的观测；切换前旧 HA 尚未采集到的缺口只保留为缺测，不会用新 HA 的历史代替。
+
 ## 数据、备份与升级
 
 `/data` 保存数据库，包含运行配置和 HA 凭据。Compose 使用 `pvyieldlens-data` 数据卷，App 的 `/data` 随 HA App 备份保存。备份时先停止容器，再复制整个数据卷／目录。
@@ -98,6 +100,8 @@ python3 -m venv .venv
 node --test tests/frontend.test.mjs
 docker build -t pvyieldlens:local pvyieldlens
 ```
+
+完整浏览器验证：安装 `requirements-browser.txt`，执行 `.venv/bin/python -m playwright install chromium`，再运行 `PVYL_BROWSER_TESTS=1 .venv/bin/pytest -q`。容器验证：构建 `pvyieldlens:dev` 后执行 `.venv/bin/python tests/container_smoke.py`，测试会创建并清理专用模拟 HA、应用容器、网络和数据卷。
 
 `tests/fake_ha.py` 仅用于本地模拟，不连接真实设备。设计和执行记录保留本地，不提交 `docs/superpowers/` 或 `.superpowers/`。
 

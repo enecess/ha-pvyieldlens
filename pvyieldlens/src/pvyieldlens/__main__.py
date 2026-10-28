@@ -15,6 +15,8 @@ def main():
         raise ValueError('invalid_log_level')
     logging.basicConfig(level=level.upper(), format='%(asctime)s %(levelname)s %(name)s: %(message)s')
     logging.getLogger('httpx').setLevel(logging.WARNING)
+    # Protocol debug frames include the authentication message.
+    logging.getLogger('websockets').setLevel(logging.WARNING)
     uvicorn.run('pvyieldlens.web:app_from_environment', factory=True, host='0.0.0.0', port=8099,
                 proxy_headers=False, access_log=False, log_level=level)
 

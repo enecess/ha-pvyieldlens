@@ -49,3 +49,42 @@ async def test_real_rest_websocket_collection_and_nine_outputs(tmp_path):
         await service.stop()
         assert published['sensor.pvyieldlens_realtime_pr']['state'] == 'unavailable'
         store.close()
+
+
+async def test_websocket_handshake_has_a_bounded_timeout():
+    from fastapi import FastAPI, WebSocket
+    stalled = FastAPI()
+
+    @stalled.websocket('/api/websocket')
+    async def socket_handler(websocket: WebSocket):
+        await websocket.accept()
+        await websocket.send_json({'type':'auth_required'})
+        await websocket.receive_json()
+        await websocket.receive()
+
+    async with fake_server(stalled) as url:
+        client = HomeAssistantClient(url, 'simulation-token')
+        client.handshake_timeout = 0.05
+        started = time.monotonic()
+        async with asyncio.timeout(2):
+            with pytest.raises(TimeoutError):
+                await anext(client.events())
+        assert time.monotonic() - started < 1
+        await client.close()
+
+
+async def test_debug_logging_does_not_include_websocket_access_token(monkeypatch, caplog):
+    import logging
+    from pvyieldlens.__main__ import main
+    monkeypatch.setenv('PVYL_LOG_LEVEL','debug')
+    monkeypatch.setattr('pvyieldlens.__main__.uvicorn.run', lambda *args, **kwargs: None)
+    caplog.set_level(logging.DEBUG)
+    main()
+    async with fake_server() as url:
+        client = HomeAssistantClient(url, 'simulation-token')
+        stream = client.events()
+        await anext(stream)
+        await stream.aclose()
+        await client.close()
+    transport_logs = '\n'.join(record.getMessage() for record in caplog.records if record.name.startswith('websockets'))
+    assert 'simulation-token' not in transport_logs

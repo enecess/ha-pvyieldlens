@@ -1,11 +1,20 @@
 import json
 import sqlite3
+from dataclasses import dataclass
 from datetime import datetime, time, timedelta
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
 from .engine import Observation, WindowResult
 from .settings import Settings
+
+
+@dataclass(frozen=True)
+class ConfigurationRevision:
+    revision: int
+    effective_at: float
+    settings: Settings
+    origin: str
 
 
 class Store:
@@ -17,10 +26,10 @@ class Store:
             PRAGMA journal_mode=WAL;
             CREATE TABLE IF NOT EXISTS metadata (key TEXT PRIMARY KEY, value TEXT NOT NULL);
             CREATE TABLE IF NOT EXISTS configs (
-                revision INTEGER PRIMARY KEY, effective_at REAL NOT NULL, settings TEXT NOT NULL);
+                revision INTEGER PRIMARY KEY, effective_at REAL NOT NULL, settings TEXT NOT NULL, origin TEXT NOT NULL);
             CREATE TABLE IF NOT EXISTS observations (
-                entity_id TEXT NOT NULL, at REAL NOT NULL, value REAL, reported_at REAL,
-                PRIMARY KEY(entity_id, at));
+                origin TEXT NOT NULL, entity_id TEXT NOT NULL, at REAL NOT NULL, value REAL, reported_at REAL,
+                PRIMARY KEY(origin, entity_id, at));
             CREATE INDEX IF NOT EXISTS observation_time ON observations(at);
             CREATE TABLE IF NOT EXISTS windows (
                 revision INTEGER NOT NULL, start REAL NOT NULL, end REAL NOT NULL, result TEXT NOT NULL,
@@ -56,26 +65,40 @@ class Store:
         row = self.db.execute("SELECT settings FROM configs ORDER BY revision DESC LIMIT 1").fetchone()
         return Settings.model_validate_json(row[0]) if row else None
 
-    def save_settings(self, settings: Settings, effective_at: float) -> int:
+    def save_settings(self, settings: Settings, effective_at: float, origin='') -> int:
         with self.db:
-            result = self.db.execute("INSERT INTO configs(effective_at, settings) VALUES (?,?)",
-                                     (effective_at, settings.model_dump_json()))
-            self.db.execute("INSERT OR REPLACE INTO metadata VALUES ('cursor', ?)", (str(effective_at),))
+            result = self.db.execute("INSERT INTO configs(effective_at, settings, origin) VALUES (?,?,?)",
+                                     (effective_at, settings.model_dump_json(), origin))
+            self.db.execute("INSERT OR IGNORE INTO metadata VALUES ('cursor', ?)", (str(effective_at),))
         return result.lastrowid
 
-    def add_observations(self, items: list[Observation]):
+    def update_realtime_settings(self, settings: Settings):
         with self.db:
-            self.db.executemany("INSERT OR REPLACE INTO observations VALUES (?,?,?,?)",
-                                [(item.entity_id, item.at, item.value, item.reported_at) for item in items])
+            self.db.execute('UPDATE configs SET settings=? WHERE revision=?', (settings.model_dump_json(), self.revision))
 
-    def observations(self, start: float, end: float) -> list[Observation]:
+    def configuration_history(self, start: float, end: float) -> list[ConfigurationRevision]:
+        rows = self.db.execute("""SELECT * FROM configs WHERE
+            revision=(SELECT revision FROM configs WHERE effective_at<=? ORDER BY effective_at DESC,revision DESC LIMIT 1)
+            OR (effective_at>? AND effective_at<=?) ORDER BY effective_at,revision""", (start, start, end))
+        return [ConfigurationRevision(row['revision'], row['effective_at'], Settings.model_validate_json(row['settings']), row['origin']) for row in rows]
+
+    def latest_origin(self) -> str:
+        row = self.db.execute('SELECT origin FROM configs ORDER BY revision DESC LIMIT 1').fetchone()
+        return row[0] if row else ''
+
+    def add_observations(self, items: list[Observation], origin=''):
+        with self.db:
+            self.db.executemany("INSERT OR REPLACE INTO observations VALUES (?,?,?,?,?)",
+                                [(origin, item.entity_id, item.at, item.value, item.reported_at) for item in items])
+
+    def observations(self, start: float, end: float, origin='') -> list[Observation]:
         rows = self.db.execute("""
-            SELECT * FROM observations WHERE at>=? AND at<=?
+            SELECT * FROM observations WHERE origin=? AND at>=? AND at<=?
             UNION ALL
-            SELECT * FROM observations WHERE (entity_id,at) IN
-                (SELECT entity_id, MAX(at) FROM observations WHERE at<? GROUP BY entity_id)
+            SELECT * FROM observations WHERE origin=? AND (entity_id,at) IN
+                (SELECT entity_id, MAX(at) FROM observations WHERE origin=? AND at<? GROUP BY entity_id)
             ORDER BY at
-        """, (start, end, start))
+        """, (origin, start, end, origin, origin, start))
         return [Observation(row['entity_id'], row['at'], row['value'], row['reported_at']) for row in rows]
 
     def settle(self, result: WindowResult, revision: int, timezone: str):
@@ -85,9 +108,10 @@ class Store:
         if self.cursor != result.start:
             raise ValueError("non_contiguous_settlement")
         zone = ZoneInfo(timezone)
+        public = {**result.public(), 'revision': revision}
         with self.db:
             self.db.execute("INSERT INTO windows VALUES (?,?,?,?)",
-                            (revision, result.start, result.end, json.dumps(result.public())))
+                            (revision, result.start, result.end, json.dumps(public)))
             for segment in result.segments:
                 left = segment.start
                 while left < segment.end:
@@ -104,7 +128,7 @@ class Store:
             self.db.execute("UPDATE metadata SET value=CAST(value AS REAL)+? WHERE key='valid_seconds'",
                             (result.valid_seconds,))
             self.db.execute("INSERT OR REPLACE INTO metadata VALUES ('cursor',?)", (str(result.end),))
-            self.db.execute("INSERT OR REPLACE INTO metadata VALUES ('latest_window',?)", (json.dumps(result.public()),))
+            self.db.execute("INSERT OR REPLACE INTO metadata VALUES ('latest_window',?)", (json.dumps(public),))
 
     def totals(self, now: float, timezone: str):
         day = datetime.fromtimestamp(now, ZoneInfo(timezone)).date().isoformat()

@@ -135,7 +135,7 @@ def create_app(service: Service, runtime: Runtime, run_background=True) -> FastA
             return JSONResponse({'error': 'connection_required'}, status_code=422)
         if run_background:
             await service.stop()
-        await service.configure(update.settings)
+        await service.configure(update.settings, origin=connection.url)
         if not runtime.supervisor_token:
             service.store.set_meta('connection', json.dumps({'url': connection.url, 'token': connection.token.get_secret_value()}))
         service.client = HomeAssistantClient(connection.url, connection.token.get_secret_value())
