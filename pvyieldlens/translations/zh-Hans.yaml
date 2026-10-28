@@ -1,0 +1,4 @@
+configuration:
+  log_level:
+    name: 日志等级
+    description: 修改日志等级后需要重启应用。

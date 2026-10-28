@@ -1,0 +1,22 @@
+name: PVYieldLens
+version: "0.1.0"
+slug: pvyieldlens
+description: Photovoltaic performance, aligned statistics and live smoothing
+url: https://github.com/enecess/ha-pvyieldlens
+arch:
+  - amd64
+  - aarch64
+startup: application
+boot: auto
+init: true
+stage: experimental
+homeassistant_api: true
+ingress: true
+ingress_port: 8099
+panel_icon: mdi:solar-power-variant
+panel_title: PVYieldLens
+panel_admin: true
+options:
+  log_level: info
+schema:
+  log_level: list(debug|info|warning|error)

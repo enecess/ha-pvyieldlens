@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  <title>PVYieldLens</title>
+  <link rel="stylesheet" href="static/style.css">
+  <script type="module" src="static/app.js"></script>
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="./"><span class="brand-mark" aria-hidden="true">☀</span><span>PVYield<span class="accent">Lens</span><small data-i18n="tagline">Solar performance, made clear</small></span></a>
+    <nav><button class="nav-button active" id="overview-tab" data-i18n="overview">Overview</button><button class="nav-button" id="settings-tab" data-i18n="settings">Settings</button></nav>
+    <span class="connection-badge" id="connection-state" role="status">…</span>
+  </header>
+  <main>
+    <div id="banner" class="banner" role="status" hidden></div>
+    <section id="dashboard">
+      <section id="setup-empty" class="empty-state" hidden><div class="empty-sun" aria-hidden="true">☀</div><h1 data-i18n="empty_setup">Connect your solar data</h1><p data-i18n="source_semantics"></p><button class="primary" id="open-settings" data-i18n="open_settings">Set up PVYieldLens</button></section>
+      <div class="section-heading"><div><p class="eyebrow">PVYIELDLENS / LIVE</p><h1 data-i18n="realtime">Live performance</h1><p class="muted" id="live-hint"></p></div><span class="muted" id="updated"></span></div>
+      <div class="metrics live-metrics">
+        <article class="metric"><span class="metric-label" data-i18n="estimated"></span><div><strong id="live-estimated">—</strong><span class="unit">W</span></div><span class="mini-line amber"></span></article>
+        <article class="metric"><span class="metric-label" data-i18n="actual"></span><div><strong id="live-actual">—</strong><span class="unit">W</span></div><span class="mini-line green"></span></article>
+        <article class="metric"><span class="metric-label" data-i18n="pr"></span><div><strong id="live-pr">—</strong><span class="unit">%</span></div><span class="muted" id="live-quality"></span></article>
+        <article class="metric"><span class="metric-label" data-i18n="opportunity"></span><div><strong id="live-opportunity">—</strong><span class="unit">W</span></div><span class="muted" id="live-coverage"></span></article>
+      </div>
+      <article class="panel live-panel"><div class="panel-heading"><h2 data-i18n="power_chart"></h2><div class="legend"><span class="amber-dot" data-i18n="estimated"></span><span class="green-dot" data-i18n="actual"></span></div></div><div class="chart" id="live-chart"></div><p class="muted" id="live-reason"></p></article>
+      <div class="section-heading"><div><p class="eyebrow">PVYIELDLENS / HISTORY</p><h2 data-i18n="statistics"></h2><p class="muted" id="statistics-hint"></p></div><select id="history-range" aria-label="History"><option value="1" data-i18n="last_24h"></option><option value="7" data-i18n="last_7d"></option><option value="30" data-i18n="last_30d"></option></select></div>
+      <div class="energy-grid"><article class="energy-card"><span data-i18n="daily"></span><div><strong id="daily-energy">—</strong><span class="unit">kWh</span></div></article><article class="energy-card"><span data-i18n="total"></span><div><strong id="total-energy">—</strong><span class="unit">kWh</span></div></article><article class="panel stat-summary"><div><span data-i18n="estimated"></span><strong id="stat-estimated">—</strong></div><div><span data-i18n="actual"></span><strong id="stat-actual">—</strong></div><div><span data-i18n="pr"></span><strong id="stat-pr">—</strong></div><p class="muted" id="stat-coverage"></p></article></div>
+      <p class="muted description" data-i18n="energy_help"></p>
+      <div class="history-grid"><article class="panel"><h3 data-i18n="power_chart"></h3><div class="chart" id="history-chart"></div></article><article class="panel"><h3 data-i18n="pr_chart"></h3><div class="chart" id="pr-chart"></div></article></div>
+      <div class="inline-notes"><span id="last-settled"></span><span data-i18n="stat_value_hint"></span></div>
+      <article class="panel quality-panel"><div class="panel-heading"><h2 data-i18n="quality"></h2><span class="muted" id="timezone-note"></span></div><div class="table-scroll"><table><thead><tr><th data-i18n="source"></th><th data-i18n="value"></th><th data-i18n="age"></th></tr></thead><tbody id="source-rows"></tbody></table></div></article>
+      <p class="muted description" data-i18n="recovery_note"></p>
+    </section>
+    <section id="configuration" hidden>
+      <div class="section-heading"><div><p class="eyebrow">PVYIELDLENS / CONFIGURATION</p><h1 data-i18n="settings"></h1></div><span class="muted" data-i18n="language_auto"></span></div>
+      <form id="settings-form">
+        <article class="panel form-section"><h2><span class="step">01</span><span data-i18n="connection"></span></h2><p id="app-connection-note" class="muted" data-i18n="app_connection" hidden></p><div class="form-grid" id="connection-fields"><label><span data-i18n="ha_url"></span><input id="ha-url" type="url" placeholder="http://homeassistant.local:8123" autocomplete="url"></label><label><span data-i18n="ha_token"></span><input id="ha-token" type="password" autocomplete="new-password"><small data-i18n="token_help"></small></label></div><button type="button" class="secondary" id="load-entities" data-i18n="connect"></button><span id="connection-result" role="status"></span></article>
+        <article class="panel form-section"><h2><span class="step">02</span><span data-i18n="solar"></span></h2><div class="form-grid"><label><span data-i18n="rated_power"></span><div class="input-unit"><input name="rated_power_w" type="number" min="1" max="1000000000" step="any" required><span>W</span></div></label><label><span data-i18n="coefficient"></span><div class="input-unit"><input name="temperature_coefficient_pct_per_c" type="number" min="-5" max="5" step="any" required><span>%/°C</span></div><small data-i18n="coef_help"></small><small id="coefficient-preview"></small></label></div></article>
+        <article class="panel form-section"><h2><span class="step">03</span><span data-i18n="inputs"></span></h2><p class="muted" data-i18n="source_semantics"></p><div class="form-grid three"><label><span data-i18n="power_source"></span><input name="power_entity" list="power-options" pattern="sensor\.[a-z0-9_]+" data-i18n-placeholder="select_source" required><datalist id="power-options"></datalist></label><label><span data-i18n="temp_source"></span><input name="temperature_entity" list="temperature-options" pattern="sensor\.[a-z0-9_]+" data-i18n-placeholder="select_source" required><datalist id="temperature-options"></datalist></label><label><span data-i18n="irr_source"></span><input name="irradiance_entity" list="irradiance-options" pattern="sensor\.[a-z0-9_]+" data-i18n-placeholder="select_source" required><datalist id="irradiance-options"></datalist></label></div></article>
+        <article class="panel form-section"><h2><span class="step">04</span><span data-i18n="timing"></span></h2><div class="form-grid three"><label><span data-i18n="interval"></span><div class="input-unit"><select name="interval_minutes"><option>1</option><option selected>5</option><option>10</option></select><span data-i18n="minutes"></span></div></label><label><span data-i18n="realtime_window"></span><div class="input-unit"><input name="realtime_window_seconds" type="number" min="10" max="3600" value="60" required><span>s</span></div></label><label><span data-i18n="update_interval"></span><div class="input-unit"><input name="update_seconds" type="number" min="1" max="60" value="5" required><span>s</span></div></label></div></article>
+        <details class="panel form-section"><summary data-i18n="advanced"></summary><p class="muted" data-i18n="hold_help"></p><div class="form-grid three"><label><span data-i18n="power_age"></span><input name="power_max_age_seconds" type="number" min="1" max="86400" value="300" required></label><label><span data-i18n="temp_age"></span><input name="temperature_max_age_seconds" type="number" min="1" max="86400" value="900" required></label><label><span data-i18n="irr_age"></span><input name="irradiance_max_age_seconds" type="number" min="1" max="86400" value="300" required></label></div></details>
+        <div class="form-actions"><span id="save-result" role="status"></span><button type="submit" class="primary" id="save-button" data-i18n="save"></button></div>
+      </form>
+    </section>
+  </main>
+  <footer><span>PVYieldLens <span class="muted">0.1.0</span></span><span data-i18n="language_auto"></span></footer>
+</body>
+</html>

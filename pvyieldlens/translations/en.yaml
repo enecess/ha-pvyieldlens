@@ -1,0 +1,4 @@
+configuration:
+  log_level:
+    name: Log level
+    description: Restart the app after changing the log level.

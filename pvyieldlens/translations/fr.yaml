@@ -1,0 +1,4 @@
+configuration:
+  log_level:
+    name: Niveau de journalisation
+    description: Redémarrez l’application après avoir modifié le niveau.

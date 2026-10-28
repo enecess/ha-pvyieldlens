@@ -1,0 +1,4 @@
+configuration:
+  log_level:
+    name: Livello di log
+    description: Riavvia l’app dopo aver modificato il livello di log.

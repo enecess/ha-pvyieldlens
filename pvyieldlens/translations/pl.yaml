@@ -1,0 +1,4 @@
+configuration:
+  log_level:
+    name: Poziom logowania
+    description: Po zmianie poziomu logowania uruchom aplikację ponownie.

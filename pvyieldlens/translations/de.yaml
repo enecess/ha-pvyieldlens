@@ -1,0 +1,4 @@
+configuration:
+  log_level:
+    name: Protokollstufe
+    description: Nach Änderung der Protokollstufe die App neu starten.

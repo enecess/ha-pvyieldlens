@@ -1,0 +1,16 @@
+services:
+  pvyieldlens:
+    build: ./pvyieldlens
+    image: pvyieldlens:local
+    restart: unless-stopped
+    init: true
+    ports:
+      - "127.0.0.1:8099:8099"
+    environment:
+      PVYL_WEB_PASSWORD: ${PVYL_WEB_PASSWORD:?Set PVYL_WEB_PASSWORD in .env}
+      PVYL_HA_URL: ${PVYL_HA_URL:-}
+      PVYL_HA_TOKEN: ${PVYL_HA_TOKEN:-}
+    volumes:
+      - pvyieldlens-data:/data
+volumes:
+  pvyieldlens-data:
