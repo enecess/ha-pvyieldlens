@@ -16,9 +16,19 @@ Confronta la potenza prevista e quella effettiva dei pannelli. Segui il PR e l�
 
 ### App Home Assistant
 
-1. Copia la cartella `pvyieldlens` in `/addons/pvyieldlens` sul dispositivo Home Assistant.
-2. Ricarica l’elenco delle app locali nello store, poi installa e avvia **PVYieldLens**.
+Per Home Assistant OS.
+
+[![Aggiungi il repository di app PVYieldLens](https://my.home-assistant.io/badges/supervisor_add_addon_repository.svg)](https://my.home-assistant.io/redirect/supervisor_add_addon_repository/?repository_url=https%3A%2F%2Fgithub.com%2Fenecess%2Fha-pvyieldlens)
+
+1. Premi il pulsante qui sopra e conferma **Aggiungi** in Home Assistant.
+2. Trova **PVYieldLens** nello store delle app, poi installa e avvia l’app.
 3. Apri la pagina Web e vai in **Impostazioni** per scegliere i sensori e inserire i dati dei pannelli.
+
+Se il pulsante non apre Home Assistant, vai in **Impostazioni > App > Installa app > menu in alto a destra > Repository** e aggiungi:
+
+```text
+https://github.com/enecess/ha-pvyieldlens
+```
 
 ### Docker
 

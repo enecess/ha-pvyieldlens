@@ -16,9 +16,19 @@
 
 ### Home Assistant App
 
-1. 将仓库中的 `pvyieldlens` 文件夹复制到 Home Assistant 主机的 `/addons/pvyieldlens`。
-2. 在 App 商店重新加载本地应用列表，安装并启动 **PVYieldLens**。
+适用于 Home Assistant OS。
+
+[![添加 PVYieldLens 应用仓库](https://my.home-assistant.io/badges/supervisor_add_addon_repository.svg)](https://my.home-assistant.io/redirect/supervisor_add_addon_repository/?repository_url=https%3A%2F%2Fgithub.com%2Fenecess%2Fha-pvyieldlens)
+
+1. 点击上方按钮，在 Home Assistant 中确认**添加**。
+2. 在应用商店找到 **PVYieldLens**，安装并启动。
 3. 打开 Web 页面，在**设置**中选择传感器并填写组件参数。
+
+如果按钮无法打开 Home Assistant，请前往**设置 > 应用 > 安装应用 > 右上角菜单 > 仓库**，添加：
+
+```text
+https://github.com/enecess/ha-pvyieldlens
+```
 
 ### Docker
 

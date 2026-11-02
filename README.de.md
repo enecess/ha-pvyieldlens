@@ -16,9 +16,19 @@ Vergleichen Sie die erwartete und die tatsächliche Leistung Ihrer Solarmodule. 
 
 ### Home Assistant App
 
-1. Kopieren Sie den Ordner `pvyieldlens` nach `/addons/pvyieldlens` auf Ihrem Home-Assistant-Gerät.
-2. Laden Sie die Liste der lokalen Apps im App Store neu. Installieren und starten Sie **PVYieldLens**.
+Für Home Assistant OS.
+
+[![PVYieldLens-App-Repository hinzufügen](https://my.home-assistant.io/badges/supervisor_add_addon_repository.svg)](https://my.home-assistant.io/redirect/supervisor_add_addon_repository/?repository_url=https%3A%2F%2Fgithub.com%2Fenecess%2Fha-pvyieldlens)
+
+1. Klicken Sie auf die Schaltfläche oben und bestätigen Sie **Hinzufügen** in Home Assistant.
+2. Suchen Sie **PVYieldLens** im App Store, installieren und starten Sie die App.
 3. Öffnen Sie die Web-Seite und wählen Sie unter **Einstellungen** Ihre Sensoren und Modulwerte.
+
+Falls die Schaltfläche Home Assistant nicht öffnet, gehen Sie zu **Einstellungen > Apps > App installieren > Menü oben rechts > Repositories** und fügen Sie diese Adresse hinzu:
+
+```text
+https://github.com/enecess/ha-pvyieldlens
+```
 
 ### Docker
 

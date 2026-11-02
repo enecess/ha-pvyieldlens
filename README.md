@@ -16,9 +16,19 @@ Compare your solar panels’ expected and actual output, follow PR, and see expe
 
 ### Home Assistant App
 
-1. Copy the `pvyieldlens` folder to `/addons/pvyieldlens` on your Home Assistant host.
-2. Reload the local apps list in the App store, then install and start **PVYieldLens**.
+For Home Assistant OS.
+
+[![Add the PVYieldLens App repository](https://my.home-assistant.io/badges/supervisor_add_addon_repository.svg)](https://my.home-assistant.io/redirect/supervisor_add_addon_repository/?repository_url=https%3A%2F%2Fgithub.com%2Fenecess%2Fha-pvyieldlens)
+
+1. Click the button above and confirm **Add** in Home Assistant.
+2. Find **PVYieldLens** in the App store, then install and start it.
 3. Open the Web UI and go to **Settings** to choose your sensors and enter your panel details.
+
+If the button does not open Home Assistant, go to **Settings > Apps > Install app > top-right menu > Repositories** and add:
+
+```text
+https://github.com/enecess/ha-pvyieldlens
+```
 
 ### Docker
 

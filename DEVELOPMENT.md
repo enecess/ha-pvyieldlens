@@ -9,6 +9,14 @@
 
 The service uses Python 3.13+, FastAPI and SQLite. The browser uses native JavaScript and SVG, with no build step or external CDN.
 
+## App repository distribution
+
+The source-build repository structure is already in place: `repository.yaml` provides root metadata, and `pvyieldlens/config.yaml` and `pvyieldlens/Dockerfile` define the App. The config omits `image`, so Supervisor builds the Dockerfile during installation. See the official [repository guide](https://contributors.home-assistant.io/apps/guides/repository/) and [App file reference](https://contributors.home-assistant.io/apps/reference/files/).
+
+For a public release, publish the complete tracked App files to the default `main` branch and make the Git repository readable to Home Assistant devices. The stable repository URL is `https://github.com/enecess/ha-pvyieldlens`. A `#branch` suffix can be used for testing, but Supervisor treats it as a separate repository and App identity.
+
+For local development, copy `pvyieldlens` to `/addons/pvyieldlens` on the Home Assistant OS host, reload the local Apps list in the App store, then install and start PVYieldLens. Apps are supported on Home Assistant OS; Home Assistant Container users run the independent Docker service. See [Apps and integrations](https://www.home-assistant.io/docs/apps-and-integrations/). Live installation on Home Assistant OS, including ARM hardware, remains untested.
+
 ## Run checks
 
 Run builds and tests in the WSL copy under `/dev-tmp`. From WSL:
