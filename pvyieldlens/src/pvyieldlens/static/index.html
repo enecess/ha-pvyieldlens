@@ -13,7 +13,10 @@
     <a class="brand" href="./">PVYieldLens</a>
     <nav><button class="nav-button active" id="overview-tab" data-i18n="overview">Overview</button><button class="nav-button" id="settings-tab" data-i18n="settings">Settings</button></nav>
     <span class="connection-badge" id="connection-state" role="status">…</span>
-    <select id="language-select" aria-label="Language"><option value="auto" data-i18n="auto">Auto</option><option value="en">English</option><option value="zh">中文</option><option value="fr">Français</option><option value="de">Deutsch</option><option value="pl">Polski</option><option value="it">Italiano</option></select>
+    <label class="language-picker">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M3 5h12M9 3v2M5 5c1 5 4 8 9 10M13 5c-1 5-4 8-9 10M13 21l4.5-11L22 21M15 17h5"/></svg>
+      <select id="language-select" aria-label="Language"><option value="auto" data-i18n="auto">Auto</option><option value="en">English</option><option value="zh">中文</option><option value="fr">Français</option><option value="de">Deutsch</option><option value="pl">Polski</option><option value="it">Italiano</option></select>
+    </label>
   </header>
   <main>
     <div id="banner" class="banner" role="status" hidden></div>

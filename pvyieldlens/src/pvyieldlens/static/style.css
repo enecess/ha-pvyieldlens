@@ -25,7 +25,9 @@ nav { display: flex; gap: 4px; margin-left: auto; }
 .connection-badge { display: flex; align-items: center; gap: 7px; font-size: 12px; color: var(--muted); }
 .connection-badge::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: #9b6a17; flex-shrink: 0; }
 .connection-badge.online::before { background: #298251; }
-#language-select { width: 148px; flex-shrink: 0; font-size: 13px; }
+.language-picker { position: relative; width: 168px; flex-shrink: 0; }
+.language-picker svg { position: absolute; left: 10px; top: 50%; transform: translateY(-50%); width: 18px; height: 18px; color: var(--muted); pointer-events: none; }
+#language-select { width: 100%; padding-left: 36px; font-size: 13px; }
 main { max-width: 1248px; margin: auto; padding: 28px 24px 20px; }
 .section-heading { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin: 8px 0 18px; }
 .section-heading:not(:first-child) { margin-top: 30px; }
@@ -115,7 +117,7 @@ footer .muted { font-size: inherit; }
 @media (max-width: 600px) {
   .topbar { flex-wrap: wrap; gap: 12px; padding: 14px 16px; }
   .brand { font-size: 20px; }
-  #language-select { order: 1; margin-left: auto; width: 144px; }
+  .language-picker { order: 1; margin-left: auto; width: 160px; }
   nav { order: 2; margin: 0; flex: 1; }
   .connection-badge { order: 3; font-size: 11px; }
   .nav-button { padding: 9px 12px; }
@@ -140,4 +142,8 @@ footer .muted { font-size: inherit; }
   .form-actions button { width: 100%; }
   .quality-panel td { font-size: 12px; }
   footer { margin-left: 16px; margin-right: 16px; }
+}
+@media (max-width: 360px) {
+  .topbar { column-gap: 8px; }
+  .brand { font-size: 18px; }
 }
