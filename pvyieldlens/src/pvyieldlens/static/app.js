@@ -1,8 +1,15 @@
-import { languages, selectLanguage, translate, formatCoefficient } from './i18n.js';
+import { languages, selectLanguage, translate } from './i18n.js';
 
 const catalogs = Object.fromEntries(await Promise.all(languages.map(async language => [language,
   await (await fetch(`static/locales/${language}.json`)).json()])));
-let language = selectLanguage(navigator.languages?.length ? navigator.languages : [navigator.language || 'en']);
+let languageChoice = 'auto';
+try {
+  const saved = localStorage.getItem('pvyieldlens.language');
+  if (languages.includes(saved)) languageChoice = saved;
+} catch {
+  // Language selection still works when browser storage is disabled.
+}
+let language = selectLanguage(navigator.languages?.length ? navigator.languages : [navigator.language || 'en'], languageChoice);
 let configuration = null;
 let snapshot = null;
 let history = [];
@@ -36,19 +43,20 @@ function showPage(settings) {
   el('settings-tab').classList.toggle('active', settings);
 }
 
+function showMessage(id, key) {
+  const node = el(id);
+  node.dataset.i18n = key;
+  node.textContent = t(key);
+}
+
 function applyLanguage() {
   document.documentElement.lang = language;
   document.querySelectorAll('[data-i18n]').forEach(node => { node.textContent = t(node.dataset.i18n); });
   document.querySelectorAll('[data-i18n-placeholder]').forEach(node => { node.placeholder = t(node.dataset.i18nPlaceholder); });
   el('history-range').setAttribute('aria-label', t('history'));
-  updateCoefficient();
+  el('language-select').setAttribute('aria-label', t('language'));
+  el('language-select').value = languageChoice;
   render();
-}
-
-function updateCoefficient() {
-  const input = form.elements.namedItem('temperature_coefficient_pct_per_c');
-  el('coefficient-preview').textContent = Number.isFinite(input.valueAsNumber)
-    ? t('coefficient_preview', { value: formatCoefficient(input.valueAsNumber, language) }) : '';
 }
 
 function plot(id, data, series, unit) {
@@ -113,7 +121,7 @@ function plot(id, data, series, unit) {
   host.append(svg);
 }
 
-const powerSeries = [{key:'estimated_power',label:'estimated',color:'#f5ca77'}, {key:'actual_power',label:'actual',color:'#82ddb3'}];
+const powerSeries = [{key:'estimated_power',label:'estimated',color:'#b65f00'}, {key:'actual_power',label:'actual',color:'#2563c6'}];
 
 function render() {
   const settings = configuration?.settings;
@@ -154,7 +162,7 @@ function render() {
   plot('live-chart', livePoints, powerSeries, 'W');
   const data = history.map(point => ({...point, at:point.end}));
   plot('history-chart', data, powerSeries, 'W');
-  plot('pr-chart', data, [{key:'pr',label:'pr',color:'#82ddb3'}], '%');
+  plot('pr-chart', data, [{key:'pr',label:'pr',color:'#2563c6'}], '%');
 }
 
 async function loadConfiguration() {
@@ -168,7 +176,6 @@ async function loadConfiguration() {
   }
   el('connection-fields').hidden = configuration.mode === 'app';
   el('app-connection-note').hidden = configuration.mode !== 'app';
-  updateCoefficient();
   render();
 }
 
@@ -200,19 +207,30 @@ async function poll() {
 el('overview-tab').addEventListener('click', () => showPage(false));
 el('settings-tab').addEventListener('click', () => showPage(true));
 el('open-settings').addEventListener('click', () => showPage(true));
-form.addEventListener('input', () => { formDirty = true; updateCoefficient(); });
+form.addEventListener('input', () => { formDirty = true; });
 el('history-range').addEventListener('change', async () => {
   try { await fetchHistory(); render(); } catch (error) { el('banner').hidden = false; el('banner').textContent=t(error.message); }
 });
 window.addEventListener('languagechange', () => {
-  language = selectLanguage(navigator.languages?.length ? navigator.languages : [navigator.language || 'en']);
+  language = selectLanguage(navigator.languages?.length ? navigator.languages : [navigator.language || 'en'], languageChoice);
+  applyLanguage();
+});
+el('language-select').addEventListener('change', event => {
+  languageChoice = event.target.value;
+  try {
+    if (languageChoice === 'auto') localStorage.removeItem('pvyieldlens.language');
+    else localStorage.setItem('pvyieldlens.language', languageChoice);
+  } catch {
+    // Keep the current choice for this page when storage is unavailable.
+  }
+  language = selectLanguage(navigator.languages?.length ? navigator.languages : [navigator.language || 'en'], languageChoice);
   applyLanguage();
 });
 
 el('load-entities').addEventListener('click', async () => {
   const button = el('load-entities');
   button.disabled = true;
-  el('connection-result').textContent = t('connecting');
+  showMessage('connection-result', 'connecting');
   try {
     const result = await api('connection', {method:'POST',body:JSON.stringify(configuration?.mode === 'app' ? null : {url:el('ha-url').value,token:el('ha-token').value})});
     for (const [role, units] of Object.entries({power:['W','kW'],temperature:['°C','°F','K'],irradiance:['W/m²','W/m2','W/m^2','kW/m²','kW/m2']})) {
@@ -221,24 +239,24 @@ el('load-entities').addEventListener('click', async () => {
       }));
     }
     configuration = {...configuration, settings:configuration?.settings || null, detectedTimezone:result.timezone};
-    el('connection-result').textContent=t('connected');
-  } catch (error) { el('connection-result').textContent=t(error.message); }
+    showMessage('connection-result', 'connected');
+  } catch (error) { showMessage('connection-result', error.message); }
   finally { button.disabled=false; }
 });
 
 form.addEventListener('submit', async event => {
   event.preventDefault();
-  const button=el('save-button'); button.disabled=true; button.textContent=t('saving');
+  const button=el('save-button'); button.disabled=true; showMessage('save-button', 'saving');
   form.querySelectorAll('[aria-invalid]').forEach(input => input.removeAttribute('aria-invalid'));
   const settings=Object.fromEntries([...new FormData(form)].map(([key,value]) => [key,key.endsWith('_entity') ? value.trim() : Number(value)]));
   settings.timezone=configuration?.detectedTimezone || configuration?.settings?.timezone || 'UTC';
   try {
     configuration=await api('config',{method:'PUT',body:JSON.stringify({settings,...(configuration?.mode==='app' ? {} : {connection:{url:el('ha-url').value,token:el('ha-token').value}})})});
-    formDirty=false; el('ha-token').value=''; el('save-result').textContent=t('saved'); livePoints=[]; lastHistoryFetch=0; render();
+    formDirty=false; el('ha-token').value=''; showMessage('save-result', 'saved'); livePoints=[]; lastHistoryFetch=0; render();
   } catch (error) {
-    el('save-result').textContent=t(error.message);
+    showMessage('save-result', error.message);
     error.fields?.forEach(field => { const input=form.elements.namedItem(field.replace(/^settings\./,'')); if(input) input.setAttribute('aria-invalid','true'); });
-  } finally { button.disabled=false; button.textContent=t('save'); }
+  } finally { button.disabled=false; showMessage('save-button', 'save'); }
 });
 
 applyLanguage();

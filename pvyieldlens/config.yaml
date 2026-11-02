@@ -1,7 +1,7 @@
 name: PVYieldLens
 version: "0.1.0"
 slug: pvyieldlens
-description: Photovoltaic performance, aligned statistics and live smoothing
+description: Compare expected and actual solar power
 url: https://github.com/enecess/ha-pvyieldlens
 arch:
   - amd64

@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
-import { selectLanguage, translate, formatCoefficient } from '../pvyieldlens/src/pvyieldlens/static/i18n.js';
+import { selectLanguage, translate } from '../pvyieldlens/src/pvyieldlens/static/i18n.js';
 
 test('selects supported preferences and regional variants with English fallback', () => {
   assert.equal(selectLanguage(['es-ES', 'de-AT']), 'de');
@@ -13,13 +13,14 @@ test('selects supported preferences and regional variants with English fallback'
   assert.equal(selectLanguage([]), 'en');
 });
 
-test('falls back per key without showing untranslated keys', () => {
-  assert.equal(translate({en:{hello:'Hello {name}'}, de:{}}, 'de','hello',{name:'Ada'}), 'Hello Ada');
+test('manual language takes priority until automatic mode is selected', () => {
+  assert.equal(selectLanguage(['de-DE'], 'fr'), 'fr');
+  assert.equal(selectLanguage(['de-DE'], 'auto'), 'de');
+  assert.equal(selectLanguage(['de-DE'], 'unknown'), 'de');
 });
 
-test('coefficient formatting does not multiply datasheet percent by 100', () => {
-  assert.equal(formatCoefficient(-0.35, 'en'), '-0.35 %/°C');
-  assert.equal(formatCoefficient(-0.35, 'de'), '-0,35 %/°C');
+test('falls back per key without showing untranslated keys', () => {
+  assert.equal(translate({en:{hello:'Hello {name}'}, de:{}}, 'de','hello',{name:'Ada'}), 'Hello Ada');
 });
 
 test('all six catalogs provide complete matching placeholders', async () => {
