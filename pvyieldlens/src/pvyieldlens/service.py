@@ -5,7 +5,6 @@ from contextlib import suppress
 from dataclasses import replace
 
 import httpx
-from pydantic import ValidationError
 from websockets.exceptions import WebSocketException
 
 from .engine import calculate
@@ -14,7 +13,7 @@ from .settings import Settings
 from .storage import Store
 
 LOGGER = logging.getLogger(__name__)
-NETWORK_ERRORS = (httpx.HTTPError, WebSocketException, OSError, TimeoutError, ValidationError, ValueError)
+NETWORK_ERRORS = (httpx.HTTPError, WebSocketException, OSError, ValueError)
 
 
 class Service:
@@ -38,6 +37,8 @@ class Service:
         now = time.time() if now is None else now
         origin = self.origin if origin is None else origin
         async with self.lock:
+            if self.config and self.config.timezone != config.timezone:
+                self.store.rebuild_day(now, config.timezone)
             realtime_fields = {'realtime_window_seconds', 'update_seconds'}
             realtime_only = self.config and origin == self.origin and self.config.model_dump(exclude=realtime_fields) == config.model_dump(exclude=realtime_fields)
             if realtime_only:
@@ -51,7 +52,7 @@ class Service:
             self.realtime = None
             self._recovery_needed = True
 
-    async def _settle(self, now: float, partial=False):
+    async def _settle(self, now: float):
         cursor = self.store.cursor
         periods = self.store.configuration_history(cursor, now)
         for index, period in enumerate(periods):
@@ -59,11 +60,11 @@ class Service:
             step = period.settings.interval_minutes * 60
             while cursor < limit:
                 boundary = (int(cursor // step) + 1) * step
-                if boundary > limit and index == len(periods)-1 and not partial:
+                if boundary > limit and index == len(periods)-1:
                     break
                 end = min(boundary, limit)
-                result = calculate(period.settings, self.store.observations(cursor, end, period.origin), cursor, end)
-                self.store.settle(result, period.revision, period.settings.timezone)
+                result = calculate(period.settings, self.store.observations(cursor, end, period.settings.entities, period.origin), cursor, end)
+                self.store.settle(result, period.revision, self.config.timezone)
                 cursor = end
                 await asyncio.sleep(0)
 
@@ -73,7 +74,7 @@ class Service:
             if not self.config:
                 return
             await self._settle(now)
-            observations = self.store.observations(now - self.config.realtime_window_seconds, now, self.origin)
+            observations = self.store.observations(now - self.config.realtime_window_seconds, now, self.config.entities, self.origin)
             result = calculate(self.config, observations, now - self.config.realtime_window_seconds, now)
             current = calculate(self.config, observations, now, now + 0.0001)
             if not current.valid_seconds:
@@ -113,6 +114,7 @@ class Service:
         if not self.client or not self.config:
             return
         now = time.time()
+        self.history_available = True
         periods = self.store.configuration_history(self.store.cursor, now)
         for index, period in enumerate(periods):
             if period.origin != self.origin:

@@ -96,31 +96,26 @@ class HomeAssistantClient:
     async def states(self, entities: tuple[str, ...] | None = None) -> list[HAState]:
         if entities is None:
             return TypeAdapter(list[HAState]).validate_python(await self.request('GET', 'states'))
-        states = []
-        for entity in entities:
-            response = await self.http.get(self.base_url + '/api/states/' + entity,
-                                          headers={'Authorization': 'Bearer ' + self.token})
-            if response.status_code == 404:
-                now = datetime.now(timezone.utc)
-                states.append(HAState(entity_id=entity, state='unavailable', last_changed=now, last_updated=now))
-            else:
-                response.raise_for_status()
-                states.append(HAState.model_validate(response.json()))
-        return states
+        # State.as_dict JSON is cached across unchanged reports; read live fields atomically.
+        result = TypeAdapter(list[HAState | None]).validate_python(await self.request('POST', 'template', json={
+            'template': '''[{% for entity in entities %}{% set s = states[entity] %}
+                {% if s is not none %}{{ dict(entity_id=s.entity_id, state=s.state, attributes=dict(s.attributes),
+                    last_changed=s.last_changed.isoformat(), last_updated=s.last_updated.isoformat(),
+                    last_reported=s.last_reported.isoformat()) | to_json }}{% else %}null{% endif %}
+                {% if not loop.last %},{% endif %}{% endfor %}]''',
+            'variables': {'entities': entities},
+        }))
+        now = datetime.now(timezone.utc)
+        return [state or HAState(entity_id=entity, state='unavailable', last_changed=now, last_updated=now)
+                for entity, state in zip(entities, result, strict=True)]
 
     async def history(self, entities: list[str], start: float, end: float) -> list[HAState]:
-        boundary = datetime.fromtimestamp(start, timezone.utc)
-        stamp = boundary.isoformat()
-        start = boundary.timestamp()
+        stamp = datetime.fromtimestamp(start, timezone.utc).isoformat()
         result = TypeAdapter(list[list[HAState]]).validate_python(await self.request('GET', 'history/period/' + stamp, params={
             'filter_entity_id': ','.join(entities), 'end_time': datetime.fromtimestamp(end, timezone.utc).isoformat(),
-            'significant_changes_only': '0',
+            'significant_changes_only': '0', 'skip_initial_state': '1',
         }))
-        # Recorder may synthesize an initial state at the query boundary.
-        return [state.model_copy(update={'last_updated': state.last_changed})
-                if index == 0 and state.last_updated.timestamp() == start else state
-                for group in result for index, state in enumerate(group)
-                if not (index == 0 and state.last_updated.timestamp() == start and state.last_changed.timestamp() >= start)]
+        return [state for group in result for state in group]
 
     async def events(self):
         async with connect(self.websocket_url, open_timeout=20, max_size=8_388_608, proxy=None) as socket:
@@ -171,7 +166,8 @@ def entity_payloads(snapshot):
             'calculated_at': snapshot['calculated_at'], 'configuration_revision': data.get('revision', snapshot['revision']),
             'sampling_method': 'state_hold',
             **{key: data[key] for key in ('start', 'end', 'valid_seconds', 'coverage_percent', 'quality', 'reason',
-                                          'settled_until', 'day', 'timezone', 'daily_valid_seconds', 'total_valid_seconds') if key in data},
+                                          'settled_until', 'day', 'timezone', 'daily_valid_seconds', 'total_valid_seconds',
+                                          'daily_complete') if key in data},
         }
         if device_class:
             attributes['device_class'] = device_class

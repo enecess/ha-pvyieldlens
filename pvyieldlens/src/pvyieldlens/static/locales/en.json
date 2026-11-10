@@ -27,11 +27,10 @@
   "value": "Value",
   "age": "Last update",
   "coverage": "Data completeness",
-  "seconds": "seconds",
   "connection": "Home Assistant connection",
   "ha_url": "Home Assistant URL",
   "ha_token": "Long-lived access token",
-  "token_help": "Leave blank to keep the saved token.",
+  "token_help": "Leave blank to reuse the saved token for the same URL. Enter a token when changing the URL.",
   "connect": "Load sensors",
   "connecting": "Connecting…",
   "connected": "Connection verified",
@@ -58,7 +57,6 @@
   "saving": "Saving…",
   "saved": "Configuration saved",
   "error": "Something went wrong. Please retry.",
-  "no_data": "No valid data yet",
   "partial": "Some data missing",
   "complete": "Data complete",
   "unavailable": "Unavailable",
@@ -83,5 +81,6 @@
   "plot_empty": "Waiting for data.",
   "stat_value_hint": "Missing readings are left out of the average.",
   "language": "Language",
+  "daily_energy_incomplete": "Today's energy is incomplete: older periods cannot be split at the new midnight.",
   "auto": "Auto"
 }

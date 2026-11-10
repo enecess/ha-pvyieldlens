@@ -34,12 +34,18 @@ class Store:
             CREATE TABLE IF NOT EXISTS windows (
                 revision INTEGER NOT NULL, start REAL NOT NULL, end REAL NOT NULL, result TEXT NOT NULL,
                 PRIMARY KEY(revision, start, end));
+            CREATE TABLE IF NOT EXISTS window_segments (
+                revision INTEGER NOT NULL, start REAL NOT NULL, end REAL NOT NULL, segments TEXT NOT NULL,
+                PRIMARY KEY(revision, start, end));
             CREATE TABLE IF NOT EXISTS days (
                 timezone TEXT NOT NULL, day TEXT NOT NULL, energy_wh REAL NOT NULL, valid_seconds REAL NOT NULL,
+                complete INTEGER NOT NULL DEFAULT 1,
                 PRIMARY KEY(timezone, day));
             INSERT OR IGNORE INTO metadata VALUES ('total_wh', '0');
             INSERT OR IGNORE INTO metadata VALUES ('valid_seconds', '0');
         """)
+        if 'complete' not in {row['name'] for row in self.db.execute('PRAGMA table_info(days)')}:
+            self.db.execute('ALTER TABLE days ADD COLUMN complete INTEGER NOT NULL DEFAULT 1')
 
     def close(self):
         self.db.close()
@@ -91,14 +97,18 @@ class Store:
             self.db.executemany("INSERT OR REPLACE INTO observations VALUES (?,?,?,?,?)",
                                 [(origin, item.entity_id, item.at, item.value, item.reported_at) for item in items])
 
-    def observations(self, start: float, end: float, origin='') -> list[Observation]:
+    def observations(self, start: float, end: float, entities: tuple[str, str, str], origin='') -> list[Observation]:
         rows = self.db.execute("""
-            SELECT * FROM observations WHERE origin=? AND at>=? AND at<=?
+            WITH sources(entity_id) AS (VALUES (?),(?),(?))
+            SELECT * FROM observations WHERE origin=? AND entity_id IN (SELECT entity_id FROM sources)
+                AND at>=? AND at<=?
             UNION ALL
-            SELECT * FROM observations WHERE origin=? AND (entity_id,at) IN
-                (SELECT entity_id, MAX(at) FROM observations WHERE origin=? AND at<? GROUP BY entity_id)
-            ORDER BY at
-        """, (origin, start, end, origin, origin, start))
+            SELECT observation.* FROM sources JOIN observations AS observation
+                ON observation.origin=? AND observation.entity_id=sources.entity_id
+                AND observation.at=(SELECT MAX(previous.at) FROM observations AS previous
+                    WHERE previous.origin=? AND previous.entity_id=sources.entity_id AND previous.at<?)
+            ORDER BY at,entity_id
+        """, (*entities, origin, start, end, origin, origin, start))
         return [Observation(row['entity_id'], row['at'], row['value'], row['reported_at']) for row in rows]
 
     def settle(self, result: WindowResult, revision: int, timezone: str):
@@ -109,19 +119,26 @@ class Store:
             raise ValueError("non_contiguous_settlement")
         zone = ZoneInfo(timezone)
         public = {**result.public(), 'revision': revision}
+        detail = []
+        for segment in result.segments:
+            if detail and detail[-1][1] == segment.start and detail[-1][2] == segment.estimated_power:
+                detail[-1][1] = segment.end
+            else:
+                detail.append([segment.start, segment.end, segment.estimated_power])
         with self.db:
             self.db.execute("INSERT INTO windows VALUES (?,?,?,?)",
                             (revision, result.start, result.end, json.dumps(public)))
-            for segment in result.segments:
-                left = segment.start
-                while left < segment.end:
+            self.db.execute('INSERT INTO window_segments VALUES (?,?,?,?)',
+                            (revision, result.start, result.end, json.dumps(detail, separators=(',', ':'))))
+            for left, end, power in detail:
+                while left < end:
                     day = datetime.fromtimestamp(left, zone).date()
                     midnight = datetime.combine(day + timedelta(days=1), time(), zone).timestamp()
-                    right = min(segment.end, midnight)
-                    self.db.execute("""INSERT INTO days VALUES (?,?,?,?)
+                    right = min(end, midnight)
+                    self.db.execute("""INSERT INTO days(timezone,day,energy_wh,valid_seconds) VALUES (?,?,?,?)
                         ON CONFLICT(timezone,day) DO UPDATE SET
                         energy_wh=energy_wh+excluded.energy_wh, valid_seconds=valid_seconds+excluded.valid_seconds""",
-                        (timezone, day.isoformat(), segment.estimated_power * (right-left) / 3600, right-left))
+                        (timezone, day.isoformat(), power * (right-left) / 3600, right-left))
                     left = right
             self.db.execute("UPDATE metadata SET value=CAST(value AS REAL)+? WHERE key='total_wh'",
                             (result.estimated_energy_wh,))
@@ -130,11 +147,37 @@ class Store:
             self.db.execute("INSERT OR REPLACE INTO metadata VALUES ('cursor',?)", (str(result.end),))
             self.db.execute("INSERT OR REPLACE INTO metadata VALUES ('latest_window',?)", (json.dumps(public),))
 
+    def rebuild_day(self, now: float, timezone: str):
+        zone = ZoneInfo(timezone)
+        day = datetime.fromtimestamp(now, zone).date()
+        start = datetime.combine(day, time(), zone).timestamp()
+        end = datetime.combine(day + timedelta(days=1), time(), zone).timestamp()
+        energy, valid = self.db.execute('''SELECT
+            COALESCE(SUM(json_extract(result,'$.estimated_energy_wh')),0),
+            COALESCE(SUM(json_extract(result,'$.valid_seconds')),0)
+            FROM windows WHERE start>=? AND end<=?''', (start, end)).fetchone()
+        complete = True
+        rows = self.db.execute('''SELECT segments FROM windows LEFT JOIN window_segments USING(revision,start,end)
+            WHERE windows.end>? AND windows.start<? AND (windows.start<? OR windows.end>?)''', (start, end, start, end))
+        for row in rows:
+            if row['segments'] is None:
+                # Legacy boundary windows do not retain their midnight distribution.
+                complete = False
+            else:
+                for left, right, power in json.loads(row['segments']):
+                    duration = max(0, min(right, end) - max(left, start))
+                    energy += power * duration / 3600
+                    valid += duration
+        with self.db:
+            self.db.execute('INSERT OR REPLACE INTO days VALUES (?,?,?,?,?)',
+                            (timezone, day.isoformat(), energy, valid, complete))
+
     def totals(self, now: float, timezone: str):
         day = datetime.fromtimestamp(now, ZoneInfo(timezone)).date().isoformat()
-        row = self.db.execute("SELECT energy_wh,valid_seconds FROM days WHERE timezone=? AND day=?", (timezone, day)).fetchone()
+        row = self.db.execute("SELECT energy_wh,valid_seconds,complete FROM days WHERE timezone=? AND day=?", (timezone, day)).fetchone()
         return {"daily_kwh": row[0] / 1000 if row else 0, "total_kwh": float(self.get_meta("total_wh")) / 1000,
                 "day": day, "timezone": timezone, "daily_valid_seconds": row[1] if row else 0,
+                "daily_complete": bool(row[2]) if row else True,
                 "total_valid_seconds": float(self.get_meta("valid_seconds")), "settled_until": self.cursor}
 
     def latest_window(self):
@@ -149,3 +192,4 @@ class Store:
         with self.db:
             self.db.execute("DELETE FROM observations WHERE at<?", (now - 7 * 86400,))
             self.db.execute("DELETE FROM windows WHERE end<?", (now - 90 * 86400,))
+            self.db.execute("DELETE FROM window_segments WHERE end<?", (now - 3 * 86400,))

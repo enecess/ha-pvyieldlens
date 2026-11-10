@@ -30,6 +30,8 @@ Se il pulsante non apre Home Assistant, vai in **Impostazioni > App > Installa a
 https://github.com/enecess/ha-pvyieldlens
 ```
 
+Nelle versioni di Home Assistant precedenti alla 2026.2, usa **Impostazioni > Componenti aggiuntivi > Store dei componenti aggiuntivi > menu in alto a destra > Repository**. L’app richiede Home Assistant 2025.9.0 o successivo.
+
 ### Docker
 
 Scarica questo repository e apri la sua cartella. Crea il file delle impostazioni:
@@ -44,7 +46,7 @@ In `.env`, scegli una password per `PVYL_WEB_PASSWORD`, poi avvia l’app:
 docker compose up -d --build
 ```
 
-Apri [localhost:8099](http://localhost:8099). Accedi come `admin` con la password scelta. In **Impostazioni**, inserisci l’indirizzo di Home Assistant e il token di accesso, poi premi **Carica sensori**.
+Apri [localhost:8099](http://localhost:8099). Accedi come `admin` con la password scelta. In **Impostazioni**, inserisci l’indirizzo di Home Assistant e un token di accesso a lunga durata di un **amministratore** di Home Assistant, poi premi **Carica sensori**. Per pubblicare i sensori di uscita sono necessari i diritti di amministratore.
 
 La pagina è accessibile dal computer con Docker. Per aprirla da un altro dispositivo, cambia `127.0.0.1:8099:8099` in `8099:8099` nel file `compose.yaml`.
 
@@ -96,3 +98,5 @@ Il PR confronta la potenza effettiva con quella prevista. La differenza è la po
 - Una differenza negativa indica che la potenza effettiva è maggiore di quella prevista.
 - L’energia è contata solo quando tutti e tre i sensori hanno dati. I periodi mancanti sono esclusi.
 - L’energia del giorno si azzera a mezzanotte nel fuso di Home Assistant. Il totale parte dalla prima configurazione.
+
+Dopo un’interruzione, alcuni periodi possono rimanere senza dati. Conserva i dati dell’app durante gli aggiornamenti o la reinstallazione. Per l’app usa i backup di Home Assistant; con Docker autonomo, arresta il contenitore prima di copiare la cartella `/data`.

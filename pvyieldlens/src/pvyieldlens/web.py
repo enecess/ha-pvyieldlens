@@ -8,11 +8,13 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from urllib.parse import urlsplit
 
+import httpx
 from fastapi import FastAPI, Query, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel, ConfigDict, SecretStr, field_validator
+from pydantic import BaseModel, ConfigDict, SecretStr, ValidationError, field_validator
+from starlette.middleware.gzip import GZipMiddleware
 
 from .home_assistant import HomeAssistantClient
 from .service import NETWORK_ERRORS, Service
@@ -37,8 +39,11 @@ class Connection(BaseModel):
     @field_validator('url')
     @classmethod
     def valid_url(cls, value: str) -> str:
-        parts = urlsplit(value)
-        if parts.scheme not in ('http', 'https') or not parts.hostname or parts.username or parts.password or parts.query or parts.fragment:
+        try:
+            parts = httpx.URL(value)
+        except httpx.InvalidURL as error:
+            raise ValueError('invalid_ha_url') from error
+        if parts.scheme not in ('http', 'https') or not parts.host or parts.username or parts.password or parts.query or parts.fragment or (parts.port is not None and not 0 <= parts.port <= 65535):
             raise ValueError('invalid_ha_url')
         return value.rstrip('/')
 
@@ -58,7 +63,10 @@ def create_app(service: Service, runtime: Runtime, run_background=True) -> FastA
             return Connection(url='http://supervisor/core', token=runtime.supervisor_token)
         stored = service.store.get_meta('connection')
         if stored:
-            return Connection.model_validate_json(stored)
+            try:
+                return Connection.model_validate_json(stored)
+            except ValidationError:
+                return None
         return Connection(url=runtime.ha_url, token=runtime.ha_token) if runtime.ha_url else None
 
     def config_response():
@@ -73,14 +81,15 @@ def create_app(service: Service, runtime: Runtime, run_background=True) -> FastA
         connection = saved_connection()
         if connection:
             service.client = HomeAssistantClient(connection.url, connection.token.get_secret_value())
-        if run_background:
-            await service.start()
+            if run_background:
+                await service.start()
         yield
         if run_background:
             await service.stop()
         service.store.close()
 
     app = FastAPI(lifespan=lifespan, docs_url=None, redoc_url=None, openapi_url=None)
+    app.add_middleware(GZipMiddleware, minimum_size=1000)
 
     @app.middleware('http')
     async def authenticate(request: Request, call_next):
@@ -128,7 +137,7 @@ def create_app(service: Service, runtime: Runtime, run_background=True) -> FastA
         connection = saved_connection()
         if not runtime.supervisor_token and update.connection:
             token = update.connection.token.get_secret_value()
-            if not token and connection:
+            if not token and connection and update.connection.url == connection.url:
                 token = connection.token.get_secret_value()
             connection = Connection(url=update.connection.url, token=token)
         if not connection or not connection.token.get_secret_value():
@@ -148,9 +157,9 @@ def create_app(service: Service, runtime: Runtime, run_background=True) -> FastA
         saved = saved_connection()
         if runtime.supervisor_token or connection is None:
             connection = saved
-        elif not connection.token.get_secret_value() and saved:
+        elif not connection.token.get_secret_value() and saved and connection.url == saved.url:
             connection = Connection(url=connection.url, token=saved.token)
-        if connection is None:
+        if connection is None or not connection.token.get_secret_value():
             return JSONResponse({'error': 'connection_required'}, status_code=422)
         client = HomeAssistantClient(connection.url, connection.token.get_secret_value())
         try:
@@ -164,10 +173,6 @@ def create_app(service: Service, runtime: Runtime, run_background=True) -> FastA
             return JSONResponse({'error': 'ha_connection_failed'}, status_code=502)
         finally:
             await client.close()
-
-    @app.get('/api/entities')
-    async def entities():
-        return await check_connection()
 
     @app.get('/api/snapshot')
     async def snapshot():

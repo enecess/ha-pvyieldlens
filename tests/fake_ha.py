@@ -47,6 +47,13 @@ async def state(entity: str):
     return found if found else JSONResponse({'message':'not found'}, status_code=404)
 
 
+@app.post('/api/template')
+async def selected_states(request: Request):
+    entities = (await request.json())['variables']['entities']
+    available = {item['entity_id']: item for item in source_states()}
+    return [available.get(entity) for entity in entities]
+
+
 @app.get('/api/history/period/{start}')
 async def history(start: str, request: Request):
     first = datetime.fromisoformat(start).timestamp()

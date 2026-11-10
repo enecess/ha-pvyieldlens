@@ -30,6 +30,8 @@
 https://github.com/enecess/ha-pvyieldlens
 ```
 
+Home Assistant 2026.2 之前的版本，请前往**设置 > 加载项 > 加载项商店 > 右上角菜单 > 仓库**。本应用要求 Home Assistant 2025.9.0 或更新版本。
+
 ### Docker
 
 下载本仓库并进入目录，创建配置文件：
@@ -44,7 +46,7 @@ cp .env.example .env
 docker compose up -d --build
 ```
 
-打开 [localhost:8099](http://localhost:8099)，用户名为 `admin`，密码为刚设置的密码。在**设置**中填写 Home Assistant 地址和访问令牌，点击**加载传感器**。
+打开 [localhost:8099](http://localhost:8099)，用户名为 `admin`，密码为刚设置的密码。在**设置**中填写 Home Assistant 地址，以及属于 Home Assistant **管理员**的长期访问令牌，然后点击**加载传感器**。发布输出实体需要管理员权限。
 
 默认只能在运行 Docker 的电脑上打开页面。如需其他设备访问，将 `compose.yaml` 中的 `127.0.0.1:8099:8099` 改为 `8099:8099`。
 
@@ -96,3 +98,5 @@ PR 表示实际功率占预计功率的比例。功率差为预计功率减去�
 - 功率差为负，表示实际功率高于预计功率。
 - 仅累计三个传感器都有数据时的电量，缺失时段不计入。
 - 今日电量按 Home Assistant 时区在午夜归零；累计电量从首次配置开始计算。
+
+中断后，部分时段的数据可能仍然缺失。更新或重新安装时，请保留应用数据。App 请使用 Home Assistant 备份；独立 Docker 部署请先停止容器，再复制 `/data` 目录。

@@ -30,6 +30,8 @@ Falls die Schaltfläche Home Assistant nicht öffnet, gehen Sie zu **Einstellung
 https://github.com/enecess/ha-pvyieldlens
 ```
 
+Bei Home Assistant vor Version 2026.2 verwenden Sie **Einstellungen > Add-ons > Add-on Store > Menü oben rechts > Repositories**. Die App benötigt Home Assistant 2025.9.0 oder neuer.
+
 ### Docker
 
 Laden Sie dieses Repository herunter und öffnen Sie den Ordner. Erstellen Sie die Einstellungsdatei:
@@ -44,7 +46,7 @@ Tragen Sie in `.env` Ihr Passwort bei `PVYL_WEB_PASSWORD` ein und starten Sie di
 docker compose up -d --build
 ```
 
-Öffnen Sie [localhost:8099](http://localhost:8099). Melden Sie sich als `admin` mit Ihrem Passwort an. Geben Sie unter **Einstellungen** die Home-Assistant-Adresse und das Zugriffstoken ein. Klicken Sie auf **Sensoren laden**.
+Öffnen Sie [localhost:8099](http://localhost:8099). Melden Sie sich als `admin` mit Ihrem Passwort an. Geben Sie unter **Einstellungen** die Home-Assistant-Adresse und ein langlebiges Zugriffstoken eines Home-Assistant-**Administrators** ein. Klicken Sie auf **Sensoren laden**. Zum Veröffentlichen der Ergebnis-Sensoren sind Administratorrechte erforderlich.
 
 Die Seite ist zunächst nur auf dem Docker-Rechner erreichbar. Für andere Geräte ändern Sie `127.0.0.1:8099:8099` in `compose.yaml` zu `8099:8099`.
 
@@ -96,3 +98,5 @@ PR vergleicht die tatsächliche mit der erwarteten Leistung. Die Differenz ist d
 - Eine negative Differenz heißt: Die tatsächliche Leistung ist höher als erwartet.
 - Energie wird nur gezählt, wenn alle drei Sensoren Daten haben. Fehlende Zeiten werden ausgelassen.
 - Die Tagesenergie wird um Mitternacht in der Home-Assistant-Zeitzone auf null gesetzt. Die Gesamtenergie zählt seit der ersten Einrichtung.
+
+Nach einem Ausfall können Daten für manche Zeiträume fehlen. Behalten Sie die App-Daten bei Updates oder einer Neuinstallation. Verwenden Sie für die App die Backups von Home Assistant; bei eigenständigem Docker stoppen Sie den Container, bevor Sie das Verzeichnis `/data` kopieren.

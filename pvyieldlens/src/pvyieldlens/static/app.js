@@ -14,7 +14,9 @@ let configuration = null;
 let snapshot = null;
 let history = [];
 let livePoints = [];
-let lastHistoryFetch = 0;
+let lastHistoryKey = null;
+let historyVersion = 0;
+let lastHistoryDraw = '';
 let formDirty = false;
 const form = document.querySelector('#settings-form');
 const t = (key, parameters) => translate(catalogs, language, key, parameters);
@@ -37,10 +39,19 @@ async function api(path, options = {}) {
 }
 
 function showPage(settings) {
+  const returning = el('dashboard').hidden && !settings;
   el('dashboard').hidden = settings;
   el('configuration').hidden = !settings;
   el('overview-tab').classList.toggle('active', !settings);
   el('settings-tab').classList.toggle('active', settings);
+  if (!settings) {
+    if (returning) lastHistoryDraw = '';
+    render();
+    if (returning) fetchHistory().then(render).catch(error => {
+      el('banner').hidden = false;
+      el('banner').textContent = t(error.message);
+    });
+  }
 }
 
 function showMessage(id, key) {
@@ -148,9 +159,10 @@ function render() {
   el('stat-coverage').textContent = `${t('coverage')} ${number(stat?.coverage_percent)}% · ${t(stat?.quality || 'waiting')}`;
   el('last-settled').textContent = t('last_settled', {time:stamp(stat?.end)});
   el('timezone-note').textContent = `${t('timezone')}: ${snapshot?.timezone || settings?.timezone || 'UTC'}`;
-  const warning = snapshot?.error || (snapshot?.history_available === false ? 'history_unavailable' : null);
-  el('banner').hidden = !warning;
-  if (warning) el('banner').textContent = t(warning);
+  const warnings = [snapshot?.error, snapshot?.history_available === false ? 'history_unavailable' : null,
+    snapshot?.energy?.daily_complete === false ? 'daily_energy_incomplete' : null].filter(Boolean);
+  el('banner').hidden = !warnings.length;
+  if (warnings.length) el('banner').textContent = warnings.map(key => t(key)).join(' ');
   el('source-rows').replaceChildren(...(snapshot?.sources || []).map(source => {
     const row = document.createElement('tr');
     const age = Math.max(0, Date.now()/1000 - source.reported_at);
@@ -159,10 +171,15 @@ function render() {
     });
     return row;
   }));
-  plot('live-chart', livePoints, powerSeries, 'W');
-  const data = history.map(point => ({...point, at:point.end}));
-  plot('history-chart', data, powerSeries, 'W');
-  plot('pr-chart', data, [{key:'pr',label:'pr',color:'#2563c6'}], '%');
+  if (!el('dashboard').hidden) {
+    plot('live-chart', livePoints, powerSeries, 'W');
+    const drawKey = `${historyVersion}|${language}|${snapshot?.timezone}|${['history-chart', 'pr-chart'].map(id => `${el(id).clientWidth},${el(id).clientHeight}`).join('|')}`;
+    if (drawKey !== lastHistoryDraw) {
+      plot('history-chart', history, powerSeries, 'W');
+      plot('pr-chart', history, [{key:'pr',label:'pr',color:'#2563c6'}], '%');
+      lastHistoryDraw = drawKey;
+    }
+  }
 }
 
 async function loadConfiguration() {
@@ -180,9 +197,12 @@ async function loadConfiguration() {
 }
 
 async function fetchHistory() {
+  if (el('dashboard').hidden) return;
+  const key = `${snapshot?.statistics?.revision}|${snapshot?.statistics?.end}|${el('history-range').value}`;
   const end = Date.now()/1000;
-  history = (await api(`history?start=${Math.max(0,end-Number(el('history-range').value)*86400)}&end=${end}`)).windows;
-  lastHistoryFetch = Date.now();
+  history = (await api(`history?start=${Math.max(0,end-Number(el('history-range').value)*86400)}&end=${end}`)).windows.map(point => ({...point, at:point.end}));
+  historyVersion += 1;
+  lastHistoryKey = key;
 }
 
 async function poll() {
@@ -192,7 +212,14 @@ async function poll() {
       livePoints.push({at:snapshot.calculated_at,estimated_power:snapshot.realtime?.estimated_power ?? null,actual_power:snapshot.realtime?.actual_power ?? null});
       livePoints = livePoints.filter(point => point.at >= Date.now()/1000 - 1800).slice(-600);
     }
-    if (Date.now() - lastHistoryFetch >= 30000) await fetchHistory();
+    if (!el('dashboard').hidden) {
+      if (lastHistoryKey !== `${snapshot?.statistics?.revision}|${snapshot?.statistics?.end}|${el('history-range').value}`) await fetchHistory();
+      const start = Math.max(0, Date.now()/1000 - Number(el('history-range').value)*86400);
+      if (history[0]?.end <= start) {
+        history = history.filter(point => point.end > start);
+        historyVersion += 1;
+      }
+    }
     render();
   } catch (error) {
     el('banner').hidden = false;
@@ -252,13 +279,15 @@ form.addEventListener('submit', async event => {
   settings.timezone=configuration?.detectedTimezone || configuration?.settings?.timezone || 'UTC';
   try {
     configuration=await api('config',{method:'PUT',body:JSON.stringify({settings,...(configuration?.mode==='app' ? {} : {connection:{url:el('ha-url').value,token:el('ha-token').value}})})});
-    formDirty=false; el('ha-token').value=''; showMessage('save-result', 'saved'); livePoints=[]; lastHistoryFetch=0; render();
+    formDirty=false; el('ha-token').value=''; showMessage('save-result', 'saved'); livePoints=[]; lastHistoryKey=null; render();
   } catch (error) {
     showMessage('save-result', error.message);
     error.fields?.forEach(field => { const input=form.elements.namedItem(field.replace(/^settings\./,'')); if(input) input.setAttribute('aria-invalid','true'); });
   } finally { button.disabled=false; showMessage('save-button', 'save'); }
 });
 
+const chartResize = new ResizeObserver(() => render());
+['history-chart', 'pr-chart'].forEach(id => chartResize.observe(el(id)));
 applyLanguage();
 try { await loadConfiguration(); } catch (error) { el('banner').hidden=false; el('banner').textContent=t(error.message); }
 poll();

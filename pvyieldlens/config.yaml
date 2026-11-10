@@ -11,6 +11,8 @@ boot: auto
 init: true
 stage: experimental
 homeassistant_api: true
+homeassistant: "2025.9.0"
+backup: cold
 ingress: true
 ingress_port: 8099
 panel_icon: mdi:solar-power-variant

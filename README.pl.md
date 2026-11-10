@@ -30,6 +30,8 @@ Jeśli przycisk nie otwiera Home Assistant, przejdź do **Ustawienia > Aplikacje
 https://github.com/enecess/ha-pvyieldlens
 ```
 
+W wersjach Home Assistant wcześniejszych niż 2026.2 wybierz **Ustawienia > Dodatki > Sklep z dodatkami > menu w prawym górnym rogu > Repozytoria**. Aplikacja wymaga Home Assistant 2025.9.0 lub nowszego.
+
 ### Docker
 
 Pobierz to repozytorium i otwórz jego folder. Utwórz plik ustawień:
@@ -44,7 +46,7 @@ W pliku `.env` ustaw swoje hasło w `PVYL_WEB_PASSWORD`, a następnie uruchom ap
 docker compose up -d --build
 ```
 
-Otwórz [localhost:8099](http://localhost:8099). Zaloguj się jako `admin`, używając ustawionego hasła. W **Ustawieniach** wpisz adres Home Assistant i token dostępu, a następnie kliknij **Wczytaj czujniki**.
+Otwórz [localhost:8099](http://localhost:8099). Zaloguj się jako `admin`, używając ustawionego hasła. W **Ustawieniach** wpisz adres Home Assistant i długoterminowy token dostępu należący do **administratora** Home Assistant, a następnie kliknij **Wczytaj czujniki**. Publikowanie czujników wynikowych wymaga uprawnień administratora.
 
 Domyślnie strona działa na komputerze z Dockerem. Aby otworzyć ją na innym urządzeniu, w `compose.yaml` zmień `127.0.0.1:8099:8099` na `8099:8099`.
 
@@ -96,3 +98,5 @@ PR porównuje moc rzeczywistą z przewidywaną. Różnica mocy to moc przewidywa
 - Ujemna różnica oznacza, że moc rzeczywista jest większa od przewidywanej.
 - Energia jest liczona tylko wtedy, gdy wszystkie trzy czujniki mają dane. Brakujące okresy są pomijane.
 - Energia dzienna zeruje się o północy według strefy Home Assistant. Suma jest liczona od pierwszej konfiguracji.
+
+Po przerwie dla niektórych okresów nadal może brakować danych. Zachowaj dane aplikacji podczas aktualizacji lub ponownej instalacji. Dla aplikacji używaj kopii zapasowych Home Assistant; przy samodzielnym Dockerze zatrzymaj kontener przed skopiowaniem katalogu `/data`.

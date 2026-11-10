@@ -27,11 +27,10 @@
   "value": "Valeur",
   "age": "Dernière mise à jour",
   "coverage": "Données reçues",
-  "seconds": "secondes",
   "connection": "Connexion Home Assistant",
   "ha_url": "Adresse Home Assistant",
   "ha_token": "Jeton d’accès de longue durée",
-  "token_help": "Laissez vide pour conserver le jeton enregistré.",
+  "token_help": "Laissez vide pour réutiliser le jeton enregistré si l’URL est identique. Saisissez un jeton si vous changez l’URL.",
   "connect": "Charger les capteurs",
   "connecting": "Connexion…",
   "connected": "Connexion vérifiée",
@@ -58,7 +57,6 @@
   "saving": "Enregistrement…",
   "saved": "Configuration enregistrée",
   "error": "Une erreur est survenue. Réessayez.",
-  "no_data": "Aucune donnée valide pour le moment",
   "partial": "Données incomplètes",
   "complete": "Données complètes",
   "unavailable": "Indisponible",
@@ -83,5 +81,6 @@
   "plot_empty": "En attente de données.",
   "stat_value_hint": "Les données manquantes sont exclues de la moyenne.",
   "language": "Langue",
+  "daily_energy_incomplete": "L’énergie du jour est incomplète : les anciennes périodes ne peuvent pas être réparties au nouveau minuit.",
   "auto": "Auto"
 }

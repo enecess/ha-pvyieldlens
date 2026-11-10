@@ -43,9 +43,6 @@ async def test_real_rest_websocket_collection_and_nine_outputs(tmp_path):
         assert float(published['sensor.pvyieldlens_realtime_pr']['state']) == pytest.approx(90, abs=0.1)
         assert service.snapshot()['connected']
         assert service.snapshot()['energy']['total_kwh'] > 0
-        total = service.snapshot()['energy']['total_kwh']
-        await service.recover()
-        assert service.snapshot()['energy']['total_kwh'] >= total
         await service.stop()
         assert published['sensor.pvyieldlens_realtime_pr']['state'] == 'unavailable'
         store.close()

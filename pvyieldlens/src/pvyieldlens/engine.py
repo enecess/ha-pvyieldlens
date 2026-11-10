@@ -1,5 +1,5 @@
 from bisect import bisect_right
-from dataclasses import asdict, dataclass
+from dataclasses import dataclass, fields
 
 from .settings import Settings
 
@@ -37,7 +37,7 @@ class WindowResult:
     segments: tuple[Segment, ...]
 
     def public(self):
-        return {key: value for key, value in asdict(self).items() if key != "segments"}
+        return {item.name: getattr(self, item.name) for item in fields(self) if item.name != "segments"}
 
 
 def calculate(settings: Settings, observations: list[Observation], start: float, end: float) -> WindowResult:

@@ -30,6 +30,8 @@ Si le bouton n’ouvre pas Home Assistant, allez dans **Paramètres > Applicatio
 https://github.com/enecess/ha-pvyieldlens
 ```
 
+Pour les versions de Home Assistant antérieures à 2026.2, utilisez **Paramètres > Modules complémentaires > Boutique des modules complémentaires > menu en haut à droite > Dépôts**. L’app nécessite Home Assistant 2025.9.0 ou une version plus récente.
+
 ### Docker
 
 Téléchargez ce dépôt et ouvrez son dossier. Créez le fichier de réglages :
@@ -44,7 +46,7 @@ Dans `.env`, choisissez un mot de passe pour `PVYL_WEB_PASSWORD`, puis démarrez
 docker compose up -d --build
 ```
 
-Ouvrez [localhost:8099](http://localhost:8099). Connectez-vous avec `admin` et le mot de passe choisi. Dans **Paramètres**, saisissez l’adresse Home Assistant et le jeton d’accès, puis cliquez sur **Charger les capteurs**.
+Ouvrez [localhost:8099](http://localhost:8099). Connectez-vous avec `admin` et le mot de passe choisi. Dans **Paramètres**, saisissez l’adresse Home Assistant et un jeton d’accès de longue durée appartenant à un **administrateur** Home Assistant, puis cliquez sur **Charger les capteurs**. Les droits d’administration sont nécessaires pour publier les capteurs de sortie.
 
 Par défaut, la page est accessible sur la machine Docker. Pour y accéder depuis un autre appareil, remplacez `127.0.0.1:8099:8099` par `8099:8099` dans `compose.yaml`.
 
@@ -96,3 +98,5 @@ Le PR compare la puissance réelle à la puissance prévue. L’écart est la pu
 - Un écart négatif signifie que la puissance réelle dépasse la puissance prévue.
 - L’énergie est comptée quand les trois capteurs ont des données. Les périodes manquantes sont exclues.
 - L’énergie du jour revient à zéro à minuit, selon le fuseau de Home Assistant. Le total commence au premier réglage.
+
+Après une interruption, certaines périodes peuvent rester sans données. Conservez les données de l’app lors d’une mise à jour ou d’une réinstallation. Pour l’app, utilisez les sauvegardes de Home Assistant ; avec Docker autonome, arrêtez le conteneur avant de copier le dossier `/data`.

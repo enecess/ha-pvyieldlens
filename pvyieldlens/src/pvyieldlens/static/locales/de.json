@@ -27,11 +27,10 @@
   "value": "Wert",
   "age": "Letztes Update",
   "coverage": "Vollständige Daten",
-  "seconds": "Sekunden",
   "connection": "Home-Assistant-Verbindung",
   "ha_url": "Home-Assistant-URL",
   "ha_token": "Langlebiges Zugriffstoken",
-  "token_help": "Leer lassen, um das gespeicherte Token beizubehalten.",
+  "token_help": "Bei gleicher URL leer lassen, um das gespeicherte Token zu verwenden. Bei einer neuen URL ein Token eingeben.",
   "connect": "Sensoren laden",
   "connecting": "Verbindung wird hergestellt…",
   "connected": "Verbindung geprüft",
@@ -58,7 +57,6 @@
   "saving": "Wird gespeichert…",
   "saved": "Konfiguration gespeichert",
   "error": "Ein Fehler ist aufgetreten. Bitte erneut versuchen.",
-  "no_data": "Noch keine gültigen Daten",
   "partial": "Daten fehlen teilweise",
   "complete": "Daten vollständig",
   "unavailable": "Nicht verfügbar",
@@ -83,5 +81,6 @@
   "plot_empty": "Warte auf Daten.",
   "stat_value_hint": "Fehlende Werte zählen nicht zum Mittelwert.",
   "language": "Sprache",
+  "daily_energy_incomplete": "Die heutige Energie ist unvollständig: Ältere Zeiträume lassen sich nicht am neuen Tagesbeginn aufteilen.",
   "auto": "Automatisch"
 }

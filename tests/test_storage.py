@@ -37,7 +37,28 @@ def test_observations_deduplicate_and_keep_predecessor(tmp_path):
     store = Store(tmp_path / 'data.sqlite')
     store.add_observations(samples())
     store.add_observations(samples())
-    assert len(store.observations(30, 60)) == 3
+    assert len(store.observations(30, 60, settings().entities)) == 3
+    store.close()
+
+
+def test_observation_sources_origin_and_inclusive_bounds_keep_strict_predecessors(tmp_path):
+    from pvyieldlens.engine import Observation
+
+    store = Store(tmp_path / 'data.sqlite')
+    store.add_observations(samples(at=5) + samples(at=10) + samples(at=20) + samples(at=30)
+                           + [Observation('sensor.retired', 15, 999), Observation('sensor.retired', 0, 999)], 'old')
+    store.add_observations(samples(at=10, sun=100), 'new')
+    store.add_observations([Observation('sensor.sun', 20, None)], 'old')
+    records = store.observations(10, 20, settings().entities, 'old')
+    assert [(item.at, item.entity_id, item.value) for item in records] == [
+        (5, 'sensor.power', 3348), (5, 'sensor.sun', 800), (5, 'sensor.temp', 45),
+        (10, 'sensor.power', 3348), (10, 'sensor.sun', 800), (10, 'sensor.temp', 45),
+        (20, 'sensor.power', 3348), (20, 'sensor.sun', None), (20, 'sensor.temp', 45),
+    ]
+    assert [(item.entity_id, item.value) for item in store.observations(10, 10, settings().entities, 'new')] == [
+        ('sensor.power', 3348), ('sensor.sun', 100), ('sensor.temp', 45),
+    ]
+    assert store.observations(0, 4, settings().entities, 'old') == []
     store.close()
 
 
@@ -48,4 +69,19 @@ def test_retention_keeps_totals_and_latest_window(tmp_path):
     store.prune(100 * 86400)
     assert store.totals(100 * 86400, 'UTC')['total_kwh'] == pytest.approx(0.062)
     assert store.latest_window()['end'] == 60
+    store.close()
+
+
+def test_detail_retention_preserves_three_days_and_committed_history(tmp_path):
+    store = Store(tmp_path / 'data.sqlite')
+    revision = store.save_settings(settings(), 0)
+    for start in range(0, 4 * 86400, 86400):
+        store.settle(calculate(settings(), samples(at=start), start, start + 86400), revision, 'UTC')
+    before = store.totals(4 * 86400, 'UTC')['total_kwh']
+    store.prune(5 * 86400)
+    assert len(store.history(0, 4 * 86400)) == 4
+    assert [row[0] for row in store.db.execute('SELECT end FROM window_segments ORDER BY end')] == [
+        2 * 86400, 3 * 86400, 4 * 86400,
+    ]
+    assert store.totals(5 * 86400, 'UTC')['total_kwh'] == before
     store.close()

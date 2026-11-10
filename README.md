@@ -30,6 +30,8 @@ If the button does not open Home Assistant, go to **Settings > Apps > Install ap
 https://github.com/enecess/ha-pvyieldlens
 ```
 
+On Home Assistant versions before 2026.2, use **Settings > Add-ons > Add-on Store > top-right menu > Repositories**. The App requires Home Assistant 2025.9.0 or newer.
+
 ### Docker
 
 Download this repository and open its folder. Create your settings file:
@@ -44,7 +46,7 @@ Set `PVYL_WEB_PASSWORD` in `.env` to your chosen password, then start the app:
 docker compose up -d --build
 ```
 
-Open [localhost:8099](http://localhost:8099). Sign in as `admin` with the password you set. In **Settings**, enter your Home Assistant address and access token, then select **Load sensors**.
+Open [localhost:8099](http://localhost:8099). Sign in as `admin` with the password you set. In **Settings**, enter your Home Assistant address and a long-lived access token belonging to a Home Assistant **administrator**, then select **Load sensors**. Administrator access is required to publish the output sensors.
 
 The default address works on the Docker host. To open the page from another device, change `127.0.0.1:8099:8099` to `8099:8099` in `compose.yaml`.
 
@@ -96,3 +98,5 @@ PR compares actual power with expected power. The power gap is expected power mi
 - A negative power gap means actual power is higher than expected.
 - Energy is counted only while all three sensors have data. Missing periods are left out.
 - Today’s energy resets at midnight in your Home Assistant time zone. Total energy starts from your first setup.
+
+After an outage, some periods may remain missing. Keep the app's data when updating or reinstalling. Use Home Assistant backups for the App; for standalone Docker, stop the container before copying the `/data` directory.

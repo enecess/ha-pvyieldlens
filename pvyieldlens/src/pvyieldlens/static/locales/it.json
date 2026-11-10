@@ -27,11 +27,10 @@
   "value": "Valore",
   "age": "Ultimo aggiornamento",
   "coverage": "Dati completi",
-  "seconds": "secondi",
   "connection": "Connessione a Home Assistant",
   "ha_url": "URL di Home Assistant",
   "ha_token": "Token di accesso a lunga durata",
-  "token_help": "Lascia vuoto per mantenere il token salvato.",
+  "token_help": "Lascia vuoto per riutilizzare il token salvato per lo stesso URL. Inserisci un token quando cambi l’URL.",
   "connect": "Carica sensori",
   "connecting": "Connessione…",
   "connected": "Connessione verificata",
@@ -58,7 +57,6 @@
   "saving": "Salvataggio…",
   "saved": "Configurazione salvata",
   "error": "Si è verificato un errore. Riprova.",
-  "no_data": "Nessun dato valido",
   "partial": "Dati incompleti",
   "complete": "Dati completi",
   "unavailable": "Non disponibile",
@@ -83,5 +81,6 @@
   "plot_empty": "In attesa di dati.",
   "stat_value_hint": "Le letture mancanti sono escluse dalla media.",
   "language": "Lingua",
+  "daily_energy_incomplete": "L’energia di oggi è incompleta: i periodi precedenti non possono essere divisi alla nuova mezzanotte.",
   "auto": "Auto"
 }

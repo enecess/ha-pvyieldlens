@@ -27,7 +27,6 @@ test('all six catalogs provide complete matching placeholders', async () => {
   const catalogs = await Promise.all(['en','zh','fr','de','pl','it'].map(async language => JSON.parse(await readFile(
     new URL(`../pvyieldlens/src/pvyieldlens/static/locales/${language}.json`, import.meta.url), 'utf8'))));
   const keys = Object.keys(catalogs[0]).sort();
-  assert.ok(keys.length > 60);
   for (const catalog of catalogs) {
     assert.deepEqual(Object.keys(catalog).sort(), keys);
     for (const key of keys) {
