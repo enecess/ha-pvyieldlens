@@ -1,4 +1,4 @@
-[English](https://github.com/enecess/ha-pvyieldlens/blob/main/README.md) | [中文](https://github.com/enecess/ha-pvyieldlens/blob/main/README.zh-CN.md) | [Français](https://github.com/enecess/ha-pvyieldlens/blob/main/README.fr.md) | [Deutsch](https://github.com/enecess/ha-pvyieldlens/blob/main/README.de.md) | [Polski](https://github.com/enecess/ha-pvyieldlens/blob/main/README.pl.md) | [Italiano](https://github.com/enecess/ha-pvyieldlens/blob/main/README.it.md)
+[English](https://github.com/enecess/ha-pvyieldlens/blob/dev_v0/README.md) | [中文](https://github.com/enecess/ha-pvyieldlens/blob/dev_v0/README.zh-CN.md) | [Français](https://github.com/enecess/ha-pvyieldlens/blob/dev_v0/README.fr.md) | [Deutsch](https://github.com/enecess/ha-pvyieldlens/blob/dev_v0/README.de.md) | [Polski](https://github.com/enecess/ha-pvyieldlens/blob/dev_v0/README.pl.md) | [Italiano](https://github.com/enecess/ha-pvyieldlens/blob/dev_v0/README.it.md)
 
 # PVYieldLens
 

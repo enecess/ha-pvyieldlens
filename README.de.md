@@ -18,7 +18,7 @@ Vergleichen Sie die erwartete und die tatsächliche Leistung Ihrer Solarmodule. 
 
 Für Home Assistant OS.
 
-[![PVYieldLens-App-Repository hinzufügen](https://my.home-assistant.io/badges/supervisor_add_addon_repository.svg)](https://my.home-assistant.io/redirect/supervisor_add_addon_repository/?repository_url=https%3A%2F%2Fgithub.com%2Fenecess%2Fha-pvyieldlens)
+[![PVYieldLens-App-Repository hinzufügen](https://my.home-assistant.io/badges/supervisor_add_addon_repository.svg)](https://my.home-assistant.io/redirect/supervisor_add_addon_repository/?repository_url=https%3A%2F%2Fgithub.com%2Fenecess%2Fha-pvyieldlens%23dev_v0)
 
 1. Klicken Sie auf die Schaltfläche oben und bestätigen Sie **Hinzufügen** in Home Assistant.
 2. Suchen Sie **PVYieldLens** im App Store, installieren und starten Sie die App.
@@ -27,7 +27,7 @@ Für Home Assistant OS.
 Falls die Schaltfläche Home Assistant nicht öffnet, gehen Sie zu **Einstellungen > Apps > App installieren > Menü oben rechts > Repositories** und fügen Sie diese Adresse hinzu:
 
 ```text
-https://github.com/enecess/ha-pvyieldlens
+https://github.com/enecess/ha-pvyieldlens#dev_v0
 ```
 
 Bei Home Assistant vor Version 2026.2 verwenden Sie **Einstellungen > Add-ons > Add-on Store > Menü oben rechts > Repositories**. Die App benötigt Home Assistant 2025.9.0 oder neuer.

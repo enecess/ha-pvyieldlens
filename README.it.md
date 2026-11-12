@@ -18,7 +18,7 @@ Confronta la potenza prevista e quella effettiva dei pannelli. Segui il PR e l�
 
 Per Home Assistant OS.
 
-[![Aggiungi il repository di app PVYieldLens](https://my.home-assistant.io/badges/supervisor_add_addon_repository.svg)](https://my.home-assistant.io/redirect/supervisor_add_addon_repository/?repository_url=https%3A%2F%2Fgithub.com%2Fenecess%2Fha-pvyieldlens)
+[![Aggiungi il repository di app PVYieldLens](https://my.home-assistant.io/badges/supervisor_add_addon_repository.svg)](https://my.home-assistant.io/redirect/supervisor_add_addon_repository/?repository_url=https%3A%2F%2Fgithub.com%2Fenecess%2Fha-pvyieldlens%23dev_v0)
 
 1. Premi il pulsante qui sopra e conferma **Aggiungi** in Home Assistant.
 2. Trova **PVYieldLens** nello store delle app, poi installa e avvia l’app.
@@ -27,7 +27,7 @@ Per Home Assistant OS.
 Se il pulsante non apre Home Assistant, vai in **Impostazioni > App > Installa app > menu in alto a destra > Repository** e aggiungi:
 
 ```text
-https://github.com/enecess/ha-pvyieldlens
+https://github.com/enecess/ha-pvyieldlens#dev_v0
 ```
 
 Nelle versioni di Home Assistant precedenti alla 2026.2, usa **Impostazioni > Componenti aggiuntivi > Store dei componenti aggiuntivi > menu in alto a destra > Repository**. L’app richiede Home Assistant 2025.9.0 o successivo.

@@ -1,5 +1,6 @@
 name: PVYieldLens
-version: "0.1.0"
+version: "0.1.0-beta.1"
+image: ghcr.io/enecess/pvyieldlens
 slug: pvyieldlens
 description: Compare expected and actual solar power
 url: https://github.com/enecess/ha-pvyieldlens

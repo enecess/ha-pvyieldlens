@@ -18,7 +18,7 @@
 
 适用于 Home Assistant OS。
 
-[![添加 PVYieldLens 应用仓库](https://my.home-assistant.io/badges/supervisor_add_addon_repository.svg)](https://my.home-assistant.io/redirect/supervisor_add_addon_repository/?repository_url=https%3A%2F%2Fgithub.com%2Fenecess%2Fha-pvyieldlens)
+[![添加 PVYieldLens 应用仓库](https://my.home-assistant.io/badges/supervisor_add_addon_repository.svg)](https://my.home-assistant.io/redirect/supervisor_add_addon_repository/?repository_url=https%3A%2F%2Fgithub.com%2Fenecess%2Fha-pvyieldlens%23dev_v0)
 
 1. 点击上方按钮，在 Home Assistant 中确认**添加**。
 2. 在应用商店找到 **PVYieldLens**，安装并启动。
@@ -27,7 +27,7 @@
 如果按钮无法打开 Home Assistant，请前往**设置 > 应用 > 安装应用 > 右上角菜单 > 仓库**，添加：
 
 ```text
-https://github.com/enecess/ha-pvyieldlens
+https://github.com/enecess/ha-pvyieldlens#dev_v0
 ```
 
 Home Assistant 2026.2 之前的版本，请前往**设置 > 加载项 > 加载项商店 > 右上角菜单 > 仓库**。本应用要求 Home Assistant 2025.9.0 或更新版本。

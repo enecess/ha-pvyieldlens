@@ -18,7 +18,7 @@ Compare your solar panels’ expected and actual output, follow PR, and see expe
 
 For Home Assistant OS.
 
-[![Add the PVYieldLens App repository](https://my.home-assistant.io/badges/supervisor_add_addon_repository.svg)](https://my.home-assistant.io/redirect/supervisor_add_addon_repository/?repository_url=https%3A%2F%2Fgithub.com%2Fenecess%2Fha-pvyieldlens)
+[![Add the PVYieldLens App repository](https://my.home-assistant.io/badges/supervisor_add_addon_repository.svg)](https://my.home-assistant.io/redirect/supervisor_add_addon_repository/?repository_url=https%3A%2F%2Fgithub.com%2Fenecess%2Fha-pvyieldlens%23dev_v0)
 
 1. Click the button above and confirm **Add** in Home Assistant.
 2. Find **PVYieldLens** in the App store, then install and start it.
@@ -27,7 +27,7 @@ For Home Assistant OS.
 If the button does not open Home Assistant, go to **Settings > Apps > Install app > top-right menu > Repositories** and add:
 
 ```text
-https://github.com/enecess/ha-pvyieldlens
+https://github.com/enecess/ha-pvyieldlens#dev_v0
 ```
 
 On Home Assistant versions before 2026.2, use **Settings > Add-ons > Add-on Store > top-right menu > Repositories**. The App requires Home Assistant 2025.9.0 or newer.
