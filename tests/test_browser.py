@@ -47,6 +47,28 @@ async def test_data_pages_and_gear_settings_preserve_context(browser_workspace):
     await expect(page.locator('#draft-status')).to_be_hidden()
 
 
+@pytest.mark.parametrize('width', [700, 768])
+async def test_french_tablet_settings_returns_to_selected_history_range(browser_workspace, width):
+    from playwright.async_api import expect
+
+    page, _, _ = browser_workspace
+    await page.set_viewport_size({'width': width, 'height': 844})
+    await page.locator('#language-select').select_option('fr')
+    await page.locator('#history-tab').click()
+    await page.locator('#history-range').select_option('7')
+    await page.locator('#settings-button').click()
+    await expect(page.locator('#configuration')).to_be_visible()
+    await expect(page.locator('#data-navigation')).to_be_hidden()
+    await expect(page.locator('#settings-back')).to_have_text('← Retour à Historique')
+    await page.locator('button[data-settings-category=panels]').click()
+    await page.locator('[name=rated_power_w]').fill('6000')
+    await page.locator('#settings-back').click()
+    await expect(page.locator('#history-page')).to_be_visible()
+    await expect(page.locator('#history-range')).to_have_value('7')
+    await expect(page.locator('#draft-status')).to_have_text('Modifications non enregistrées')
+    assert await page.evaluate('scrollX') == 0
+
+
 @pytest.mark.parametrize('browser_workspace', [False], indirect=True)
 async def test_settings_reveals_first_invalid_category(browser_workspace):
     from playwright.async_api import expect

@@ -129,6 +129,10 @@ footer .muted { font-size: inherit; }
   .history-grid { grid-template-columns: 1fr; }
   footer { margin-left: 24px; margin-right: 24px; }
 }
+@media (max-width: 800px) {
+  .topbar { flex-wrap: wrap; }
+  #data-navigation { order: 1; margin: 0; width: 100%; justify-content: flex-end; }
+}
 @media (max-width: 600px) {
   .topbar { flex-wrap: wrap; gap: 12px; padding: 14px 16px; }
   .brand { font-size: 20px; }

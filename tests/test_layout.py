@@ -78,7 +78,33 @@ async def test_data_and_settings_keep_header_and_content_width(layout_page, layo
                 assert value == pytest.approx(measurements[0]['boxes'][name][edge], abs=1)
 
 
-@pytest.mark.parametrize(('width', 'language'), [(1440, 'en'), (390, 'de'), (320, 'fr')])
+@pytest.mark.parametrize('width', [601, 700, 768, 800, 801])
+async def test_tablet_data_header_keeps_controls_inside_viewport(layout_page, layout_artifacts, width):
+    from playwright.async_api import expect
+
+    page, _ = layout_page
+    await page.set_viewport_size({'width': width, 'height': 844})
+    await page.locator('#language-select').select_option('fr')
+    for control, destination in [('live-tab', 'live-page'), ('history-tab', 'history-page'),
+                                  ('forecast-tab', 'forecast-page'), ('settings-button', 'configuration'),
+                                  ('settings-back', 'forecast-page')]:
+        geometry = await page.evaluate('''() => ({
+            viewport: document.documentElement.clientWidth,
+            scrollWidth: document.documentElement.scrollWidth,
+            controls: [...document.querySelectorAll('.topbar button, .topbar select')]
+                .filter(node => node.checkVisibility()).map(node => {
+                    const {left, right} = node.getBoundingClientRect();
+                    return {id: node.id, left, right};
+                })
+        })''')
+        assert geometry['scrollWidth'] <= geometry['viewport'], geometry
+        assert all(box['left'] >= 0 and box['right'] <= geometry['viewport'] for box in geometry['controls']), geometry
+        await page.locator(f'#{control}').click()
+        await expect(page.locator(f'#{destination}')).to_be_visible()
+    await page.screenshot(path=str(layout_artifacts / f'header-tablet-{width}-fr.png'), full_page=True)
+
+
+@pytest.mark.parametrize(('width', 'language'), [(1440, 'en'), (768, 'fr'), (700, 'fr'), (390, 'de'), (320, 'fr')])
 async def test_scrolled_navigation_reveals_destination_and_preserves_same_page_scroll(layout_page, layout_artifacts, width, language):
     from playwright.async_api import expect
 
