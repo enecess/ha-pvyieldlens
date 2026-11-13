@@ -177,3 +177,36 @@ footer .muted { font-size: inherit; }
   .brand { font-size: 18px; }
   .language-picker { width: 120px; }
 }
+
+.forecast-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.forecast-status-line { display: flex; align-items: center; flex-wrap: wrap; gap: 10px 20px; margin: 14px 0; font-size: 13px; }
+.forecast-status-line p { flex: 1 1 220px; margin: 0; line-height: 1.6; }
+#forecast-error:empty { display: none; }
+#forecast-days { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 8px; }
+#forecast-days button { display: grid; grid-template-rows: auto 100px auto; gap: 10px; min-height: 44px; padding: 12px 6px; font-size: 12px; font-variant-numeric: tabular-nums; color: var(--muted); background: #fff; border-color: transparent; }
+#forecast-days button[aria-pressed=true] { background: #fff7e9; border-color: #c48b3c; color: #73420a; }
+.day-label { font-weight: 600; }
+.day-bar { height: var(--bar-height); align-self: end; width: 55%; min-height: 1px; margin: 0 auto; background: #bf7929; border-radius: 3px 3px 0 0; }
+.day-bar.unavailable { background: repeating-linear-gradient(135deg, #eef0f3, #eef0f3 5px, #fff 5px, #fff 10px); border: 1px dashed #bcc6d2; }
+.forecast-hourly { margin-top: 16px; }
+.forecast-meta { margin-top: 18px; }
+.forecast-meta span, .forecast-meta a { overflow-wrap: anywhere; }
+.chart .current-time { stroke: #677487; stroke-width: 1.5; stroke-dasharray: 4 4; }
+#forecast-details { margin-top: 20px; }
+#forecast-details table { min-width: 640px; table-layout: fixed; }
+#forecast-details th, #forecast-details td { padding: 12px; }
+#forecast-details th:first-child, #forecast-details td:first-child { padding-left: 0; width: 136px; }
+#forecast-details time { display: block; font-size: 12px; line-height: 1.7; }
+#forecast-details-help { margin-bottom: 12px; }
+#forecast-scroll-hint { display: none; }
+@media (max-width: 800px) {
+  #forecast-scroll-hint { display: block; margin: 0 0 16px; }
+}
+@media (max-width: 600px) {
+  #forecast-days { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; }
+  #forecast-days button { grid-template-rows: auto 65px auto; padding: 10px 2px; font-size: 11px; }
+  .forecast-metrics { grid-template-columns: minmax(0, 1fr); }
+  .forecast-metrics .metric { min-height: 108px; }
+  .forecast-metrics .metric-label { min-height: 30px; }
+  #forecast-data .panel-heading { align-items: flex-start; font-size: 13px; }
+}

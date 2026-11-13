@@ -49,6 +49,19 @@
     </section>
     <section id="forecast-page" hidden>
       <div class="section-heading"><div><h1 data-i18n="forecast"></h1><p class="muted" data-i18n="forecast_intro"></p></div></div>
+      <div class="metrics forecast-metrics">
+        <article class="metric"><span class="metric-label" data-i18n="forecast_remaining"></span><div><strong id="forecast-remaining">—</strong><span class="unit">kWh</span></div></article>
+        <article class="metric"><span class="metric-label" data-i18n="forecast_tomorrow"></span><div><strong id="forecast-tomorrow">—</strong><span class="unit">kWh</span></div></article>
+      </div>
+      <div class="forecast-status-line"><p id="forecast-status" role="status"></p><span id="forecast-refresh-state" class="muted" role="status"></span><button type="button" id="forecast-refresh" class="secondary" data-i18n="forecast_refresh"></button></div>
+      <p id="forecast-error" class="muted" role="status"></p>
+      <div id="forecast-data" hidden>
+        <article class="panel"><div class="panel-heading"><h2 data-i18n="forecast_daily"></h2><span><span data-i18n="forecast_seven_days"></span> <strong id="forecast-seven-days">— kWh</strong></span></div><p class="muted" data-i18n="forecast_calendar_help"></p><div id="forecast-days" role="group"></div></article>
+        <article class="panel forecast-hourly"><div class="panel-heading"><h2><span id="forecast-day-heading"></span> · <span data-i18n="forecast_hourly"></span></h2><strong id="forecast-day-total">— kWh</strong></div><p class="muted" id="forecast-day-coverage"></p><div class="chart" id="forecast-chart"></div><p class="muted" data-i18n="forecast_marker_help"></p>
+          <details id="forecast-details"><summary id="forecast-details-label" data-i18n="forecast_details"></summary><p class="muted" id="forecast-details-help" data-i18n="forecast_details_help"></p><p class="muted" id="forecast-scroll-hint" data-i18n="forecast_scroll"></p><div class="table-scroll" tabindex="0" role="region" aria-labelledby="forecast-details-label"><table aria-labelledby="forecast-details-label" aria-describedby="forecast-details-help"><thead><tr><th data-i18n="forecast_period"></th><th><span data-i18n="forecast_poa"></span> (W/m²)</th><th><span data-i18n="forecast_air"></span> (°C)</th><th><span data-i18n="forecast_cell"></span> (°C)</th><th><span data-i18n="forecast_power"></span> (W)</th><th><span data-i18n="forecast_interval_energy"></span> (kWh)</th></tr></thead><tbody id="forecast-rows"></tbody></table></div></details>
+        </article>
+      </div>
+      <div class="inline-notes forecast-meta"><span id="forecast-fetched"></span><span id="forecast-timezone"></span><a href="https://open-meteo.com/" target="_blank" rel="noopener noreferrer" data-i18n="forecast_attribution"></a></div>
       <button class="secondary" id="open-forecast-settings" data-i18n="forecast_configure"></button>
     </section>
     <section id="configuration" hidden>

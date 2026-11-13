@@ -1,3 +1,4 @@
+import { plot } from './charts.js';
 import { languages, selectLanguage, translate } from './i18n.js';
 
 const catalogs = Object.fromEntries(await Promise.all(languages.map(async language => [language,
@@ -20,6 +21,14 @@ let livePoints = [];
 let lastHistoryKey = null;
 let historyVersion = 0;
 let lastHistoryDraw = '';
+let forecastData = null;
+let selectedForecastDay = null;
+let lastForecastDraw = '';
+let forecastVersion = 0;
+let forecastRequest = null;
+let updateForecastTime = null;
+const forecastKey = view => `${view?.fetched_at}|${view?.timezone}|${view?.today?.start}|${view?.seven_days?.end}`;
+const chartOptions = () => ({language, timezone:snapshot?.timezone || configuration?.settings?.timezone || 'UTC', translate:t});
 const editedFields = new Set();
 let entitiesLoaded = false;
 const form = document.querySelector('#settings-form');
@@ -56,6 +65,7 @@ function showPage(page) {
   el('data-navigation').hidden = page === 'settings';
   render();
   if (page === 'settings') loadEntities();
+  if (page === 'forecast') fetchForecast();
   if (page === 'history') fetchHistory().then(render).catch(error => {
     el('banner').hidden = false;
     el('banner').textContent = t(error.message);
@@ -102,73 +112,12 @@ function applyLanguage() {
   el('settings-button').setAttribute('aria-label', t('settings'));
   el('data-navigation').setAttribute('aria-label', t('data_pages'));
   el('settings-categories').setAttribute('aria-label', t('settings_categories'));
+  el('forecast-days').setAttribute('aria-label', t('forecast_daily'));
   el('history-range').setAttribute('aria-label', t('history'));
   el('language-select').setAttribute('aria-label', t('language'));
   el('language-select').value = languageChoice;
   ['live-coverage', 'stat-coverage'].forEach(id => { el(id).title = t('coverage_help'); });
   render();
-}
-
-function plot(id, data, series, unit) {
-  const host = el(id);
-  host.replaceChildren();
-  const valid = data.flatMap(point => series.map(item => point[item.key])).filter(value => Number.isFinite(value));
-  if (!data.length || !valid.length) {
-    const message = document.createElement('div');
-    message.className = 'chart-empty';
-    message.textContent = t('plot_empty');
-    host.append(message);
-    return;
-  }
-  const width = Math.max(host.clientWidth, 320), height = host.clientHeight, left = 58, right = 18, top = 16, bottom = 34;
-  const start = data[0].at, end = Math.max(data.at(-1).at, start + 1);
-  const maximum = Math.max(1, ...valid) * 1.1;
-  const minimum = Math.min(0, ...valid);
-  const x = at => left + (at - start) / (end - start) * (width - left - right);
-  const y = value => top + (maximum - value) / (maximum - minimum) * (height - top - bottom);
-  const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-  svg.setAttribute('viewBox', `0 0 ${width} ${height}`);
-  svg.setAttribute('role', 'img');
-  svg.setAttribute('aria-label', series.map(item => t(item.label)).join(' / '));
-  const add = (tag, attrs, text) => {
-    const node = document.createElementNS(svg.namespaceURI, tag);
-    Object.entries(attrs).forEach(([key, value]) => node.setAttribute(key, value));
-    if (text != null) node.textContent = text;
-    svg.append(node);
-    return node;
-  };
-  for (let index = 0; index <= 4; index++) {
-    const value = minimum + (maximum - minimum) * index / 4;
-    add('line', { x1: left, x2: width-right, y1: y(value), y2: y(value), class: 'grid' });
-    add('text', { x: left-10, y: y(value)+4, 'text-anchor': 'end' }, number(value, 0));
-  }
-  add('text', { x: left, y: 9 }, unit);
-  for (let index = 0; index <= 4; index++) {
-    const at = start + (end-start)*index/4;
-    const text = new Intl.DateTimeFormat(language, { hour: '2-digit', minute: '2-digit',
-      ...(end-start > 86400 ? { month:'numeric', day:'numeric' } : {}), timeZone:snapshot?.timezone || 'UTC' }).format(new Date(at*1000));
-    add('text', { x:x(at), y:height-8, 'text-anchor':index === 0 ? 'start' : index === 4 ? 'end' : 'middle' }, text);
-  }
-  const stride = Math.max(1, Math.ceil(data.length / 600));
-  const selected = data.filter((point,index) => index % stride === 0 || index === data.length-1 || series.some(item => point[item.key] == null));
-  series.forEach(item => {
-    let connected = false;
-    const commands = selected.map(point => {
-      if (!Number.isFinite(point[item.key])) { connected = false; return ''; }
-      const command = `${connected ? 'L' : 'M'}${x(point.at).toFixed(2)},${y(point[item.key]).toFixed(2)}`;
-      connected = true;
-      return command;
-    });
-    add('path', { d:commands.join(' '), stroke:item.color, class:'series' });
-    const last = selected.at(-1);
-    if (Number.isFinite(last[item.key])) {
-      const point = add('circle', { cx:x(last.at), cy:y(last[item.key]), r:3, fill:item.color });
-      const title = document.createElementNS(svg.namespaceURI, 'title');
-      title.textContent = `${t(item.label)}: ${number(last[item.key])} ${unit} · ${stamp(last.at)}`;
-      point.append(title);
-    }
-  });
-  host.append(svg);
 }
 
 const powerSeries = [{key:'estimated_power',label:'estimated',color:'#b65f00'}, {key:'actual_power',label:'actual',color:'#2563c6'}];
@@ -219,15 +168,16 @@ function render() {
     return row;
   }));
   el('source-empty').hidden = Boolean(snapshot?.sources?.length);
-  if (currentPage === 'live') plot('live-chart', livePoints, powerSeries, 'W');
+  if (currentPage === 'live') plot('live-chart', livePoints, powerSeries, 'W', chartOptions());
   if (currentPage === 'history') {
     const drawKey = `${historyVersion}|${language}|${snapshot?.timezone}|${['history-chart', 'pr-chart'].map(id => `${el(id).clientWidth},${el(id).clientHeight}`).join('|')}`;
     if (drawKey !== lastHistoryDraw) {
-      plot('history-chart', history, powerSeries, 'W');
-      plot('pr-chart', history, [{key:'pr',label:'pr',color:'#2563c6'}], '%');
+      plot('history-chart', history, powerSeries, 'W', chartOptions());
+      plot('pr-chart', history, [{key:'pr',label:'pr',color:'#2563c6'}], '%', chartOptions());
       lastHistoryDraw = drawKey;
     }
   }
+  if (currentPage === 'forecast') renderForecast();
 }
 
 async function loadConfiguration() {
@@ -269,9 +219,113 @@ async function fetchHistory(force = false) {
   lastHistoryKey = key;
 }
 
+async function fetchForecast() {
+  if (currentPage !== 'forecast' || forecastRequest) return;
+  forecastRequest = api('forecast');
+  try {
+    const result = await forecastRequest;
+    if (JSON.stringify([forecastData?.fetched_at, forecastData?.timezone, forecastData?.days, forecastData?.intervals]) !==
+        JSON.stringify([result.fetched_at, result.timezone, result.days, result.intervals])) forecastVersion += 1;
+    forecastData = result;
+    if (currentPage === 'forecast') renderForecast();
+  } catch (error) {
+    el('forecast-error').textContent = t(error.message);
+  } finally {
+    forecastRequest = null;
+  }
+}
+
+function renderForecast() {
+  const light = snapshot?.forecast;
+  const view = light && (!forecastData || light.calculated_at >= forecastData.calculated_at) ? light : forecastData;
+  const matching = forecastData && forecastKey(view) === forecastKey(forecastData);
+  const timezone = view?.timezone || snapshot?.timezone || 'UTC';
+  const dateFormat = new Intl.DateTimeFormat(language, {month:'short', day:'numeric', timeZone:timezone});
+  const timeFormat = new Intl.DateTimeFormat(language, {year:'numeric', month:'short', day:'numeric',
+    hour:'2-digit', minute:'2-digit', hourCycle:'h23', timeZone:timezone, timeZoneName:'longOffset'});
+  const time = value => timeFormat.format(new Date(value*1000));
+  const intervalTime = new Intl.DateTimeFormat(language, {hour:'2-digit', minute:'2-digit', hourCycle:'h23',
+    timeZone:timezone, timeZoneName:'longOffset'});
+  const status = view?.status || 'loading';
+  el('forecast-status').dataset.status = status;
+  el('forecast-status').textContent = t(`forecast_status_${status}`);
+  el('forecast-error').textContent = view?.last_error ? t('forecast_fetch_failed') : '';
+  el('forecast-remaining').textContent = number(view?.remaining_today?.kwh, 3);
+  el('forecast-tomorrow').textContent = number(view?.tomorrow?.kwh, 3);
+  el('forecast-seven-days').textContent = `${number(view?.seven_days?.kwh, 3)} kWh`;
+  el('forecast-fetched').textContent = view?.fetched_at == null ? t('forecast_never_fetched') : t('forecast_fetched', {time:time(view.fetched_at)});
+  el('forecast-timezone').textContent = `${t('timezone')}: ${timezone}`;
+  el('forecast-refresh-state').textContent = view?.refreshing ? t('forecast_refreshing') : '';
+  el('forecast-refresh').disabled = Boolean(view?.refreshing) || ['disabled', 'location_unavailable'].includes(status);
+  const days = matching ? forecastData.days : [];
+  if (days.length && !days.some(day => day.day === selectedForecastDay)) selectedForecastDay = days[0].day;
+  el('forecast-data').hidden = !days.length;
+  const selected = days.find(day => day.day === selectedForecastDay);
+  el('forecast-day-heading').textContent = selected ? dateFormat.format(new Date(selected.start*1000)) : t('forecast_hourly');
+  el('forecast-day-total').textContent = `${number(selected?.kwh, 3)} kWh`;
+  el('forecast-day-coverage').textContent = selected ? `${t(selected.quality)} · ${t('coverage')} ${number(selected.coverage_percent)}%` : '';
+  const drawKey = `${forecastVersion}|${matching}|${selectedForecastDay}|${language}|${timezone}|${el('forecast-chart').clientWidth},${el('forecast-chart').clientHeight}`;
+  if (drawKey !== lastForecastDraw) {
+    const maximum = Math.max(1, ...days.map(day => day.kwh ?? 0));
+    el('forecast-days').replaceChildren(...days.map(day => {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.dataset.day = day.day;
+      button.setAttribute('aria-pressed', String(day.day === selectedForecastDay));
+      const date = dateFormat.format(new Date(day.start*1000));
+      button.setAttribute('aria-label', `${date}: ${number(day.kwh, 3)} kWh · ${t(day.quality)}`);
+      const label = document.createElement('span');
+      label.className = 'day-label';
+      label.textContent = date;
+      const bar = document.createElement('span');
+      bar.className = `day-bar${day.kwh == null ? ' unavailable' : ''}`;
+      bar.style.setProperty('--bar-height', `${day.kwh == null ? 100 : Math.max(1, day.kwh/maximum*100)}%`);
+      bar.setAttribute('aria-hidden', 'true');
+      const value = document.createElement('span');
+      value.textContent = number(day.kwh, 3);
+      button.append(label, bar, value);
+      button.addEventListener('click', () => {selectedForecastDay = day.day; renderForecast(); el('forecast-days').querySelector(`[data-day="${day.day}"]`).focus({preventScroll:true});});
+      return button;
+    }));
+    const rows = selected ? forecastData.intervals.filter(row => row.end > selected.start && row.start < selected.end)
+      .map(row => ({...row, start:Math.max(row.start, selected.start), end:Math.min(row.end, selected.end),
+        energy_kwh:row.energy_kwh == null ? null : row.energy_kwh *
+          (Math.min(row.end, selected.end)-Math.max(row.start, selected.start))/(row.end-row.start)})) : [];
+    const details = row => `${time(row.start)} – ${time(row.end)} · ${t('forecast_poa')}: ${number(row.poa_w_m2)} W/m² · ${t('forecast_air')}: ${number(row.air_temperature_c)} °C · ${t('forecast_cell')}: ${number(row.cell_temperature_c)} °C · ${t('forecast_power')}: ${number(row.power_w)} W · ${t('forecast_interval_energy')}: ${number(row.energy_kwh, 3)} kWh`;
+    updateForecastTime = plot('forecast-chart', rows.flatMap(row => [
+      {at:row.start, power_w:row.power_w, interval:row}, {at:row.end, power_w:row.power_w, interval:row}]),
+      [{key:'power_w',label:'forecast_power',color:'#b65f00'}], 'W',
+      {language, timezone, translate:t, tooltip:point => details(point.interval), currentTime:Date.now()/1000});
+    el('forecast-rows').replaceChildren(...rows.map(row => {
+      const tr = document.createElement('tr');
+      const period = document.createElement('td');
+      [row.start, row.end].forEach((at, index) => {
+        const instant = document.createElement('time');
+        instant.dateTime = new Date(at*1000).toISOString();
+        instant.setAttribute('aria-label', time(at));
+        instant.title = time(at);
+        instant.textContent = `${index ? '→ ' : ''}${index && at === selected.end ? `${dateFormat.format(new Date(at*1000))} ` : ''}${intervalTime.format(new Date(at*1000))}`;
+        period.append(instant);
+      });
+      tr.append(period);
+      [number(row.poa_w_m2), number(row.air_temperature_c),
+        number(row.cell_temperature_c), number(row.power_w), number(row.energy_kwh,3)].forEach(value => {
+        const cell = document.createElement('td'); cell.textContent = value; tr.append(cell);
+      });
+      return tr;
+    }));
+    lastForecastDraw = drawKey;
+  }
+  updateForecastTime?.(Date.now()/1000);
+}
+
 async function poll() {
   try {
+    const previousForecast = snapshot?.forecast;
     snapshot = await api('snapshot');
+    if (currentPage === 'forecast' && (!forecastData || snapshot.forecast?.calculated_at >= forecastData.calculated_at) &&
+        (forecastKey(snapshot.forecast) !== forecastKey(forecastData) ||
+        previousForecast?.refreshing && !snapshot.forecast?.refreshing)) await fetchForecast();
     if (snapshot.calculated_at && livePoints.at(-1)?.at !== snapshot.calculated_at) {
       livePoints.push({at:snapshot.calculated_at,estimated_power:snapshot.realtime?.estimated_power ?? null,actual_power:snapshot.realtime?.actual_power ?? null});
       livePoints = livePoints.filter(point => point.at >= Date.now()/1000 - 1800).slice(-600);
@@ -289,6 +343,19 @@ async function poll() {
 }
 
 ['live', 'history', 'forecast'].forEach(page => el(`${page}-tab`).addEventListener('click', () => showPage(page)));
+el('forecast-refresh').addEventListener('click', async () => {
+  el('forecast-refresh').disabled = true;
+  el('forecast-refresh-state').textContent = t('forecast_refreshing');
+  try {
+    await api('forecast/refresh', {method:'POST'});
+    if (snapshot?.forecast) snapshot.forecast.refreshing = true;
+    if (forecastData) forecastData.refreshing = true;
+  } catch (error) {
+    el('forecast-error').textContent = t(error.message);
+    el('forecast-refresh').disabled = false;
+    el('forecast-refresh-state').textContent = '';
+  }
+});
 el('settings-button').addEventListener('click', () => showPage('settings'));
 el('settings-back').addEventListener('click', () => showPage(previousDataPage));
 el('open-settings').addEventListener('click', () => showPage('settings'));
@@ -403,7 +470,7 @@ form.addEventListener('submit', async event => {
 });
 
 const chartResize = new ResizeObserver(() => render());
-['live-chart', 'history-chart', 'pr-chart'].forEach(id => chartResize.observe(el(id)));
+['live-chart', 'history-chart', 'pr-chart', 'forecast-chart'].forEach(id => chartResize.observe(el(id)));
 applyLanguage();
 try { await loadConfiguration(); } catch (error) { el('banner').hidden=false; el('banner').textContent=t(error.message); }
 poll();
