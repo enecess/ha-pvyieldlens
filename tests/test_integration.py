@@ -35,13 +35,38 @@ async def test_real_rest_websocket_collection_and_thirteen_outputs(tmp_path):
     async with fake_server() as url:
         store = Store(tmp_path / 'data.sqlite')
         service = Service(store, HomeAssistantClient(url, 'simulation-token'))
-        await service.configure(settings(interval_minutes=1, timezone='Asia/Shanghai', update_seconds=1), now=time.time()-65)
+        await service.configure(settings(interval_minutes=1, timezone='Asia/Shanghai', update_seconds=1), now=time.time()-65, origin=url)
         await service.start()
         async with asyncio.timeout(15):
             while len(published) != 13 or published['sensor.pvyieldlens_realtime_pr']['state'] == 'unavailable':
                 await asyncio.sleep(0.1)
         assert float(published['sensor.pvyieldlens_realtime_pr']['state']) == pytest.approx(90, abs=0.1)
-        assert all(payload['state'] == 'unavailable' for entity, payload in published.items() if entity.startswith('sensor.pvyieldlens_forecast_'))
+        for name, unit, device_class, state_class in (
+            ('estimated_power', 'W', 'power', 'measurement'),
+            ('actual_power', 'W', 'power', 'measurement'),
+            ('pr', '%', None, 'measurement'),
+            ('daily_estimated_energy', 'kWh', 'energy', 'total_increasing'),
+            ('total_estimated_energy', 'kWh', 'energy', 'total_increasing'),
+            ('realtime_estimated_power', 'W', 'power', 'measurement'),
+            ('realtime_actual_power', 'W', 'power', 'measurement'),
+            ('realtime_pr', '%', None, 'measurement'),
+            ('realtime_optimizable_power', 'W', 'power', 'measurement'),
+        ):
+            payload = published['sensor.pvyieldlens_' + name]
+            assert float(payload['state']) >= 0
+            assert payload['attributes']['unit_of_measurement'] == unit
+            assert payload['attributes'].get('device_class') == device_class
+            assert payload['attributes']['state_class'] == state_class
+        for name in ('today', 'remaining_today', 'tomorrow', '7d'):
+            payload = published['sensor.pvyieldlens_forecast_energy_' + name]
+            assert payload['state'] == 'unavailable'
+            assert payload['attributes']['unit_of_measurement'] == 'kWh'
+            assert payload['attributes']['device_class'] == 'energy'
+            assert payload['attributes']['status'] == 'disabled'
+            assert 'state_class' not in payload['attributes']
+        assert service.forecast.location.latitude == 31.23
+        assert service.forecast.location.longitude == 121.47
+        assert service.forecast.location.timezone == 'Asia/Shanghai'
         assert service.snapshot()['connected']
         assert service.snapshot()['energy']['total_kwh'] > 0
         await service.stop()

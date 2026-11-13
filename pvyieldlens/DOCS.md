@@ -7,7 +7,11 @@
 1. Open the Web UI and select **Settings**.
 2. Select your solar power, panel temperature and sunlight sensors.
 3. Enter the total rated power in W and temperature coefficient K in %/°C from your panel datasheet.
-4. Save and open **Overview**.
+4. Save and open **Live**.
+
+## Views and settings
+
+Use **Live** for current averages and sensor diagnostics, **History** for settled periods and the selected range's energy/PR, and **Forecast** for weather-based generation estimates. Today's settled and lifetime totals remain separate from the history range. The gear opens Settings categories: Home Assistant connection, Solar panels, Sensors, Monitoring and Forecast. Return to the previous data view after saving.
 
 ## Updates
 
@@ -24,6 +28,23 @@ PR compares actual power with expected power. The power gap is expected power mi
 Energy is counted only when all three sensors have data. Today's energy resets at midnight in your Home Assistant time zone; total energy starts from your first setup.
 
 Choose a language above for the full guide, including settings, output sensors and formulas.
+
+## Generation forecast
+
+Forecast is disabled by default, including after an upgrade. Under **Settings > Forecast**, enable it, enter panel tilt (0–90°), compass direction (north 0°, east 90°, south 180°, west 270°, or a custom value from 0° to below 360°), and NOCT from the datasheet (above 20°C, at most 80°C; default 45°C). Rated power and K are shared with monitoring. Location and time zone come automatically from the saved Home Assistant connection; change them in HA.
+
+Open-Meteo supplies hourly weather for today and the following six local calendar days. Select a date for full-day energy, the hourly power curve and numeric interval details; timestamps include UTC offsets. Today's forecast includes all of today, while **Remaining today** counts only from now to local midnight. Both use the latest successful weather fetch and are separate from settled theoretical energy calculated from sensor readings. Remaining energy decreases as time passes between fetches; a new forecast can also revise the full-day estimate.
+
+Weather normally refreshes hourly; **Refresh forecast** requests an update. Matching cached data survives restart. A failed refresh retains its original fetch time and shows stale data; retries occur after 15 minutes. Data at least two hours old is also stale. Missing weather intervals make affected totals unavailable, with completeness shown separately; missing data is never assumed to be zero. Disabled, missing HA location, initial loading and unavailable states are shown explicitly.
+
+These are theoretical DC reference values for one panel array, using plane-of-array irradiance and a simplified NOCT temperature model. They do not model inverter efficiency/clipping, shading, snow, soiling or system losses and do not guarantee actual AC yield. The four forecast entities are kWh energy values without `state_class`; they can decrease after refresh and are separate from cumulative monitoring energy. They do not provide native HA forecast or Energy dashboard integration.
+
+| Forecast | Entity ID |
+| --- | --- |
+| Today | `sensor.pvyieldlens_forecast_energy_today` |
+| Remaining today | `sensor.pvyieldlens_forecast_energy_remaining_today` |
+| Tomorrow | `sensor.pvyieldlens_forecast_energy_tomorrow` |
+| Seven days | `sensor.pvyieldlens_forecast_energy_7d` |
 
 ## Installation and connection
 

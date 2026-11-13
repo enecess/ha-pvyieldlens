@@ -51,8 +51,15 @@ def docker(*args):
 
 async def exercise(client, directory):
     checks = {}
-    assert (await client.configuration()).time_zone == 'UTC'
-    checks['rest_config'] = True
+    configuration = await client.configuration()
+    assert configuration.time_zone == 'UTC'
+    assert configuration.location is not None
+    assert configuration.location.origin == client.base_url
+    assert configuration.location.latitude == 0
+    assert configuration.location.longitude == 0
+    assert configuration.location.location_name == 'PVYieldLens compatibility'
+    assert configuration.location.timezone == 'UTC'
+    checks['rest_config_location'] = True
     stream = client.events()
     assert await anext(stream) is None
 
@@ -222,7 +229,7 @@ async def exercise(client, directory):
         'calculated_at': time.time(), 'revision': 2}
     payloads = entity_payloads(snapshot)
     await client.publish(payloads)
-    assert len(payloads) == 9
+    assert len(payloads) == 13
     expected = {'estimated_power': 5000, 'actual_power': 4500, 'pr': 90,
         'daily_estimated_energy': .1, 'total_estimated_energy': 1.2,
         'realtime_estimated_power': 5000, 'realtime_actual_power': 5500,
@@ -255,6 +262,52 @@ async def exercise(client, directory):
     await client.publish(entity_payloads(snapshot))
     assert (await client.states(('sensor.pvyieldlens_pr',)))[0].state == 'unavailable'
     checks['nine_outputs_metadata_daily_complete_growth_reset_unavailable'] = True
+
+    day_start = datetime(2026, 11, 13, tzinfo=timezone.utc).timestamp()
+    snapshot['forecast'] = {
+        'status': 'ready', 'refreshing': False, 'timezone': 'UTC',
+        'fetched_at': day_start + 3600, 'calculated_at': day_start + 7200, 'last_error': None,
+        'today': {'start': day_start, 'end': day_start + 86400, 'kwh': 2.4,
+                  'coverage_percent': 100, 'quality': 'complete'},
+        'remaining_today': {'start': day_start + 7200, 'end': day_start + 86400, 'kwh': 1.2,
+                            'coverage_percent': 100, 'quality': 'complete'},
+        'tomorrow': {'start': day_start + 86400, 'end': day_start + 172800, 'kwh': 3.6,
+                     'coverage_percent': 100, 'quality': 'complete'},
+        'seven_days': {'start': day_start, 'end': day_start + 604800, 'kwh': 20.4,
+                       'coverage_percent': 100, 'quality': 'complete'},
+    }
+    await client.publish(entity_payloads(snapshot))
+    for name, value, start, end in (
+        ('today', 2.4, day_start, day_start + 86400),
+        ('remaining_today', 1.2, day_start + 7200, day_start + 86400),
+        ('tomorrow', 3.6, day_start + 86400, day_start + 172800),
+        ('7d', 20.4, day_start, day_start + 604800),
+    ):
+        actual = await client.request('GET', 'states/sensor.pvyieldlens_forecast_energy_' + name)
+        assert float(actual['state']) == value
+        attrs = actual['attributes']
+        assert attrs['unit_of_measurement'] == 'kWh'
+        assert attrs['device_class'] == 'energy'
+        assert 'state_class' not in attrs
+        assert attrs['start'] == start and attrs['end'] == end
+        assert attrs['timezone'] == 'UTC'
+        assert attrs['fetched_at'] == day_start + 3600
+        assert attrs['calculated_at'] == day_start + 7200
+        assert attrs['coverage_percent'] == 100 and attrs['quality'] == 'complete'
+        assert attrs['status'] == 'ready' and attrs['refreshing'] is False
+        assert attrs['last_error'] is None
+    snapshot['forecast']['remaining_today']['kwh'] = .6
+    await client.publish(entity_payloads(snapshot))
+    assert float((await client.request('GET',
+        'states/sensor.pvyieldlens_forecast_energy_remaining_today'))['state']) == .6
+    snapshot['forecast'] = {'status': 'disabled'}
+    await client.publish(entity_payloads(snapshot))
+    for name in ('today', 'remaining_today', 'tomorrow', '7d'):
+        actual = await client.request('GET', 'states/sensor.pvyieldlens_forecast_energy_' + name)
+        assert actual['state'] == 'unavailable'
+        assert actual['attributes']['status'] == 'disabled'
+        assert 'state_class' not in actual['attributes']
+    checks['four_forecast_outputs_energy_no_state_class_periods_decrease_disabled'] = True
     return checks
 
 

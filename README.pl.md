@@ -52,6 +52,8 @@ Domyślnie strona działa na komputerze z Dockerem. Aby otworzyć ją na innym u
 
 ## Ustawienia
 
+**Na żywo** pokazuje bieżące średnie i diagnostykę, **Historia** zakończone okresy oraz energię/PR wybranego zakresu, a **Prognoza** szacunki na podstawie pogody. Sumy dzienne i całkowite nie zależą od zakresu. Koło zębate otwiera **Ustawienia**: Połączenie z Home Assistant, Panele słoneczne, Czujniki, Monitorowanie i Prognoza. Następnie możesz wrócić do poprzedniego widoku; wybór języka pozostaje w prawym górnym rogu.
+
 | Ustawienie | Co wpisać |
 | --- | --- |
 | Łączna moc znamionowa | Suma mocy paneli w W, np. `5000`. |
@@ -63,7 +65,17 @@ Domyślnie strona działa na komputerze z Dockerem. Aby otworzyć ją na innym u
 | Średnia z | Czas do obliczenia średniej na żywo. Domyślnie 60 sekund. |
 | Odświeżaj co | Czas między aktualizacjami. Domyślnie 5 sekund. |
 
-Zapisz ustawienia i otwórz **Przegląd**. Pierwszy wynik w historii pojawi się po zakończeniu bieżącego okresu. W sekcji **Limit czasu bez danych** ustaw czas oczekiwania na każdy czujnik.
+Zapisz ustawienia i otwórz **Na żywo**. Pierwszy rozliczony wynik pojawi się w widoku **Historia** po zakończeniu bieżącego okresu. W sekcji **Limit czasu bez danych** ustaw czas oczekiwania na każdy czujnik.
+
+## Prognoza produkcji
+
+Prognoza jest domyślnie wyłączona, również po aktualizacji. Włącz ją w **Ustawienia > Prognoza** i podaj nachylenie (0–90°), kierunek kompasowy (północ 0°, wschód 90°, południe 180°, zachód 270° lub własny azymut od 0° do mniej niż 360°) oraz NOCT z karty panelu (powyżej 20°C, do 80°C; domyślnie 45°C). Moc znamionowa i K są wspólne z monitorowaniem. Lokalizacja i strefa czasowa pochodzą automatycznie z zapisanego połączenia HA; zmieniaj je w HA.
+
+Open-Meteo dostarcza pogodę co godzinę na dziś i sześć następnych lokalnych dni kalendarzowych. Wybierz datę, aby zobaczyć energię całego dnia, wykres godzinowy i tabelę przedziałów z przesunięciem UTC. Dzisiejsza prognoza obejmuje cały dzień, a **Pozostało dzisiaj** tylko czas od teraz do lokalnej północy. Obie korzystają z ostatniej poprawnie pobranej pogody i są odrębne od rozliczonej energii teoretycznej wyliczonej z danych czujników. Pozostała energia maleje z upływem czasu między pobraniami; nowe dane mogą też zmienić prognozę całego dnia.
+
+Pogoda odświeża się co godzinę lub przyciskiem **Odśwież prognozę**. Pasująca pamięć podręczna przetrwa restart. Nieudane pobranie zachowuje pierwotny czas i oznacza dane jako nieaktualne; ponowienie następuje po 15 minutach. Dane mające co najmniej dwie godziny także są nieaktualne. Brakujące przedziały czynią odpowiednie sumy niedostępnymi; kompletność jest pokazywana osobno, a braków nie zastępuje zero. Widoczne są stany wyłączenia, braku lokalizacji HA, pierwszego ładowania i niedostępności.
+
+To teoretyczna wartość odniesienia DC dla jednego pola paneli, z promieniowaniem w ich płaszczyźnie i uproszczonym modelem temperatury NOCT. Nie uwzględnia sprawności/ograniczeń falownika, cienia, śniegu, zabrudzeń ani strat systemowych i nie gwarantuje rzeczywistego uzysku AC. Cztery encje prognozy mają kWh i klasę urządzenia energy, bez `state_class`; mogą maleć i są oddzielone od liczników skumulowanych. Nie zapewniają natywnej integracji prognoz HA ani panelu Energia.
 
 ## Czujniki wynikowe
 
@@ -78,6 +90,10 @@ Zapisz ustawienia i otwórz **Przegląd**. Pierwszy wynik w historii pojawi się
 | Moc rzeczywista na żywo | `sensor.pvyieldlens_realtime_actual_power` | W |
 | PR na żywo | `sensor.pvyieldlens_realtime_pr` | % |
 | Różnica mocy na żywo | `sensor.pvyieldlens_realtime_optimizable_power` | W |
+| Prognoza na dzisiaj | `sensor.pvyieldlens_forecast_energy_today` | kWh |
+| Prognoza pozostała dzisiaj | `sensor.pvyieldlens_forecast_energy_remaining_today` | kWh |
+| Prognoza na jutro | `sensor.pvyieldlens_forecast_energy_tomorrow` | kWh |
+| Prognoza na 7 dni | `sensor.pvyieldlens_forecast_energy_7d` | kWh |
 
 ## Wzór PR
 

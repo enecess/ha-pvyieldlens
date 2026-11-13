@@ -52,6 +52,8 @@ Par défaut, la page est accessible sur la machine Docker. Pour y accéder depui
 
 ## Réglages
 
+**Temps réel** affiche les moyennes actuelles et les diagnostics ; **Historique**, les périodes clôturées et l’énergie/PR de la plage choisie ; **Prévisions**, les estimations météo. Les totaux du jour et depuis l’installation restent indépendants de cette plage. La roue dentée ouvre les **Paramètres** : Connexion Home Assistant, Panneaux solaires, Capteurs, Surveillance et Prévisions. Revenez ensuite à la vue précédente ; le menu de langue reste en haut à droite.
+
 | Réglage | Valeur à saisir |
 | --- | --- |
 | Puissance nominale totale | Somme des puissances des panneaux en W, par exemple `5000`. |
@@ -63,7 +65,17 @@ Par défaut, la page est accessible sur la machine Docker. Pour y accéder depui
 | Moyenne sur | Durée utilisée pour la moyenne en direct. Par défaut : 60 secondes. |
 | Mise à jour toutes les | Délai entre deux mises à jour. Par défaut : 5 secondes. |
 
-Enregistrez, puis ouvrez **Vue d’ensemble**. Le premier résultat de l’historique apparaît à la fin de la période en cours. Sous **Délai sans données**, réglez le temps d’attente pour chaque capteur.
+Enregistrez, puis ouvrez **Temps réel**. Le premier résultat clôturé apparaît dans **Historique** à la fin de la période en cours. Sous **Délai sans données**, réglez le temps d’attente pour chaque capteur.
+
+## Prévisions de production
+
+Les prévisions sont désactivées par défaut, y compris après une mise à jour. Dans **Paramètres > Prévisions**, activez-les et indiquez l’inclinaison (0–90°), l’orientation (nord 0°, est 90°, sud 180°, ouest 270°, ou un azimut personnalisé de 0° à moins de 360°) et le NOCT de la fiche technique (plus de 20°C, au maximum 80°C ; 45°C par défaut). La puissance nominale et K sont partagés avec la surveillance. Le lieu et le fuseau sont lus automatiquement depuis la connexion Home Assistant enregistrée ; modifiez-les dans HA.
+
+Open-Meteo fournit la météo horaire pour aujourd’hui et les six jours calendaires locaux suivants. Choisissez une date pour l’énergie de la journée, la courbe horaire et le tableau des intervalles, avec décalages UTC. La prévision du jour couvre toute la journée ; **Reste aujourd’hui** couvre seulement maintenant jusqu’à minuit local. Ces valeurs utilisent la dernière météo obtenue avec succès et sont distinctes de l’énergie théorique clôturée calculée à partir des capteurs. L’énergie restante diminue avec le temps entre deux téléchargements ; une nouvelle météo peut aussi réviser le total du jour.
+
+La météo est actualisée chaque heure, ou avec **Actualiser les prévisions**. Le cache correspondant est conservé au redémarrage. Un échec conserve l’heure d’origine et signale des données anciennes ; nouvelle tentative après 15 minutes. Les données datant d’au moins deux heures sont également anciennes. Des intervalles manquants rendent les totaux concernés indisponibles ; la complétude reste affichée et les valeurs manquantes ne deviennent pas zéro. L’interface distingue désactivation, lieu HA absent, chargement initial et indisponibilité.
+
+Il s’agit d’une référence théorique en courant continu pour un seul champ de panneaux, avec rayonnement dans leur plan et modèle thermique NOCT simplifié. Rendement/écrêtage de l’onduleur, ombrage, neige, salissures et pertes ne sont pas modélisés ; la production réelle en courant alternatif n’est pas garantie. Les quatre entités météo sont en kWh, de classe energy, sans `state_class` ; elles peuvent diminuer et restent séparées des compteurs cumulés. Elles ne fournissent pas d’intégration native aux prévisions HA ni au tableau de bord Énergie.
 
 ## Capteurs de sortie
 
@@ -78,6 +90,10 @@ Enregistrez, puis ouvrez **Vue d’ensemble**. Le premier résultat de l’histo
 | Puissance réelle en direct | `sensor.pvyieldlens_realtime_actual_power` | W |
 | PR en direct | `sensor.pvyieldlens_realtime_pr` | % |
 | Écart de puissance en direct | `sensor.pvyieldlens_realtime_optimizable_power` | W |
+| Prévision aujourd’hui | `sensor.pvyieldlens_forecast_energy_today` | kWh |
+| Prévision restante aujourd’hui | `sensor.pvyieldlens_forecast_energy_remaining_today` | kWh |
+| Prévision demain | `sensor.pvyieldlens_forecast_energy_tomorrow` | kWh |
+| Prévision sur 7 jours | `sensor.pvyieldlens_forecast_energy_7d` | kWh |
 
 ## Formule du PR
 

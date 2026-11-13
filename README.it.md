@@ -52,6 +52,8 @@ La pagina è accessibile dal computer con Docker. Per aprirla da un altro dispos
 
 ## Impostazioni
 
+**Tempo reale** mostra medie attuali e diagnostica, **Storico** i periodi conclusi e l’energia/PR dell’intervallo scelto, **Previsioni** le stime meteo. I totali del giorno e dall’avvio restano indipendenti dall’intervallo. L’ingranaggio apre **Impostazioni**: Connessione a Home Assistant, Pannelli solari, Sensori, Monitoraggio e Previsioni. Poi puoi tornare alla vista precedente; la lingua si sceglie sempre in alto a destra.
+
 | Impostazione | Valore da inserire |
 | --- | --- |
 | Potenza nominale totale | Somma delle potenze dei pannelli in W, ad esempio `5000`. |
@@ -63,7 +65,17 @@ La pagina è accessibile dal computer con Docker. Per aprirla da un altro dispos
 | Media su | Tempo usato per la media in tempo reale. Predefinito: 60 secondi. |
 | Aggiorna ogni | Tempo tra gli aggiornamenti. Predefinito: 5 secondi. |
 
-Salva e apri **Panoramica**. Il primo risultato nello storico appare alla fine del periodo in corso. In **Tempo senza nuovi dati**, imposta quanto attendere un aggiornamento da ogni sensore.
+Salva e apri **Tempo reale**. Il primo risultato consolidato appare nello **Storico** alla fine del periodo in corso. In **Tempo senza nuovi dati**, imposta quanto attendere un aggiornamento da ogni sensore.
+
+## Previsioni di produzione
+
+Le previsioni sono disattivate per impostazione predefinita, anche dopo un aggiornamento. In **Impostazioni > Previsioni**, attivale e inserisci inclinazione (0–90°), direzione (nord 0°, est 90°, sud 180°, ovest 270° o azimut personalizzato da 0° a meno di 360°) e NOCT della scheda tecnica (oltre 20°C, massimo 80°C; predefinito 45°C). Potenza nominale e K sono condivisi con il monitoraggio. Posizione e fuso provengono automaticamente dalla connessione HA salvata; modificali in HA.
+
+Open-Meteo fornisce il meteo orario per oggi e i sei giorni di calendario locali successivi. Scegli una data per energia giornaliera, curva oraria e tabella degli intervalli con scostamenti UTC. La previsione di oggi comprende tutto il giorno; **Rimanente oggi** solo il tempo da adesso alla mezzanotte locale. Entrambe usano l’ultimo meteo scaricato correttamente e sono distinte dall’energia teorica consolidata calcolata dai sensori. L’energia rimanente diminuisce con il tempo tra i download; nuovi dati possono anche modificare la stima dell’intera giornata.
+
+Il meteo si aggiorna ogni ora o con **Aggiorna previsione**. La cache corrispondente resta dopo il riavvio. Un errore conserva l’ora del download e segnala dati obsoleti; nuovo tentativo dopo 15 minuti. Anche i dati vecchi di almeno due ore sono obsoleti. Gli intervalli mancanti rendono indisponibili i totali interessati; la completezza è mostrata separatamente e i dati mancanti non valgono zero. Sono indicati disattivazione, posizione HA assente, primo caricamento e indisponibilità.
+
+Sono riferimenti teorici in corrente continua per un solo campo di pannelli, con irraggiamento sul loro piano e modello termico NOCT semplificato. Non includono efficienza/limitazione dell’inverter, ombre, neve, sporco o perdite e non garantiscono la produzione reale in corrente alternata. Le quattro entità hanno kWh e classe energy, senza `state_class`; possono diminuire e restano separate dai contatori cumulativi. Non forniscono un’integrazione nativa con previsioni HA o dashboard Energia.
 
 ## Sensori di uscita
 
@@ -78,6 +90,10 @@ Salva e apri **Panoramica**. Il primo risultato nello storico appare alla fine d
 | Potenza effettiva in tempo reale | `sensor.pvyieldlens_realtime_actual_power` | W |
 | PR in tempo reale | `sensor.pvyieldlens_realtime_pr` | % |
 | Differenza di potenza in tempo reale | `sensor.pvyieldlens_realtime_optimizable_power` | W |
+| Previsione oggi | `sensor.pvyieldlens_forecast_energy_today` | kWh |
+| Previsione restante oggi | `sensor.pvyieldlens_forecast_energy_remaining_today` | kWh |
+| Previsione domani | `sensor.pvyieldlens_forecast_energy_tomorrow` | kWh |
+| Previsione per 7 giorni | `sensor.pvyieldlens_forecast_energy_7d` | kWh |
 
 ## Formula del PR
 

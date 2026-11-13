@@ -52,6 +52,8 @@ Die Seite ist zunächst nur auf dem Docker-Rechner erreichbar. Für andere Gerä
 
 ## Einstellungen
 
+**Live** zeigt aktuelle Sensormittelwerte und Diagnosen, **Verlauf** abgeschlossene Zeiträume samt Energie/PR im gewählten Bereich und **Prognose** wetterbasierte Erträge. Tages- und Gesamtsummen bleiben vom gewählten Bereich unabhängig. Das Zahnrad öffnet **Einstellungen** mit Home-Assistant-Verbindung, Solarmodule, Sensoren, Überwachung und Prognose. Danach können Sie zur vorherigen Datenansicht zurückkehren; die Sprachauswahl bleibt oben rechts.
+
 | Einstellung | Eingabe |
 | --- | --- |
 | Gesamtnennleistung | Summe der Modulleistungen in W, z. B. `5000`. |
@@ -63,7 +65,17 @@ Die Seite ist zunächst nur auf dem Docker-Rechner erreichbar. Für andere Gerä
 | Mittelwert über | Zeitraum für den aktuellen Mittelwert. Standard: 60 Sekunden. |
 | Update alle | Abstand zwischen Updates. Standard: 5 Sekunden. |
 
-Speichern Sie die Werte und öffnen Sie **Übersicht**. Der erste Verlaufseintrag erscheint am Ende des laufenden Zeitraums. Unter **Zeit ohne neue Daten** legen Sie die Wartezeit für jeden Sensor fest.
+Speichern Sie die Werte und öffnen Sie **Live**. Der erste abgeschlossene Eintrag erscheint unter **Verlauf** am Ende des laufenden Zeitraums. Unter **Zeit ohne neue Daten** legen Sie die Wartezeit für jeden Sensor fest.
+
+## Ertragsprognose
+
+Die Prognose ist standardmäßig deaktiviert, auch nach einem Upgrade. Aktivieren Sie sie unter **Einstellungen > Prognose** und tragen Sie Neigung (0–90°), Kompassrichtung (Nord 0°, Ost 90°, Süd 180°, West 270° oder eigener Azimut von 0° bis unter 360°) und NOCT laut Datenblatt ein (über 20°C, höchstens 80°C; Standard 45°C). Nennleistung und K werden mit der Überwachung geteilt. Standort und Zeitzone stammen automatisch aus der gespeicherten HA-Verbindung; ändern Sie diese in HA.
+
+Open-Meteo liefert stündliches Wetter für heute und die folgenden sechs lokalen Kalendertage. Wählen Sie ein Datum für Tagesenergie, stündliche Leistungskurve und Intervalltabelle mit UTC-Versatz. Die heutige Prognose umfasst den ganzen Tag, **Heute verbleibend** nur die Zeit ab jetzt bis zur lokalen Mitternacht. Beide beruhen auf dem letzten erfolgreichen Wetterabruf und sind von der abgeschlossenen, aus Sensorwerten berechneten theoretischen Energie getrennt. Die verbleibende Energie sinkt zwischen Abrufen mit der Zeit; neue Wetterdaten können auch die Tagesprognose ändern.
+
+Das Wetter wird stündlich oder über **Prognose aktualisieren** abgerufen. Passende Cache-Daten bleiben nach Neustart erhalten. Bei Fehlern bleiben Abrufzeit und ältere Werte sichtbar; ein neuer Versuch folgt nach 15 Minuten. Daten ab zwei Stunden Alter gelten ebenfalls als veraltet. Fehlende Wetterintervalle machen betroffene Summen nicht verfügbar; die Vollständigkeit bleibt sichtbar, fehlende Werte zählen nicht als null. Deaktivierung, fehlender HA-Standort, erstes Laden und nicht verfügbare Daten werden angezeigt.
+
+Die Werte sind eine theoretische Gleichstromreferenz für ein Modulfeld mit Strahlung in Modulebene und vereinfachtem NOCT-Temperaturmodell. Wechselrichterwirkungsgrad/Begrenzung, Schatten, Schnee, Schmutz und Systemverluste sind nicht enthalten; tatsächlicher Wechselstromertrag ist nicht garantiert. Die vier Prognoseentitäten haben kWh und Geräteklasse energy, aber keine `state_class`; sie können sinken und bleiben von kumulierten Zählern getrennt. Eine native HA-Prognose- oder Energie-Dashboard-Integration wird nicht bereitgestellt.
 
 ## Ergebnis-Sensoren
 
@@ -78,6 +90,10 @@ Speichern Sie die Werte und öffnen Sie **Übersicht**. Der erste Verlaufseintra
 | Tatsächliche Live-Leistung | `sensor.pvyieldlens_realtime_actual_power` | W |
 | Live-PR | `sensor.pvyieldlens_realtime_pr` | % |
 | Live-Differenz | `sensor.pvyieldlens_realtime_optimizable_power` | W |
+| Prognose heute | `sensor.pvyieldlens_forecast_energy_today` | kWh |
+| Prognose heute verbleibend | `sensor.pvyieldlens_forecast_energy_remaining_today` | kWh |
+| Prognose morgen | `sensor.pvyieldlens_forecast_energy_tomorrow` | kWh |
+| Prognose für 7 Tage | `sensor.pvyieldlens_forecast_energy_7d` | kWh |
 
 ## PR-Formel
 
