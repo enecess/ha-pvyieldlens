@@ -40,6 +40,12 @@ class WindowResult:
         return {item.name: getattr(self, item.name) for item in fields(self) if item.name != "segments"}
 
 
+def estimated_power(rated_power_w: float, coefficient_per_c: float, temperature_c: float,
+                    irradiance_w_m2: float) -> float | None:
+    factor = 1 + coefficient_per_c * (temperature_c - 25)
+    return rated_power_w * factor * irradiance_w_m2 / 1000 if factor >= 0 else None
+
+
 def calculate(settings: Settings, observations: list[Observation], start: float, end: float) -> WindowResult:
     """Integrate the intersection of valid, piecewise constant source intervals."""
     sources = [sorted({item.at: item for item in observations if item.entity_id == entity and item.at < end}.values(),
@@ -59,10 +65,10 @@ def calculate(settings: Settings, observations: list[Observation], start: float,
         power, temperature, irradiance = values
         if power is None or temperature is None or irradiance is None:
             continue
-        factor = 1 + coefficient * (temperature - 25)
-        if factor < 0:
+        expected = estimated_power(settings.rated_power_w, coefficient, temperature, irradiance)
+        if expected is None:
             continue
-        segments.append(Segment(left, right, settings.rated_power_w * factor * irradiance / 1000, power))
+        segments.append(Segment(left, right, expected, power))
     duration = sum(part.end - part.start for part in segments)
     estimated = sum(part.estimated_power * (part.end - part.start) / 3600 for part in segments)
     actual = sum(part.actual_power * (part.end - part.start) / 3600 for part in segments)

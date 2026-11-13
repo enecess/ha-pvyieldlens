@@ -55,3 +55,35 @@ class Settings(BaseModel):
     @property
     def coefficient_per_c(self) -> float:
         return self.temperature_coefficient_pct_per_c / 100
+
+
+class ForecastSettings(BaseModel):
+    model_config = ConfigDict(extra="forbid", allow_inf_nan=False, strict=True, frozen=True)
+
+    enabled: bool = False
+    tilt_deg: float | None = Field(default=None, ge=0, le=90)
+    azimuth_deg: float | None = Field(default=None, ge=0, lt=360)
+    noct_c: float = Field(default=45.0, gt=20, le=80)
+
+    @model_validator(mode="after")
+    def require_enabled_geometry(self) -> Self:
+        if self.enabled and (self.tilt_deg is None or self.azimuth_deg is None):
+            raise ValueError("forecast_geometry_required")
+        return self
+
+
+class HALocation(BaseModel):
+    model_config = ConfigDict(extra="forbid", allow_inf_nan=False, strict=True, frozen=True)
+
+    origin: str
+    latitude: float = Field(ge=-90, le=90)
+    longitude: float = Field(ge=-180, le=180)
+    location_name: str | None = None
+    timezone: str
+
+    @field_validator("timezone")
+    @classmethod
+    def validate_timezone(cls, value: str) -> str:
+        if value not in available_timezones():
+            raise ValueError("invalid_timezone")
+        return value

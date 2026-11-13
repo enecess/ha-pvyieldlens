@@ -2,7 +2,7 @@ import pytest
 from pydantic import ValidationError
 
 from pvyieldlens.settings import Settings
-from pvyieldlens.engine import Observation, calculate
+from pvyieldlens.engine import Observation, calculate, estimated_power
 
 
 def settings(**changes):
@@ -79,3 +79,17 @@ def test_zero_denominator_and_negative_opportunity():
 def test_rejects_invalid_configuration(changes):
     with pytest.raises(ValidationError):
         settings(**changes)
+
+
+@pytest.mark.parametrize('temperature,irradiance,expected', [
+    (45, 800, 3720), (25, 0, 0), (-10, 1200, 6735), (400, 800, None),
+])
+def test_shared_power_preserves_zero_gain_and_invalid_factor(temperature, irradiance, expected):
+    assert estimated_power(5000, -0.0035, temperature, irradiance) == pytest.approx(expected)
+
+
+def test_negative_temperature_factor_does_not_become_a_valid_monitoring_segment():
+    result = calculate(settings(), samples(temp=400), 0, 60)
+    assert result.valid_seconds == 0
+    assert result.estimated_power is None
+    assert result.quality == 'unavailable'
