@@ -1,5 +1,7 @@
 from math import ceil
 
+from pydantic import JsonValue
+
 from pvyieldlens.forecast import ForecastInput, ForecastInterval
 from pvyieldlens.settings import HALocation
 
@@ -25,3 +27,17 @@ def constant_intervals(start: float, end: float, power_w: float = 3720.0) -> tup
         energy_kwh=power_w * (min(left + 3600, end) - left) / 3_600_000,
         quality='complete',
     ) for left in (start + index * 3600 for index in range(ceil((end - start) / 3600))))
+
+
+def hourly_payload(start: float, hours: int = 216, poa_w_m2: float | None = 800.0,
+                   air_temperature_c: float | None = 20.0) -> dict[str, JsonValue]:
+    return {
+        'latitude': 0.0, 'longitude': 0.0, 'generationtime_ms': 0.1,
+        'utc_offset_seconds': 0, 'timezone': 'GMT', 'timezone_abbreviation': 'GMT', 'elevation': 0.0,
+        'hourly_units': {'time': 'unixtime', 'global_tilted_irradiance': 'W/m²', 'temperature_2m': '°C'},
+        'hourly': {
+            'time': [start + index * 3600 for index in range(hours + 1)],
+            'global_tilted_irradiance': [poa_w_m2] * (hours + 1),
+            'temperature_2m': [air_temperature_c] * (hours + 1),
+        },
+    }
