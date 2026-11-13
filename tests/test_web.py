@@ -89,6 +89,10 @@ async def test_large_history_gzip_preserves_response_authentication_and_ingress(
     assert len(compressed) < len(plain.content)
     assert len(plain.json()['windows']) == 100
     assert all('segments' not in row for row in plain.json()['windows'])
+    assert plain.json()['requested_range'] == {'start': 0, 'end': 6000}
+    assert plain.json()['summary'] == pytest.approx({'start': 0, 'end': 6000, 'estimated_energy_kwh': 6.2,
+                                                  'pr': 90, 'coverage_percent': 100, 'valid_seconds': 6000})
+    assert 'private-token' not in plain.text
     async with httpx.AsyncClient(transport=httpx.ASGITransport(app=ingress, client=('10.0.0.5', 123)), base_url='http://app') as client:
         assert (await client.get(path, headers={'Accept-Encoding': 'gzip'})).status_code == 403
 
@@ -433,3 +437,63 @@ async def test_forecast_refresh_reports_disabled_and_location_required(service):
         forecast = await client.get('/api/forecast')
         assert forecast.json()['status'] == 'location_unavailable'
         assert forecast.json()['today'] is None
+
+
+async def test_history_summary_uses_committed_revisions_without_changing_monitoring(service):
+    import sqlite3
+    from pvyieldlens.home_assistant import entity_payloads
+    from test_engine import samples
+
+    await service.configure(settings(interval_minutes=1), now=0)
+    service.store.add_observations(samples())
+    await service.tick(60)
+    await service.configure(settings(interval_minutes=1, rated_power_w=10000), now=60)
+    service.store.add_observations(samples(at=60))
+    await service.tick(120)
+    service.store.add_observations(samples(at=120))
+    await service.tick(180.25)
+    before = service.snapshot(180.25)
+    payloads = entity_payloads(before)
+    original_ids = ('estimated_power', 'actual_power', 'pr', 'daily_estimated_energy', 'total_estimated_energy',
+                    'realtime_estimated_power', 'realtime_actual_power', 'realtime_pr', 'realtime_optimizable_power')
+    original_payloads = {name: payloads['sensor.pvyieldlens_' + name] for name in original_ids}
+    assert len(original_payloads) == 9
+    assert original_payloads['estimated_power']['state'] == '7440.0'
+    assert original_payloads['pr']['state'] == '45.0'
+    service.store.add_observations(samples(at=60, sun=100))
+    service.store.db.set_authorizer(lambda action, table, *_: sqlite3.SQLITE_DENY
+                                   if action == sqlite3.SQLITE_READ and table in ('window_segments', 'observations')
+                                   else sqlite3.SQLITE_OK)
+    app = create_app(service, Runtime(web_password='test-pass'), run_background=False)
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url='http://app') as client:
+        assert (await client.get('/api/history?start=0&end=180.25')).status_code == 401
+        auth = ('admin', 'test-pass')
+        complete = await client.get('/api/history?start=0&end=180.25', auth=auth)
+        assert complete.status_code == 200
+        complete_body = complete.json()
+        assert complete_body['requested_range'] == {'start': 0, 'end': 180.25}
+        assert complete_body['summary'] == pytest.approx({'start': 0, 'end': 180,
+            'estimated_energy_kwh': 0.31, 'pr': 54, 'coverage_percent': 100, 'valid_seconds': 180})
+        assert [row['revision'] for row in complete_body['windows']] == [1, 2, 2]
+        assert [row['estimated_energy_wh'] for row in complete_body['windows']] == pytest.approx([62, 124, 124])
+        partial = await client.get('/api/history?start=30.5&end=150.5', auth=auth)
+        assert partial.status_code == 200
+        partial_body = partial.json()
+        assert partial_body['requested_range'] == {'start': 30.5, 'end': 150.5}
+        assert partial_body['windows'] == complete_body['windows']
+        assert partial_body['summary'] == pytest.approx({'start': 60, 'end': 120,
+            'estimated_energy_kwh': 0.124, 'pr': 45, 'coverage_percent': 100, 'valid_seconds': 60})
+        empty = await client.get('/api/history?start=30.5&end=50.5', auth=auth)
+        assert len(empty.json()['windows']) == 1
+        assert empty.json()['summary'] == {'start': None, 'end': None, 'estimated_energy_kwh': None,
+                                         'pr': None, 'coverage_percent': None, 'valid_seconds': 0}
+        assert (await client.get('/api/history?start=60&end=60', auth=auth)).status_code == 422
+        assert (await client.get('/api/history?start=nan&end=180', auth=auth)).status_code == 422
+        assert (await client.get('/api/history?start=0&end=inf', auth=auth)).status_code == 422
+    after = service.snapshot(180.25)
+    for channel in ('energy', 'statistics', 'realtime', 'revision'):
+        assert after[channel] == before[channel]
+    after_payloads = entity_payloads(after)
+    assert {name: after_payloads['sensor.pvyieldlens_' + name] for name in original_ids} == original_payloads
+    assert after['energy']['total_kwh'] == pytest.approx(0.31)
+    assert after['statistics']['pr'] == pytest.approx(45)

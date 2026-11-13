@@ -20,7 +20,7 @@ from starlette.middleware.gzip import GZipMiddleware
 from .home_assistant import HomeAssistantClient
 from .service import NETWORK_ERRORS, Service
 from .settings import ForecastSettings, Settings
-from .storage import Store
+from .storage import Store, summarize_history
 
 
 @dataclass(frozen=True)
@@ -211,7 +211,8 @@ def create_app(service: Service, runtime: Runtime, run_background=True) -> FastA
         async with service.lock:
             rows = service.store.history(start, end)
         # Preserve outages by returning complete windows; the browser aggregates for display.
-        return {'windows': rows}
+        return {'windows': rows, 'summary': summarize_history(rows, start, end).model_dump(mode='json'),
+                'requested_range': {'start': start, 'end': end}}
 
     static = Path(__file__).parent / 'static'
 

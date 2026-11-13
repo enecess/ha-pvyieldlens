@@ -3,10 +3,56 @@ import sqlite3
 from dataclasses import dataclass
 from datetime import datetime, time, timedelta
 from pathlib import Path
+from typing import TypedDict
 from zoneinfo import ZoneInfo
+
+from pydantic import BaseModel, ConfigDict
 
 from .engine import Observation, WindowResult
 from .settings import ForecastSettings, Settings
+
+
+class HistoryWindow(TypedDict):
+    revision: int
+    start: float
+    end: float
+    valid_seconds: float
+    estimated_energy_wh: float
+    actual_energy_wh: float
+    estimated_power: float | None
+    actual_power: float | None
+    pr: float | None
+    optimizable_power: float | None
+    coverage_percent: float
+    quality: str
+    reason: str | None
+
+
+class HistorySummary(BaseModel):
+    model_config = ConfigDict(extra='forbid', allow_inf_nan=False, strict=True, frozen=True)
+
+    start: float | None
+    end: float | None
+    estimated_energy_kwh: float | None
+    pr: float | None
+    coverage_percent: float | None
+    valid_seconds: float
+
+
+def summarize_history(windows: list[HistoryWindow], start: float, end: float) -> HistorySummary:
+    included = [row for row in windows if row['start'] >= start and row['end'] <= end]
+    if not included:
+        return HistorySummary(start=None, end=None, estimated_energy_kwh=None, pr=None,
+                              coverage_percent=None, valid_seconds=0)
+    first = min(row['start'] for row in included)
+    last = max(row['end'] for row in included)
+    valid = sum(row['valid_seconds'] for row in included)
+    estimated = sum(row['estimated_energy_wh'] for row in included)
+    return HistorySummary(
+        start=first, end=last, estimated_energy_kwh=estimated / 1000 if valid else None,
+        pr=sum(row['actual_energy_wh'] for row in included) / estimated * 100 if valid and estimated else None,
+        coverage_percent=valid / (last - first) * 100, valid_seconds=valid,
+    )
 
 
 @dataclass(frozen=True)
@@ -187,11 +233,11 @@ class Store:
                 "daily_complete": bool(row[2]) if row else True,
                 "total_valid_seconds": float(self.get_meta("valid_seconds")), "settled_until": self.cursor}
 
-    def latest_window(self):
+    def latest_window(self) -> HistoryWindow | None:
         value = self.get_meta("latest_window")
         return json.loads(value) if value else None
 
-    def history(self, start: float, end: float):
+    def history(self, start: float, end: float) -> list[HistoryWindow]:
         return [{**json.loads(row['result']), 'revision': row['revision']}
                 for row in self.db.execute("SELECT revision,result FROM windows WHERE end>? AND start<? ORDER BY start", (start, end))]
 

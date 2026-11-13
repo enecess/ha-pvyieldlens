@@ -115,3 +115,86 @@ def test_forecast_settings_round_trip_keeps_monitoring_metadata(tmp_path):
     assert store.revision == 1
     assert store.cursor == 0
     store.close()
+
+
+def test_history_summary_uses_energy_ratio_not_mean_pr(tmp_path):
+    from pvyieldlens.storage import summarize_history
+
+    store = Store(tmp_path / 'data.sqlite')
+    first = settings(rated_power_w=600)
+    second = settings(rated_power_w=5400)
+    store.settle(calculate(first, samples(power=300, temp=25, sun=1000), 0, 600),
+                 store.save_settings(first, 0), 'UTC')
+    store.settle(calculate(second, samples(power=5400, temp=25, sun=1000, at=600), 600, 1200),
+                 store.save_settings(second, 600), 'UTC')
+    windows = store.history(0, 1200)
+    assert [(row['estimated_energy_wh'], row['actual_energy_wh']) for row in windows] == [(100, 50), (900, 900)]
+    assert [row['revision'] for row in windows] == [1, 2]
+    summary = summarize_history(windows, 0, 1200)
+    assert summary.estimated_energy_kwh == pytest.approx(1.0)
+    assert summary.pr == pytest.approx(95.0)
+    assert summary.coverage_percent == pytest.approx(100.0)
+    assert summary.valid_seconds == 1200
+    assert (summary.start, summary.end) == (0, 1200)
+    assert store.history(0, 1200) == windows
+    store.close()
+
+
+def test_partial_boundary_windows_are_excluded_without_proration(tmp_path):
+    import sqlite3
+    from pvyieldlens.storage import summarize_history
+
+    store = Store(tmp_path / 'data.sqlite')
+    revision = store.save_settings(settings(), 0.25)
+    for at in (0.25, 600.25, 1200.25):
+        store.settle(calculate(settings(), samples(at=at), at, at + 600), revision, 'UTC')
+    store.add_observations(samples(at=600.25, sun=100))
+    store.db.set_authorizer(lambda action, table, *_: sqlite3.SQLITE_DENY
+                            if action == sqlite3.SQLITE_READ and table in ('window_segments', 'observations')
+                            else sqlite3.SQLITE_OK)
+    windows = store.history(30.5, 1500.5)
+    assert len(windows) == 3
+    summary = summarize_history(windows, 30.5, 1500.5)
+    assert (summary.start, summary.end) == (600.25, 1200.25)
+    assert summary.estimated_energy_kwh == pytest.approx(0.62)
+    assert summary.pr == pytest.approx(90)
+    assert summary.valid_seconds == 600
+    assert summary.coverage_percent == 100
+    assert all('segments' not in row for row in windows)
+    store.close()
+
+
+@pytest.mark.parametrize('windows,start,end,expected', [
+    pytest.param([], 0, 86400, (None, None, None, None, None, 0), id='no-windows'),
+    pytest.param([{**calculate(settings(), samples(), 0, 60).public(), 'revision': 1}],
+                 30, 45, (None, None, None, None, None, 0), id='no-full-window'),
+    pytest.param([{**calculate(settings(), [], 0, 60).public(), 'revision': 1}],
+                 0, 86400, (0, 60, None, None, 0, 0), id='missing'),
+    pytest.param([{**calculate(settings(), samples(power=0, sun=0), 0, 60).public(), 'revision': 1}],
+                 0, 86400, (0, 60, 0, None, 100, 60), id='valid-night'),
+    pytest.param([{**calculate(settings(), samples(at=3600), 3600, 3660).public(), 'revision': 1}],
+                 0, 86400, (3600, 3660, 0.062, 90, 100, 60), id='short-installation'),
+    pytest.param([{**calculate(settings(power_max_age_seconds=30), samples(), 0, 60).public(), 'revision': 1},
+                  {**calculate(settings(), [], 60, 120).public(), 'revision': 1},
+                  {**calculate(settings(), samples(at=120), 120, 180).public(), 'revision': 2}],
+                 0, 86400, (0, 180, 0.093, 90, 50, 90), id='partial-and-missing'),
+])
+def test_history_summary_no_windows_missing_night_and_short_installation(windows, start, end, expected):
+    from pvyieldlens.storage import summarize_history
+
+    summary = summarize_history(windows, start, end)
+    assert summary.model_dump() == pytest.approx(dict(zip(
+        ('start', 'end', 'estimated_energy_kwh', 'pr', 'coverage_percent', 'valid_seconds'), expected)))
+
+
+@pytest.mark.parametrize('changes', [
+    {'valid_seconds': '60'}, {'estimated_energy_kwh': float('nan')},
+    {'pr': float('inf')}, {'extra': 1},
+])
+def test_history_summary_rejects_non_strict_or_non_finite_values(changes):
+    from pydantic import ValidationError
+    from pvyieldlens.storage import HistorySummary
+
+    with pytest.raises(ValidationError):
+        HistorySummary(**{'start': 0.0, 'end': 60.0, 'estimated_energy_kwh': 0.062,
+                          'pr': 90.0, 'coverage_percent': 100.0, 'valid_seconds': 60.0, **changes})
