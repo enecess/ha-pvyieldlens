@@ -63,9 +63,19 @@ def test_nine_outputs_keep_night_pr_unavailable():
     snapshot = {'statistics': {'estimated_power': 0, 'actual_power': 0, 'pr': None, 'quality': 'complete'},
                 'realtime': None, 'energy': {'daily_kwh': 0.1, 'total_kwh': 1.2}, 'calculated_at': 123, 'revision': 1}
     payloads = entity_payloads(snapshot)
-    assert len(payloads) == 9
-    assert payloads['sensor.pvyieldlens_pr']['state'] == 'unavailable'
-    assert payloads['sensor.pvyieldlens_total_estimated_energy']['state'] == '1.2'
+    original_ids = ('estimated_power', 'actual_power', 'pr', 'daily_estimated_energy', 'total_estimated_energy',
+                    'realtime_estimated_power', 'realtime_actual_power', 'realtime_pr', 'realtime_optimizable_power')
+    original_payloads = {name: payloads['sensor.pvyieldlens_' + name] for name in original_ids}
+    assert len(original_payloads) == 9
+    assert len(payloads) == 13
+    assert original_payloads['pr']['state'] == 'unavailable'
+    assert original_payloads['total_estimated_energy']['state'] == '1.2'
+    assert original_payloads['total_estimated_energy']['attributes']['state_class'] == 'total_increasing'
+    assert original_payloads['estimated_power']['attributes']['state_class'] == 'measurement'
+    forecast_payloads = [payload for entity, payload in payloads.items() if entity.startswith('sensor.pvyieldlens_forecast_')]
+    assert len(forecast_payloads) == 4
+    assert all(payload['state'] == 'unavailable' for payload in forecast_payloads)
+    assert all('state_class' not in payload['attributes'] for payload in forecast_payloads)
 
 
 async def test_recorder_attribute_change_keeps_update_time_without_reported_timestamp():
@@ -115,3 +125,39 @@ async def test_invalid_optional_location_does_not_break_monitoring_timezone(site
         config = await HomeAssistantClient('http://ha.test', 'secret', http=http).configuration()
         assert config.time_zone == 'UTC'
         assert config.location is None
+
+
+@pytest.mark.parametrize('fetched_at,status', [(43000.0, 'partial'), (1.0, 'stale')])
+def test_forecast_entities_have_no_state_class(fetched_at, status):
+    from forecast_fixtures import constant_intervals, forecast_input
+    from pvyieldlens.forecast import ForecastBatch, forecast_view
+    from pvyieldlens.settings import ForecastSettings
+
+    inputs = forecast_input()
+    view = forecast_view(ForecastBatch(inputs=inputs, fetched_at=fetched_at,
+        intervals=constant_intervals(0, 2 * 86400)), inputs,
+        ForecastSettings(enabled=True, tilt_deg=25.0, azimuth_deg=180.0), 43200)
+    payloads = entity_payloads({'statistics': None, 'realtime': None, 'energy': {},
+        'calculated_at': 123, 'revision': 1, 'forecast': view.model_dump(mode='json', exclude={'days', 'intervals'})})
+    targets = (
+        ('sensor.pvyieldlens_forecast_energy_today', '89.28', 0, 86400, 100, 'complete'),
+        ('sensor.pvyieldlens_forecast_energy_remaining_today', '44.64', 43200, 86400, 100, 'complete'),
+        ('sensor.pvyieldlens_forecast_energy_tomorrow', '89.28', 86400, 172800, 100, 'complete'),
+        ('sensor.pvyieldlens_forecast_energy_7d', 'unavailable', 0, 604800, 200 / 7, 'partial'),
+    )
+    assert len(payloads) == 13
+    for entity, state_value, start, end, coverage, quality in targets:
+        payload = payloads[entity]
+        assert payload['state'] == state_value
+        attributes = payload['attributes']
+        assert attributes['unit_of_measurement'] == 'kWh'
+        assert attributes['device_class'] == 'energy'
+        assert 'state_class' not in attributes
+        assert attributes['start'] == start
+        assert attributes['end'] == end
+        assert attributes['timezone'] == 'UTC'
+        assert attributes['fetched_at'] == fetched_at
+        assert attributes['calculated_at'] == 43200
+        assert attributes['coverage_percent'] == pytest.approx(coverage)
+        assert attributes['quality'] == quality
+        assert attributes['status'] == status

@@ -97,7 +97,8 @@ class Service:
                 'history_available': self.history_available, 'calculated_at': self.calculated_at,
                 'revision': self.store.revision, 'statistics': self.store.latest_window(), 'realtime': self.realtime,
                 'energy': self.store.totals(now, self.config.timezone if self.config else 'UTC'),
-                'sources': self.sources, 'timezone': self.config.timezone if self.config else 'UTC'}
+                'sources': self.sources, 'timezone': self.config.timezone if self.config else 'UTC',
+                'forecast': self.forecast.view(now).model_dump(mode='json', exclude={'days', 'intervals'})}
 
     async def ingest(self, states, historical=False, config: Settings | None = None, origin: str | None = None):
         async with self.lock:

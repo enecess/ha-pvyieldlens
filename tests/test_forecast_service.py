@@ -521,3 +521,36 @@ async def test_repeated_disabled_configuration_is_idempotent_during_cancellation
             release_cleanup.set()
             await forecast.stop()
     store.close()
+
+
+async def test_forecast_remaining_updates_without_new_weather(tmp_path):
+    from pvyieldlens.home_assistant import entity_payloads
+    from pvyieldlens.service import Service
+
+    requests = []
+    payload = hourly_payload(0)
+    payload['hourly']['global_tilted_irradiance'] = [800.0] * 15 + [0.0] * 202
+    store = Store(tmp_path / 'data.sqlite')
+    service = Service(store)
+    await service.configure(settings(), now=0, origin=ORIGIN)
+    async with httpx.AsyncClient(transport=httpx.MockTransport(
+        lambda request: requests.append(request) or httpx.Response(200, json=payload),
+    )) as http:
+        service.forecast = controller(store, http)
+        await service.forecast.refresh(now=48000)
+        before = service.snapshot(48000)
+        after = service.snapshot(49200)
+        assert before['forecast']['remaining_today']['kwh'] == pytest.approx(2.48)
+        assert after['forecast']['remaining_today']['kwh'] == pytest.approx(1.24)
+        assert 'days' not in before['forecast']
+        assert 'intervals' not in before['forecast']
+        before_payload = entity_payloads(before)['sensor.pvyieldlens_forecast_energy_remaining_today']
+        after_payload = entity_payloads(after)['sensor.pvyieldlens_forecast_energy_remaining_today']
+        assert before_payload['state'] == '2.48'
+        assert after_payload['state'] == '1.24'
+        assert before_payload['attributes']['fetched_at'] == after_payload['attributes']['fetched_at'] == 48000
+        assert before_payload['attributes']['calculated_at'] == 48000
+        assert after_payload['attributes']['calculated_at'] == 49200
+        assert after['forecast']['today']['kwh'] == before['forecast']['today']['kwh'] == pytest.approx(52.08)
+        assert len(requests) == 1
+    store.close()

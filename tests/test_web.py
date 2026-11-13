@@ -216,3 +216,220 @@ async def test_invalid_legacy_connection_keeps_app_reachable_until_correction(se
         assert response.json()['connection'] == {'url': url, 'token_set': True}
         assert json.loads(service.store.get_meta('connection')) == connection
         assert service.client.base_url == url
+
+
+async def test_legacy_update_preserves_forecast_settings(service):
+    from pvyieldlens.settings import ForecastSettings, HALocation
+
+    await service.configure(settings(), now=0, origin='http://ha.test')
+    before_forecast_settings = ForecastSettings(enabled=True, tilt_deg=25.0, azimuth_deg=180.0, noct_c=47.0)
+    location = HALocation(origin=service.origin, latitude=31.23, longitude=121.47, timezone='UTC')
+    service.forecast.configure(service.config, before_forecast_settings, service.origin, location)
+    service.store.set_meta('connection', '{"url":"http://ha.test","token":"private-token"}')
+    app = create_app(service, Runtime(web_password='test-pass'), run_background=False)
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url='http://app', auth=('admin', 'test-pass')) as client:
+        legacy_response = await client.put('/api/config', json={'settings': settings(rated_power_w=6000).model_dump()})
+        assert legacy_response.status_code == 200
+        assert legacy_response.json()['forecast_settings'] == before_forecast_settings.model_dump()
+        saved = await client.get('/api/config')
+        assert saved.json()['location'] == location.model_dump()
+        assert 'private-token' not in saved.text
+        assert service.store.forecast_settings() == before_forecast_settings
+        assert service.forecast.inputs.rated_power_w == 6000
+    await service.client.close()
+
+
+async def test_invalid_forecast_preserves_all_configuration_and_secrets(service):
+    from pvyieldlens.settings import ForecastSettings, HALocation
+
+    await service.configure(settings(), now=0, origin='http://ha.test')
+    before_forecast_settings = ForecastSettings(enabled=True, tilt_deg=25.0, azimuth_deg=180.0)
+    location = HALocation(origin=service.origin, latitude=31.23, longitude=121.47, timezone='UTC')
+    service.forecast.configure(service.config, before_forecast_settings, service.origin, location)
+    saved_connection = '{"url":"http://ha.test","token":"private-token"}'
+    service.store.set_meta('connection', saved_connection)
+    before_monitor_config = service.config
+    before_changes = service.store.db.total_changes
+    app = create_app(service, Runtime(web_password='test-pass'), run_background=False)
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url='http://app', auth=('admin', 'test-pass')) as client:
+        invalid_response = await client.put('/api/config', json={
+            'settings': settings(rated_power_w=6000).model_dump(),
+            'connection': {'url': 'http://new-ha.test', 'token': 'private-token'},
+            'forecast_settings': {'enabled': True, 'tilt_deg': None, 'azimuth_deg': 360},
+        })
+    assert invalid_response.status_code == 422
+    assert service.config == before_monitor_config
+    assert service.store.forecast_settings() == before_forecast_settings
+    assert 'private-token' not in invalid_response.text
+    assert service.store.get_meta('connection') == saved_connection
+    assert service.forecast.location == location
+    assert service.store.revision == 1
+    assert service.store.db.total_changes == before_changes
+    assert service.client is None
+
+
+async def test_forecast_update_requires_effective_credentials_before_writes(service):
+    await service.configure(settings(), now=0, origin='http://ha.test')
+    before = service.store.db.total_changes
+    app = create_app(service, Runtime(web_password='test-pass'), run_background=False)
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url='http://app', auth=('admin', 'test-pass')) as client:
+        response = await client.put('/api/config', json={
+            'settings': settings(rated_power_w=6000).model_dump(),
+            'forecast_settings': {'enabled': True, 'tilt_deg': 25.0, 'azimuth_deg': 180.0},
+        })
+    assert response.status_code == 422
+    assert response.json() == {'error': 'connection_required'}
+    assert service.config.rated_power_w == 5000
+    assert service.store.forecast_settings().enabled is False
+    assert service.store.db.total_changes == before
+
+
+async def test_forecast_only_put_keeps_running_monitoring(service, monkeypatch):
+    import asyncio
+    from pvyieldlens.settings import ForecastSettings, HALocation
+    from test_integration import fake_server
+
+    monkeypatch.setattr('pvyieldlens.service.time.time', lambda: 180)
+    async with fake_server() as url:
+        config = settings(interval_minutes=1, update_seconds=60, timezone='Asia/Shanghai')
+        await service.configure(config, now=120, origin=url)
+        location = HALocation(origin=url, latitude=31.23, longitude=121.47, location_name='Home', timezone='Asia/Shanghai')
+        service.forecast.configure(config, ForecastSettings(tilt_deg=25.0, azimuth_deg=180.0), url, location)
+        service.store.set_meta('connection', '{"url":"' + url + '","token":"simulation-token"}')
+        app = create_app(service, Runtime(web_password='test-pass'))
+        async with app.router.lifespan_context(app), httpx.AsyncClient(transport=httpx.ASGITransport(app=app),
+                base_url='http://app', auth=('admin', 'test-pass')) as client:
+            async with asyncio.timeout(2):
+                while not service.connected:
+                    await asyncio.sleep(0.01)
+            tasks, ha_client = tuple(service.tasks), service.client
+            before = service.snapshot(180)
+            cursor, started_at = service.store.cursor, service.store.get_meta('started_at')
+            observations = service.store.observations(120, 180, config.entities, url)
+            days = list(map(tuple, service.store.db.execute('SELECT * FROM days')))
+            response = await client.put('/api/config', json={'settings': config.model_dump(),
+                'connection': {'url': url + '/', 'token': ''},
+                'forecast_settings': {'enabled': False, 'tilt_deg': 25.0, 'azimuth_deg': 180.0, 'noct_c': 47.0}})
+            assert response.status_code == 200
+            assert tuple(service.tasks) == tasks
+            assert all(not task.done() for task in tasks)
+            assert service.client is ha_client
+            assert service._recovery_needed is False
+            after = service.snapshot(180)
+            for key in ('revision', 'energy', 'realtime', 'sources', 'statistics', 'connected', 'calculated_at'):
+                assert after[key] == before[key]
+            assert service.store.cursor == cursor
+            assert service.store.get_meta('started_at') == started_at
+            assert list(map(tuple, service.store.db.execute('SELECT * FROM days'))) == days
+            assert service.store.observations(120, 180, config.entities, url) == observations
+            assert response.json()['location'] == location.model_dump()
+            assert response.json()['forecast_settings']['noct_c'] == 47.0
+
+
+async def test_connection_preview_does_not_replace_active_forecast_location(service):
+    from pvyieldlens.settings import ForecastSettings, HALocation
+    from test_integration import fake_server
+
+    await service.configure(settings(), now=0, origin='http://active-ha.test')
+    location = HALocation(origin=service.origin, latitude=0.0, longitude=0.0, location_name='Active', timezone='UTC')
+    service.forecast.configure(service.config, ForecastSettings(enabled=True, tilt_deg=25.0, azimuth_deg=180.0), service.origin, location)
+    saved = '{"url":"http://active-ha.test","token":"private-token"}'
+    service.store.set_meta('connection', saved)
+    changes = service.store.db.total_changes
+    app = create_app(service, Runtime(web_password='test-pass'), run_background=False)
+    async with fake_server() as url, httpx.AsyncClient(transport=httpx.ASGITransport(app=app),
+            base_url='http://app', auth=('admin', 'test-pass')) as client:
+        response = await client.post('/api/connection', json={'url': url, 'token': 'simulation-token'})
+        assert response.status_code == 200
+        assert response.json()['location'] == {'origin': url, 'latitude': 31.23, 'longitude': 121.47,
+                                              'location_name': 'Home', 'timezone': 'Asia/Shanghai'}
+        assert len(response.json()['entities']) == 3
+        assert service.forecast.location == location
+        assert service.store.get_meta('ha_location') == location.model_dump_json()
+        assert service.store.get_meta('connection') == saved
+        assert service.store.db.total_changes == changes
+        assert (await client.get('/api/config')).json()['location'] == location.model_dump()
+
+
+async def test_forecast_read_and_refresh_are_authenticated_and_nonblocking(service, monkeypatch):
+    import asyncio
+    from forecast_fixtures import hourly_payload
+    from pvyieldlens.forecast_service import ForecastController
+    from pvyieldlens.open_meteo import OpenMeteoClient
+    from pvyieldlens.settings import ForecastSettings, HALocation
+
+    monkeypatch.setattr('pvyieldlens.service.time.time', lambda: 180)
+    entered, release = asyncio.Event(), asyncio.Event()
+    requests = []
+
+    async def weather_response(request):
+        requests.append(request)
+        entered.set()
+        await release.wait()
+        return httpx.Response(200, json=hourly_payload(0))
+
+    await service.configure(settings(), now=0, origin='http://ha.test')
+    async with httpx.AsyncClient(transport=httpx.MockTransport(weather_response)) as weather_http:
+        service.forecast = ForecastController(service.store, OpenMeteoClient(weather_http))
+        service.forecast.configure(service.config, ForecastSettings(enabled=True, tilt_deg=25.0, azimuth_deg=180.0),
+            service.origin, HALocation(origin=service.origin, latitude=0.0, longitude=0.0, timezone='UTC'))
+        app = create_app(service, Runtime(web_password='test-pass'), run_background=False)
+        async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url='http://app') as client:
+            try:
+                assert (await client.get('/api/forecast')).status_code == 401
+                assert (await client.post('/api/forecast/refresh')).status_code == 401
+                assert requests == []
+                auth = ('admin', 'test-pass')
+                trigger = await asyncio.wait_for(client.post('/api/forecast/refresh', auth=auth), 0.5)
+                assert trigger.status_code == 202
+                assert trigger.json() == {'scheduled': True, 'status': 'loading'}
+                await asyncio.wait_for(entered.wait(), 1)
+                async with service.lock:
+                    forecast = await asyncio.wait_for(client.get('/api/forecast', auth=auth), 0.5)
+                    repeated = await asyncio.wait_for(client.post('/api/forecast/refresh', auth=auth), 0.5)
+                assert forecast.status_code == 200
+                assert forecast.json()['status'] == 'loading'
+                assert forecast.json()['refreshing'] is True
+                assert len(forecast.json()['days']) == 7
+                assert forecast.json()['intervals'] == []
+                assert repeated.status_code == 202
+                assert repeated.json() == {'scheduled': True, 'status': 'loading'}
+                snapshot = await asyncio.wait_for(client.get('/api/snapshot', auth=auth), 0.5)
+                assert snapshot.json()['forecast']['refreshing'] is True
+                assert 'days' not in snapshot.json()['forecast']
+                assert 'intervals' not in snapshot.json()['forecast']
+                assert len(requests) == 1
+                assert (await client.post('/api/forecast/refresh', auth=auth, headers={'Origin': 'http://evil.test'})).status_code == 403
+                release.set()
+                async with asyncio.timeout(1):
+                    while service.forecast.view(180).refreshing:
+                        await asyncio.sleep(0)
+                ready = await client.get('/api/forecast', auth=auth)
+                assert ready.json()['today']['kwh'] == pytest.approx(89.28)
+                assert ready.json()['remaining_today']['kwh'] == pytest.approx(89.094)
+                assert ready.json()['fetched_at'] == 180
+                assert ready.json()['calculated_at'] == 180
+                assert len(ready.json()['intervals']) == 168
+                assert 'private-token' not in ready.text
+            finally:
+                await service.forecast.stop()
+
+
+async def test_forecast_refresh_reports_disabled_and_location_required(service):
+    from pvyieldlens.settings import ForecastSettings
+
+    app = create_app(service, Runtime(web_password='test-pass'), run_background=False)
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url='http://app', auth=('admin', 'test-pass')) as client:
+        config = await client.get('/api/config')
+        assert config.json()['forecast_settings'] == {'enabled': False, 'tilt_deg': None, 'azimuth_deg': None, 'noct_c': 45.0}
+        assert config.json()['location'] is None
+        disabled = await client.post('/api/forecast/refresh')
+        assert disabled.status_code == 409
+        assert disabled.json() == {'error': 'forecast_disabled'}
+        service.forecast.configure(None, ForecastSettings(enabled=True, tilt_deg=25.0, azimuth_deg=180.0), '', None)
+        missing = await client.post('/api/forecast/refresh')
+        assert missing.status_code == 422
+        assert missing.json() == {'error': 'forecast_location_required'}
+        forecast = await client.get('/api/forecast')
+        assert forecast.json()['status'] == 'location_unavailable'
+        assert forecast.json()['today'] is None

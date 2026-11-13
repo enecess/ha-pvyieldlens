@@ -184,4 +184,26 @@ def entity_payloads(snapshot):
         if device_class:
             attributes['device_class'] = device_class
         payloads['sensor.pvyieldlens_' + name] = {'state': 'unavailable' if value is None else str(round(value, 6)), 'attributes': attributes}
+    forecast = snapshot.get('forecast') or {}
+    for name, target in (
+        ('forecast_energy_today', 'today'),
+        ('forecast_energy_remaining_today', 'remaining_today'),
+        ('forecast_energy_tomorrow', 'tomorrow'),
+        ('forecast_energy_7d', 'seven_days'),
+    ):
+        data = forecast.get(target) or {}
+        value = data.get('kwh')
+        payloads['sensor.pvyieldlens_' + name] = {
+            'state': 'unavailable' if value is None else str(round(value, 6)),
+            'attributes': {
+                'friendly_name': 'PVYieldLens ' + name.replace('_', ' ').title(),
+                'unit_of_measurement': 'kWh', 'device_class': 'energy',
+                'start': data.get('start'), 'end': data.get('end'),
+                'timezone': forecast.get('timezone'), 'fetched_at': forecast.get('fetched_at'),
+                'calculated_at': forecast.get('calculated_at'),
+                'coverage_percent': data.get('coverage_percent', 0), 'quality': data.get('quality', 'unavailable'),
+                'status': forecast.get('status', 'disabled'), 'refreshing': forecast.get('refreshing', False),
+                'last_error': forecast.get('last_error'),
+            },
+        }
     return payloads
