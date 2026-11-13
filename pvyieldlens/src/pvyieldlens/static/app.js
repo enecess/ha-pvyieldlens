@@ -69,6 +69,7 @@ function applyLanguage() {
   el('history-range').setAttribute('aria-label', t('history'));
   el('language-select').setAttribute('aria-label', t('language'));
   el('language-select').value = languageChoice;
+  ['live-coverage', 'stat-coverage'].forEach(id => { el(id).title = t('coverage_help'); });
   render();
 }
 
@@ -173,6 +174,7 @@ function render() {
     });
     return row;
   }));
+  el('source-empty').hidden = Boolean(snapshot?.sources?.length);
   if (!el('dashboard').hidden) {
     plot('live-chart', livePoints, powerSeries, 'W');
     const drawKey = `${historyVersion}|${language}|${snapshot?.timezone}|${['history-chart', 'pr-chart'].map(id => `${el(id).clientWidth},${el(id).clientHeight}`).join('|')}`;
