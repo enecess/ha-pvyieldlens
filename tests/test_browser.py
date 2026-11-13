@@ -273,7 +273,7 @@ async def test_settings_discovers_once_and_preserves_edits(tmp_path, mode, pendi
 
     async with fake_server() as ha_url:
         service = Service(Store(tmp_path / 'data.sqlite'))
-        await service.configure(settings(update_seconds=1))
+        await service.configure(settings(interval_minutes=1, update_seconds=1))
         web = create_app(service, Runtime(web_password='browser-test', ha_url=ha_url,
                                          ha_token='simulation-token'), run_background=False)
         async with fake_server(web) as url, async_playwright() as playwright:
@@ -313,15 +313,19 @@ async def test_settings_discovers_once_and_preserves_edits(tmp_path, mode, pendi
             await expect(page.locator('#power-options option')).to_have_count(0)
             await page.locator('#settings-tab').click()
             await page.locator('[name=power_entity]').fill('sensor.typed_power')
-            await page.locator('[name=temperature_entity]').fill('sensor.typed_temperature')
-            await page.locator('[name=irradiance_entity]').fill('sensor.typed_irradiance')
             await page.locator('[name=temperature_coefficient_pct_per_c]').fill('-0.4')
             if edited_connection:
                 await page.locator('#ha-url').fill(ha_url + '/')
                 await page.locator('#ha-token').fill('simulation-token')
-            unsaved = await page.locator('#settings-form').evaluate('form => [...new FormData(form)]')
             config_ready.set()
             await expect(page.locator('#load-entities')).to_be_disabled()
+            await expect(page.locator('[name=power_entity]')).to_have_value('sensor.typed_power')
+            await expect(page.locator('[name=temperature_coefficient_pct_per_c]')).to_have_value('-0.4')
+            await expect(page.locator('[name=rated_power_w]')).to_have_value('5000')
+            await expect(page.locator('[name=temperature_entity]')).to_have_value('sensor.temp')
+            await expect(page.locator('[name=irradiance_entity]')).to_have_value('sensor.sun')
+            await expect(page.locator('[name=interval_minutes]')).to_have_value('1')
+            unsaved = await page.locator('#settings-form').evaluate('form => [...new FormData(form)]')
             await page.locator('#overview-tab').click()
             await page.locator('#settings-tab').click()
             await page.locator('#language-select').select_option('fr')
@@ -362,6 +366,57 @@ async def test_settings_discovers_once_and_preserves_edits(tmp_path, mode, pendi
                 "form => [...new FormData(form)].filter(([key]) => key.endsWith('_entity') || key === 'temperature_coefficient_pct_per_c')"
             ) == [entry for entry in unsaved if entry[0].endswith('_entity') or entry[0] == 'temperature_coefficient_pct_per_c']
             assert errors == []
+            await browser.close()
+        service.store.close()
+
+
+@pytest.mark.parametrize(('selector', 'typed_value'), [
+    ('[name=power_entity]', 'sensor.cleared_power'), ('#ha-url', 'http://edited.invalid:8123'),
+])
+async def test_settings_pending_configuration_preserves_cleared_field(tmp_path, selector, typed_value):
+    from playwright.async_api import async_playwright, expect
+    from test_engine import settings
+    from test_integration import fake_server
+    from pvyieldlens.service import Service
+    from pvyieldlens.storage import Store
+    from pvyieldlens.web import Runtime, create_app
+
+    async with fake_server() as ha_url:
+        service = Service(Store(tmp_path / 'data.sqlite'))
+        await service.configure(settings(interval_minutes=1, update_seconds=1))
+        web = create_app(service, Runtime(web_password='browser-test', ha_url=ha_url,
+                                         ha_token='simulation-token'), run_background=False)
+        async with fake_server(web) as url, async_playwright() as playwright:
+            browser = await playwright.chromium.launch(args=['--no-sandbox'])
+            page = await browser.new_page(locale='en-US',
+                                          http_credentials={'username':'admin', 'password':'browser-test'})
+            config_requested = asyncio.Event()
+            config_ready = asyncio.Event()
+
+            async def configuration(route):
+                response = await route.fetch()
+                config_requested.set()
+                await config_ready.wait()
+                await route.fulfill(response=response)
+
+            await page.route('**/api/config', configuration)
+            await page.goto(url, wait_until='domcontentloaded')
+            await asyncio.wait_for(config_requested.wait(), 10)
+            await page.locator('#settings-tab').click()
+            await page.locator(selector).fill(typed_value)
+            await page.locator(selector).fill('')
+            async with page.expect_response(lambda response: response.url.endswith('/api/snapshot')):
+                config_ready.set()
+            await expect(page.locator(selector)).to_have_value('')
+            await expect(page.locator('[name=rated_power_w]')).to_have_value('5000')
+            await expect(page.locator('[name=temperature_entity]')).to_have_value('sensor.temp')
+            await expect(page.locator('[name=irradiance_entity]')).to_have_value('sensor.sun')
+            await expect(page.locator('[name=interval_minutes]')).to_have_value('1')
+            await expect(page.locator('[name=temperature_coefficient_pct_per_c]')).to_have_value('-0.35')
+            if selector == '[name=power_entity]':
+                await expect(page.locator('#ha-url')).to_have_value(ha_url)
+            else:
+                await expect(page.locator('[name=power_entity]')).to_have_value('sensor.power')
             await browser.close()
         service.store.close()
 

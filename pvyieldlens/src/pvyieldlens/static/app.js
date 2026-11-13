@@ -17,8 +17,7 @@ let livePoints = [];
 let lastHistoryKey = null;
 let historyVersion = 0;
 let lastHistoryDraw = '';
-let formDirty = false;
-let connectionUrlDirty = false;
+const editedFields = new Set();
 let entitiesLoaded = false;
 const form = document.querySelector('#settings-form');
 const t = (key, parameters) => translate(catalogs, language, key, parameters);
@@ -187,13 +186,11 @@ function render() {
 
 async function loadConfiguration() {
   configuration = await api('config');
-  if (!formDirty) {
-    Object.entries(configuration.settings || {}).forEach(([key,value]) => {
-      const input = form.elements.namedItem(key);
-      if (input) input.value = value;
-    });
-  }
-  if (!connectionUrlDirty) el('ha-url').value = configuration.connection.url;
+  Object.entries(configuration.settings || {}).forEach(([key,value]) => {
+    const input = form.elements.namedItem(key);
+    if (input && !editedFields.has(key)) input.value = value;
+  });
+  if (!editedFields.has('ha-url')) el('ha-url').value = configuration.connection.url;
   el('connection-fields').hidden = configuration.mode === 'app';
   el('app-connection-note').hidden = configuration.mode !== 'app';
   render();
@@ -238,8 +235,7 @@ async function poll() {
 el('overview-tab').addEventListener('click', () => showPage(false));
 el('settings-tab').addEventListener('click', () => showPage(true));
 el('open-settings').addEventListener('click', () => showPage(true));
-form.addEventListener('input', () => { formDirty = true; });
-el('ha-url').addEventListener('input', () => { connectionUrlDirty = true; });
+form.addEventListener('input', event => editedFields.add(event.target.name || event.target.id));
 el('history-range').addEventListener('change', async () => {
   try { await fetchHistory(); render(); } catch (error) { el('banner').hidden = false; el('banner').textContent=t(error.message); }
 });
@@ -289,7 +285,7 @@ form.addEventListener('submit', async event => {
   settings.timezone=configuration?.detectedTimezone || configuration?.settings?.timezone || 'UTC';
   try {
     configuration=await api('config',{method:'PUT',body:JSON.stringify({settings,...(configuration?.mode==='app' ? {} : {connection:{url:el('ha-url').value,token:el('ha-token').value}})})});
-    formDirty=false; el('ha-token').value=''; showMessage('save-result', 'saved'); livePoints=[]; lastHistoryKey=null; render();
+    editedFields.clear(); el('ha-token').value=''; showMessage('save-result', 'saved'); livePoints=[]; lastHistoryKey=null; render();
   } catch (error) {
     showMessage('save-result', error.message);
     error.fields?.forEach(field => { const input=form.elements.namedItem(field.replace(/^settings\./,'')); if(input) input.setAttribute('aria-invalid','true'); });
