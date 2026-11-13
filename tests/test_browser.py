@@ -259,10 +259,11 @@ async def test_rolling_history_expires_cached_windows_without_refetch(tmp_path):
         await browser.close()
     service.store.close()
 
-@pytest.mark.parametrize(('mode', 'pending_configuration'), [
-    ('docker', False), ('app', False), ('docker', True), ('app', True),
+@pytest.mark.parametrize(('mode', 'pending_configuration', 'edited_connection'), [
+    ('docker', False, False), ('app', False, False), ('docker', True, False),
+    ('app', True, False), ('docker', True, True),
 ])
-async def test_settings_discovers_once_and_preserves_edits(tmp_path, mode, pending_configuration):
+async def test_settings_discovers_once_and_preserves_edits(tmp_path, mode, pending_configuration, edited_connection):
     from playwright.async_api import async_playwright, expect
     from test_engine import settings
     from test_integration import fake_server
@@ -315,8 +316,9 @@ async def test_settings_discovers_once_and_preserves_edits(tmp_path, mode, pendi
             await page.locator('[name=temperature_entity]').fill('sensor.typed_temperature')
             await page.locator('[name=irradiance_entity]').fill('sensor.typed_irradiance')
             await page.locator('[name=temperature_coefficient_pct_per_c]').fill('-0.4')
-            if pending_configuration:
-                await page.locator('#ha-url').fill(ha_url)
+            if edited_connection:
+                await page.locator('#ha-url').fill(ha_url + '/')
+                await page.locator('#ha-token').fill('simulation-token')
             unsaved = await page.locator('#settings-form').evaluate('form => [...new FormData(form)]')
             config_ready.set()
             await expect(page.locator('#load-entities')).to_be_disabled()
@@ -325,7 +327,12 @@ async def test_settings_discovers_once_and_preserves_edits(tmp_path, mode, pendi
             await page.locator('#language-select').select_option('fr')
             async with page.expect_response(lambda response: response.url.endswith('/api/snapshot')):
                 pass
-            assert requests == [None if mode == 'app' else {'url':ha_url, 'token':''}]
+            assert requests == [None if mode == 'app' else {
+                'url':ha_url + '/' if edited_connection else ha_url,
+                'token':'simulation-token' if edited_connection else '',
+            }]
+            await expect(page.locator('#ha-url')).to_have_value(ha_url + '/' if edited_connection else ha_url)
+            await expect(page.locator('#ha-token')).to_have_value('simulation-token' if edited_connection else '')
             assert await page.locator('#settings-form').evaluate('form => [...new FormData(form)]') == unsaved
             discovery_ready.set()
             await expect(page.locator('#load-entities')).to_be_enabled()
@@ -345,7 +352,10 @@ async def test_settings_discovers_once_and_preserves_edits(tmp_path, mode, pendi
                 await page.locator('#load-entities').click()
             await expect(page.locator('#load-entities')).to_be_enabled()
             assert requests == [
-                None if mode == 'app' else {'url':ha_url, 'token':''},
+                None if mode == 'app' else {
+                    'url':ha_url + '/' if edited_connection else ha_url,
+                    'token':'simulation-token' if edited_connection else '',
+                },
                 None if mode == 'app' else {'url':ha_url + '/', 'token':'simulation-token'},
             ]
             assert await page.locator('#settings-form').evaluate(

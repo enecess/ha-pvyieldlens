@@ -18,6 +18,7 @@ let lastHistoryKey = null;
 let historyVersion = 0;
 let lastHistoryDraw = '';
 let formDirty = false;
+let connectionUrlDirty = false;
 let entitiesLoaded = false;
 const form = document.querySelector('#settings-form');
 const t = (key, parameters) => translate(catalogs, language, key, parameters);
@@ -191,8 +192,8 @@ async function loadConfiguration() {
       const input = form.elements.namedItem(key);
       if (input) input.value = value;
     });
-    el('ha-url').value = configuration.connection.url;
   }
+  if (!connectionUrlDirty) el('ha-url').value = configuration.connection.url;
   el('connection-fields').hidden = configuration.mode === 'app';
   el('app-connection-note').hidden = configuration.mode !== 'app';
   render();
@@ -238,6 +239,7 @@ el('overview-tab').addEventListener('click', () => showPage(false));
 el('settings-tab').addEventListener('click', () => showPage(true));
 el('open-settings').addEventListener('click', () => showPage(true));
 form.addEventListener('input', () => { formDirty = true; });
+el('ha-url').addEventListener('input', () => { connectionUrlDirty = true; });
 el('history-range').addEventListener('change', async () => {
   try { await fetchHistory(); render(); } catch (error) { el('banner').hidden = false; el('banner').textContent=t(error.message); }
 });
