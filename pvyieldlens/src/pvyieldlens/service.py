@@ -98,6 +98,7 @@ class Service:
                 'revision': self.store.revision, 'statistics': self.store.latest_window(), 'realtime': self.realtime,
                 'energy': self.store.totals(now, self.config.timezone if self.config else 'UTC'),
                 'sources': self.sources, 'timezone': self.config.timezone if self.config else 'UTC',
+                'location': self.forecast.location.model_dump() if self.forecast.location else None,
                 'forecast': self.forecast.view(now).model_dump(mode='json', exclude={'days', 'intervals'})}
 
     async def ingest(self, states, historical=False, config: Settings | None = None, origin: str | None = None):

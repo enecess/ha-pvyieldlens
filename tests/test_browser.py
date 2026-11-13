@@ -535,3 +535,98 @@ async def test_settings_first_connection_failure_keeps_polling_and_allows_retry(
             await expect(page.locator('#ha-token')).to_have_value('' if saved_credentials else 'simulation-token')
             await browser.close()
         service.store.close()
+
+
+@pytest.mark.parametrize('initial_location', [False, True])
+async def test_settings_refreshes_active_location_without_changing_drafts(browser_workspace, initial_location):
+    from playwright.async_api import expect
+    from pvyieldlens.settings import HALocation
+    from test_integration import fake_server
+
+    page, service, _ = browser_workspace
+    response = await page.request.get(page.url + 'api/config')
+    await service.configure(service.config, origin=(await response.json())['connection']['url'])
+    location = HALocation(origin=service.origin, latitude=1.0, longitude=2.0, location_name='Active', timezone='UTC')
+    if initial_location:
+        service.forecast.configure(service.config, service.forecast.settings, service.origin, location)
+    await page.reload()
+    await expect(page.locator('[name=rated_power_w]')).to_have_value('5000')
+    await page.locator('#settings-button').click()
+    await page.locator('button[data-settings-category=forecast]').click()
+    await expect(page.locator('#forecast-location')).to_have_text('Active · 1, 2 · UTC' if initial_location else 'HA location is not available yet.')
+    await page.locator('[name=forecast_noct_c]').fill('48')
+    await page.locator('button[data-settings-category=panels]').click()
+    await page.locator('[name=rated_power_w]').fill('6100')
+    async with fake_server() as preview_url:
+        await page.locator('button[data-settings-category=connection]').click()
+        await expect(page.locator('#load-entities')).to_be_enabled()
+        await page.locator('#ha-url').fill(preview_url)
+        await page.locator('#ha-token').fill('simulation-token')
+        await page.locator('#load-entities').click()
+        await expect(page.locator('#connection-result')).to_have_text('Connection verified')
+        await page.locator('button[data-settings-category=forecast]').click()
+        await expect(page.locator('#forecast-location')).to_have_text('Active · 1, 2 · UTC' if initial_location else 'HA location is not available yet.')
+        drafts = await page.locator('#settings-form').evaluate('form => [...new FormData(form)]')
+        for current, expected in (
+            (location, 'Active · 1, 2 · UTC'),
+            (location.model_copy(update={'location_name': 'Renamed'}), 'Renamed · 1, 2 · UTC'),
+            (location.model_copy(update={'latitude': -33.86, 'longitude': 151.21, 'timezone': 'Australia/Sydney'}),
+             'Active · -33.86, 151.21 · Australia/Sydney'),
+            (None, 'HA location is not available yet.'),
+        ):
+            service.forecast.configure(service.config, service.forecast.settings, service.origin, current)
+            async with page.expect_response(lambda response: response.url.endswith('/api/snapshot')):
+                pass
+            await expect(page.locator('#forecast-location')).to_have_text(expected)
+            assert await page.locator('#settings-form').evaluate('form => [...new FormData(form)]') == drafts
+            await expect(page.locator('#ha-url')).to_have_value(preview_url)
+            await expect(page.locator('#ha-token')).to_have_value('simulation-token')
+            await expect(page.locator('#draft-status')).to_have_text('Unsaved changes')
+            await page.locator('#settings-back').click()
+            await page.locator('#settings-button').click()
+            await expect(page.locator('#forecast-location')).to_have_text(expected)
+        assert service.forecast.settings.enabled is False
+
+
+@pytest.mark.parametrize('change', ['forecast', 'monitoring', 'connection'])
+async def test_live_curve_save_resets_only_for_monitoring_changes(browser_workspace, change):
+    from playwright.async_api import expect
+    from test_engine import samples
+
+    page, service, _ = browser_workspace
+    response = await page.request.get(page.url + 'api/config')
+    connection = (await response.json())['connection']
+    await service.configure(service.config.model_copy(update={'timezone': 'Asia/Shanghai'}), origin=connection['url'])
+    await page.reload()
+    await expect(page.locator('[name=rated_power_w]')).to_have_value('5000')
+    now = time.time()
+    service.store.add_observations(samples(at=now-60), origin=service.origin)
+    for index in range(3):
+        await service.tick(now-2+index)
+        async with page.expect_response(lambda response: response.url.endswith('/api/snapshot')):
+            pass
+        await expect(page.locator('#live-actual')).to_have_text('3,348')
+    await page.wait_for_function("document.querySelector('#live-chart path.series')?.getAttribute('d').match(/[ML]/g)?.length === 3")
+    curve = await page.locator('#live-chart path.series').first.get_attribute('d')
+    await page.locator('#settings-button').click()
+    if change == 'forecast':
+        await page.locator('button[data-settings-category=forecast]').click()
+        await page.locator('[name=forecast_noct_c]').fill('48')
+        # A normalized URL and explicit identical credential still mean the same connection.
+        await page.locator('button[data-settings-category=connection]').click()
+        await page.locator('#ha-url').fill(connection['url'] + '/')
+        await page.locator('#ha-token').fill('simulation-token')
+    elif change == 'monitoring':
+        await page.locator('button[data-settings-category=panels]').click()
+        await page.locator('[name=rated_power_w]').fill('6100')
+    else:
+        await page.locator('button[data-settings-category=connection]').click()
+        await page.locator('#ha-token').fill('replacement-token')
+    await page.locator('#save-button').click()
+    await expect(page.locator('#save-result')).to_have_text('Configuration saved')
+    await expect(page.locator('#ha-token')).to_have_value('')
+    await page.locator('#settings-back').click()
+    if change == 'forecast':
+        await expect(page.locator('#live-chart path.series').first).to_have_attribute('d', curve)
+    else:
+        await page.wait_for_function("!document.querySelector('#live-chart path.series') || document.querySelector('#live-chart path.series').getAttribute('d').match(/[ML]/g).length < 3")

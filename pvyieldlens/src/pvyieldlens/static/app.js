@@ -323,6 +323,7 @@ async function poll() {
   try {
     const previousForecast = snapshot?.forecast;
     snapshot = await api('snapshot');
+    if (configuration) configuration.location = snapshot.location;
     if (currentPage === 'forecast' && (!forecastData || snapshot.forecast?.calculated_at >= forecastData.calculated_at) &&
         (forecastKey(snapshot.forecast) !== forecastKey(forecastData) ||
         previousForecast?.refreshing && !snapshot.forecast?.refreshing)) await fetchForecast();
@@ -452,7 +453,7 @@ form.addEventListener('submit', async event => {
     editedFields.clear();
     el('ha-token').value = '';
     showMessage('save-result', 'saved');
-    livePoints = [];
+    if (configuration.monitoring_changed) livePoints = [];
     lastHistoryKey = null;
     render();
   } catch (error) {

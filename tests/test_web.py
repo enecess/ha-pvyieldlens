@@ -497,3 +497,57 @@ async def test_history_summary_uses_committed_revisions_without_changing_monitor
     assert {name: after_payloads['sensor.pvyieldlens_' + name] for name in original_ids} == original_payloads
     assert after['energy']['total_kwh'] == pytest.approx(0.31)
     assert after['statistics']['pr'] == pytest.approx(45)
+
+
+async def test_snapshot_refreshes_active_location_with_forecast_disabled(service):
+    from pvyieldlens.settings import HALocation
+    from test_integration import fake_server
+
+    await service.configure(settings(), now=0, origin='http://active-ha.test')
+    service.store.set_meta('connection', '{"url":"http://active-ha.test","token":"private-token"}')
+    app = create_app(service, Runtime(web_password='test-pass'), run_background=False)
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url='http://app', auth=('admin', 'test-pass')) as client:
+        assert (await client.get('/api/snapshot')).json()['location'] is None
+        location = HALocation(origin=service.origin, latitude=0.0, longitude=0.0, location_name='Active', timezone='UTC')
+        for current in (location, location.model_copy(update={'location_name': 'Renamed'}),
+                        location.model_copy(update={'latitude': -33.86, 'longitude': 151.21, 'timezone': 'Australia/Sydney'}), None):
+            service.forecast.configure(service.config, service.forecast.settings, service.origin, current)
+            response = await client.get('/api/snapshot')
+            assert response.status_code == 200
+            assert response.json()['location'] == (current.model_dump() if current else None)
+            assert response.json()['forecast']['status'] == 'disabled'
+            assert 'days' not in response.json()['forecast'] and 'intervals' not in response.json()['forecast']
+            assert 'private-token' not in response.text
+        service.forecast.configure(service.config, service.forecast.settings, service.origin, location)
+        async with fake_server() as url:
+            preview = await client.post('/api/connection', json={'url': url, 'token': 'simulation-token'})
+            assert preview.status_code == 200 and preview.json()['location']['origin'] == url
+        assert (await client.get('/api/snapshot')).json()['location'] == location.model_dump()
+        await service.configure(service.config, origin='http://new-active-ha.test')
+        assert (await client.get('/api/snapshot')).json()['location'] is None
+
+
+@pytest.mark.parametrize(('change', 'monitoring_changed'), [
+    ('forecast', False), ('same_token', False), ('settings', True), ('url', True), ('token', True),
+])
+async def test_save_reports_effective_monitoring_change(service, change, monitoring_changed):
+    await service.configure(settings(), now=0, origin='http://active-ha.test')
+    service.store.set_meta('connection', '{"url":"http://active-ha.test","token":"private-token"}')
+    app = create_app(service, Runtime(web_password='test-pass'), run_background=False)
+    update = {'settings': service.config.model_dump(),
+              'connection': {'url': service.origin + '/', 'token': ''},
+              'forecast_settings': {'enabled': False, 'noct_c': 47}}
+    if change == 'same_token':
+        update['connection']['token'] = 'private-token'
+    elif change == 'settings':
+        update['settings']['update_seconds'] = 2
+    elif change == 'url':
+        update['connection'] = {'url': 'http://new-ha.test', 'token': 'replacement-token'}
+    elif change == 'token':
+        update['connection']['token'] = 'replacement-token'
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url='http://app', auth=('admin', 'test-pass')) as client:
+        response = await client.put('/api/config', json=update)
+        assert response.status_code == 200
+        assert response.json()['monitoring_changed'] is monitoring_changed
+        assert 'private-token' not in response.text and 'replacement-token' not in response.text
+    await service.client.close()

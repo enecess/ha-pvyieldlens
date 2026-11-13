@@ -160,7 +160,7 @@ def create_app(service: Service, runtime: Runtime, run_background=True) -> FastA
             service.client = HomeAssistantClient(connection.url, connection.token.get_secret_value())
         if monitoring_changed and run_background:
             await service.start()
-        return config_response()
+        return {**config_response(), 'monitoring_changed': monitoring_changed}
 
     @app.post('/api/connection')
     async def check_connection(connection: Connection | None = None):
