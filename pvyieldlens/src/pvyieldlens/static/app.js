@@ -41,6 +41,7 @@ async function api(path, options = {}) {
 
 function showPage(settings) {
   const returning = el('dashboard').hidden && !settings;
+  if (el('dashboard').hidden !== settings) window.scrollTo(0, 0);
   el('dashboard').hidden = settings;
   el('configuration').hidden = !settings;
   el('overview-tab').classList.toggle('active', !settings);

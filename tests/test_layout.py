@@ -90,12 +90,16 @@ async def test_tab_switch_keeps_header_and_content_geometry(layout_page, layout_
 
 
 @pytest.mark.parametrize(('width', 'language'), [(1440, 'en'), (390, 'de'), (320, 'fr')])
-async def test_header_stays_visible_and_clickable_after_document_scroll(layout_page, layout_artifacts, width, language):
+@pytest.mark.parametrize(('source', 'destination'), [('overview', 'settings'), ('settings', 'overview')])
+async def test_scrolled_navigation_reveals_destination_and_preserves_same_section_scroll(layout_page, layout_artifacts, width, language, source, destination):
     from playwright.async_api import expect
 
     page, _ = layout_page
     await page.set_viewport_size({'width': width, 'height': 700})
     await page.locator('#language-select').select_option(language)
+    if source == 'settings':
+        await page.locator('#settings-tab').click()
+        await expect(page.locator('#power-options option')).to_have_attribute('value', 'sensor.power')
     initial = await page.locator('.topbar').bounding_box()
     if width < 600:
         assert initial['height'] > 90, 'Exercise a header whose controls wrap'
@@ -110,8 +114,8 @@ async def test_header_stays_visible_and_clickable_after_document_scroll(layout_p
                 return {id: node.id, top: box.top, bottom: box.bottom, left: box.left, right: box.right};
             })};
     }''')
-    (layout_artifacts / f'sticky-{width}-{language}.json').write_text(json.dumps(geometry, indent=2), encoding='utf-8')
-    await page.screenshot(path=str(layout_artifacts / f'sticky-{width}-{language}.png'))
+    (layout_artifacts / f'sticky-{width}-{language}-{source}.json').write_text(json.dumps(geometry, indent=2), encoding='utf-8')
+    await page.screenshot(path=str(layout_artifacts / f'sticky-{width}-{language}-{source}.png'))
     print(json.dumps(geometry))
     assert geometry['scrollY'] > 200
     assert geometry['top'] == pytest.approx(0, abs=1)
@@ -120,12 +124,32 @@ async def test_header_stays_visible_and_clickable_after_document_scroll(layout_p
     for control in geometry['controls']:
         assert control['top'] >= 0 and control['bottom'] <= geometry['bottom']
         assert control['left'] >= 0 and control['right'] <= geometry['viewport']
-    await page.locator('#settings-tab').click()
-    await expect(page.locator('#configuration')).to_be_visible()
+    await page.locator(f'#{source}-tab').click()
+    assert await page.evaluate('scrollY') == pytest.approx(geometry['scrollY'], abs=1), 'The active section must keep its scroll position'
+
+    await page.locator(f'#{destination}-tab').click()
+    await expect(page.locator('#configuration' if destination == 'settings' else '#dashboard')).to_be_visible()
+    if destination == 'settings':
+        await expect(page.locator('#power-options option')).to_have_attribute('value', 'sensor.power')
+    opening = await page.evaluate('''destination => {
+        const header = document.querySelector('.topbar').getBoundingClientRect();
+        const selectors = destination === 'settings'
+            ? ['#configuration > .section-heading h1', '#ha-url', '#ha-token']
+            : ['#dashboard > .section-heading h1', '#dashboard .live-metrics'];
+        return {destination, scrollY, height: innerHeight, headerBottom: header.bottom,
+            content: selectors.map(selector => {
+                const {top, bottom} = document.querySelector(selector).getBoundingClientRect();
+                return {selector, top, bottom};
+            })};
+    }''', destination)
+    (layout_artifacts / f'opening-{width}-{language}-{destination}.json').write_text(json.dumps(opening, indent=2), encoding='utf-8')
+    await page.screenshot(path=str(layout_artifacts / f'opening-{width}-{language}-{destination}.png'))
+    print(json.dumps(opening))
+    assert opening['scrollY'] == pytest.approx(0, abs=1), opening
+    for content in opening['content']:
+        assert content['top'] >= opening['headerBottom'] and content['bottom'] <= opening['height'], opening
     await page.locator('#language-select').select_option('zh')
     await expect(page.locator('html')).to_have_attribute('lang', 'zh')
-    await page.locator('#overview-tab').click()
-    await expect(page.locator('#dashboard')).to_be_visible()
 
 
 async def test_completeness_hints_belong_to_metrics_and_follow_language(layout_page):
