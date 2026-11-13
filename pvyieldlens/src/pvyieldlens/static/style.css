@@ -81,7 +81,6 @@ th:nth-child(2), td:nth-child(2) { padding-left: 20px; padding-right: 20px; }
 .primary { background: var(--blue); border-color: var(--blue); color: #fff; }
 .primary:hover { background: #1c50a2; }
 .secondary { color: var(--blue); }
-#configuration { max-width: 1000px; margin: auto; }
 .form-section { margin-bottom: 18px; }
 .form-section h2 { display: flex; align-items: center; gap: 10px; margin-bottom: 20px; font-size: 17px; }
 .step { color: var(--muted); font-size: 13px; font-weight: 400; }

@@ -46,7 +46,7 @@ Dans `.env`, choisissez un mot de passe pour `PVYL_WEB_PASSWORD`, puis démarrez
 docker compose up -d --build
 ```
 
-Ouvrez [localhost:8099](http://localhost:8099). Connectez-vous avec `admin` et le mot de passe choisi. Dans **Paramètres**, saisissez l’adresse Home Assistant et un jeton d’accès de longue durée appartenant à un **administrateur** Home Assistant, puis cliquez sur **Charger les capteurs**. Les droits d’administration sont nécessaires pour publier les capteurs de sortie.
+Ouvrez [localhost:8099](http://localhost:8099). Connectez-vous avec `admin` et le mot de passe choisi. Pour la première connexion, saisissez l’adresse Home Assistant et un jeton d’accès de longue durée appartenant à un **administrateur** Home Assistant dans **Paramètres**, puis cliquez sur **Actualiser les capteurs**. Si l’adresse et le jeton sont déjà configurés, les capteurs se chargent automatiquement à la première ouverture des **Paramètres**. Utilisez **Actualiser les capteurs** après une modification de la connexion, pour mettre à jour la liste ou pour réessayer après un échec. Les droits d’administration sont nécessaires pour publier les capteurs de sortie.
 
 Par défaut, la page est accessible sur la machine Docker. Pour y accéder depuis un autre appareil, remplacez `127.0.0.1:8099:8099` par `8099:8099` dans `compose.yaml`.
 

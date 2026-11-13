@@ -31,7 +31,7 @@
   "ha_url": "Home Assistant URL",
   "ha_token": "Long-lived access token",
   "token_help": "Leave blank to reuse the saved token for the same URL. Enter a token when changing the URL.",
-  "connect": "Load sensors",
+  "connect": "Refresh sensors",
   "connecting": "Connecting…",
   "connected": "Connection verified",
   "solar": "Solar panels",
@@ -39,9 +39,9 @@
   "coefficient": "Temperature coefficient K",
   "coef_help": "From the panel datasheet, e.g. −0.35.",
   "inputs": "Sensors",
-  "power_source": "PV power",
-  "temp_source": "Module temperature",
-  "irr_source": "Sunlight on panels",
+  "power_source": "Actual Power",
+  "temp_source": "Module Temperature",
+  "irr_source": "Irradiance",
   "select_source": "Search sensors",
   "timing": "Updates",
   "interval": "History interval",
@@ -82,5 +82,6 @@
   "stat_value_hint": "Missing readings are left out of the average.",
   "language": "Language",
   "daily_energy_incomplete": "Today's energy is incomplete: older periods cannot be split at the new midnight.",
-  "auto": "Auto"
+  "auto": "Auto",
+  "coverage_help": "Data completeness is the share of the calculation window when all three inputs are valid at the same time. Live data uses the recent rolling window; history uses the latest settled period, not the chart's selected date range."
 }

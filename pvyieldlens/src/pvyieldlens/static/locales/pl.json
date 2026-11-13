@@ -31,7 +31,7 @@
   "ha_url": "Adres Home Assistant",
   "ha_token": "Długoterminowy token dostępu",
   "token_help": "Pozostaw puste, aby użyć zapisanego tokenu dla tego samego adresu URL. Przy zmianie adresu URL wprowadź token.",
-  "connect": "Wczytaj czujniki",
+  "connect": "Odśwież czujniki",
   "connecting": "Łączenie…",
   "connected": "Połączenie zweryfikowane",
   "solar": "Panele słoneczne",
@@ -82,5 +82,6 @@
   "stat_value_hint": "Brakujące odczyty nie są wliczane do średniej.",
   "language": "Język",
   "daily_energy_incomplete": "Dzisiejsza energia jest niepełna: starszych okresów nie można podzielić o nowej północy.",
-  "auto": "Auto"
+  "auto": "Auto",
+  "coverage_help": "Kompletność danych to udział czasu w oknie obliczeń, przez który wszystkie trzy dane wejściowe są jednocześnie prawidłowe. Dane bieżące dotyczą ostatniego ruchomego okna, a historia ostatniego zamkniętego okresu, nie zakresu dat wybranego na wykresie."
 }

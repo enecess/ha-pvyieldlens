@@ -46,7 +46,7 @@ Set `PVYL_WEB_PASSWORD` in `.env` to your chosen password, then start the app:
 docker compose up -d --build
 ```
 
-Open [localhost:8099](http://localhost:8099). Sign in as `admin` with the password you set. In **Settings**, enter your Home Assistant address and a long-lived access token belonging to a Home Assistant **administrator**, then select **Load sensors**. Administrator access is required to publish the output sensors.
+Open [localhost:8099](http://localhost:8099). Sign in as `admin` with the password you set. For the first connection, enter your Home Assistant address and a long-lived access token belonging to a Home Assistant **administrator** in **Settings**, then select **Refresh sensors**. When a URL and token are already configured, sensors load automatically the first time you enter **Settings**. Use **Refresh sensors** after changing the connection, to refresh the list or to retry a failed request. Administrator access is required to publish the output sensors.
 
 The default address works on the Docker host. To open the page from another device, change `127.0.0.1:8099:8099` to `8099:8099` in `compose.yaml`.
 
@@ -56,9 +56,9 @@ The default address works on the Docker host. To open the page from another devi
 | --- | --- |
 | Total rated power | Total panel power in W, e.g. `5000`. |
 | Temperature coefficient K | The value from the panel datasheet, in %/°C, e.g. `-0.35`. |
-| Power sensor | Your solar generation power sensor (W or kW). |
-| Panel temperature | Your panel temperature sensor (°C, °F or K). |
-| Sunlight on panels | A sunlight sensor in the same plane as the panels (W/m² or kW/m²). |
+| Actual Power | Your solar generation power sensor (W or kW). |
+| Module Temperature | Your panel temperature sensor (°C, °F or K). |
+| Irradiance | A sunlight sensor in the same plane as the panels (W/m² or kW/m²). |
 | History interval | 1, 5 or 10 minutes. Default: 5 minutes. |
 | Average over | Time used to average live readings. Default: 60 seconds. |
 | Update every | How often live results refresh. Default: 5 seconds. |

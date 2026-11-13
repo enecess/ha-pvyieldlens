@@ -46,7 +46,7 @@ In `.env`, scegli una password per `PVYL_WEB_PASSWORD`, poi avvia l’app:
 docker compose up -d --build
 ```
 
-Apri [localhost:8099](http://localhost:8099). Accedi come `admin` con la password scelta. In **Impostazioni**, inserisci l’indirizzo di Home Assistant e un token di accesso a lunga durata di un **amministratore** di Home Assistant, poi premi **Carica sensori**. Per pubblicare i sensori di uscita sono necessari i diritti di amministratore.
+Apri [localhost:8099](http://localhost:8099). Accedi come `admin` con la password scelta. Per il primo collegamento, inserisci in **Impostazioni** l’indirizzo di Home Assistant e un token di accesso a lunga durata di un **amministratore** di Home Assistant, poi premi **Aggiorna sensori**. Se indirizzo e token sono già configurati, i sensori vengono caricati automaticamente alla prima apertura delle **Impostazioni**. Usa **Aggiorna sensori** dopo aver modificato il collegamento, per aggiornare l’elenco o per riprovare dopo un errore. Per pubblicare i sensori di uscita sono necessari i diritti di amministratore.
 
 La pagina è accessibile dal computer con Docker. Per aprirla da un altro dispositivo, cambia `127.0.0.1:8099:8099` in `8099:8099` nel file `compose.yaml`.
 

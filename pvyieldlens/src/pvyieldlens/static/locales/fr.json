@@ -31,7 +31,7 @@
   "ha_url": "Adresse Home Assistant",
   "ha_token": "Jeton d’accès de longue durée",
   "token_help": "Laissez vide pour réutiliser le jeton enregistré si l’URL est identique. Saisissez un jeton si vous changez l’URL.",
-  "connect": "Charger les capteurs",
+  "connect": "Actualiser les capteurs",
   "connecting": "Connexion…",
   "connected": "Connexion vérifiée",
   "solar": "Panneaux solaires",
@@ -82,5 +82,6 @@
   "stat_value_hint": "Les données manquantes sont exclues de la moyenne.",
   "language": "Langue",
   "daily_energy_incomplete": "L’énergie du jour est incomplète : les anciennes périodes ne peuvent pas être réparties au nouveau minuit.",
-  "auto": "Auto"
+  "auto": "Auto",
+  "coverage_help": "La complétude des données indique la part de la période de calcul où les trois entrées sont valides simultanément. Les données en direct utilisent la fenêtre glissante récente ; l’historique utilise la dernière période finalisée, et non la plage de dates sélectionnée dans le graphique."
 }

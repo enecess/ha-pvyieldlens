@@ -18,6 +18,7 @@ let lastHistoryKey = null;
 let historyVersion = 0;
 let lastHistoryDraw = '';
 let formDirty = false;
+let entitiesLoaded = false;
 const form = document.querySelector('#settings-form');
 const t = (key, parameters) => translate(catalogs, language, key, parameters);
 const number = (value, digits = 1) => value == null ? '—' : new Intl.NumberFormat(language, { maximumFractionDigits: digits }).format(value);
@@ -44,7 +45,8 @@ function showPage(settings) {
   el('configuration').hidden = !settings;
   el('overview-tab').classList.toggle('active', !settings);
   el('settings-tab').classList.toggle('active', settings);
-  if (!settings) {
+  if (settings) loadEntities();
+  else {
     if (returning) lastHistoryDraw = '';
     render();
     if (returning) fetchHistory().then(render).catch(error => {
@@ -194,6 +196,7 @@ async function loadConfiguration() {
   el('connection-fields').hidden = configuration.mode === 'app';
   el('app-connection-note').hidden = configuration.mode !== 'app';
   render();
+  if (!el('configuration').hidden) loadEntities();
 }
 
 async function fetchHistory() {
@@ -254,8 +257,10 @@ el('language-select').addEventListener('change', event => {
   applyLanguage();
 });
 
-el('load-entities').addEventListener('click', async () => {
+async function loadEntities(manual = false) {
   const button = el('load-entities');
+  if (button.disabled || (!manual && (entitiesLoaded || !(configuration?.mode === 'app' ||
+      (configuration?.connection.url && configuration.connection.token_set))))) return;
   button.disabled = true;
   showMessage('connection-result', 'connecting');
   try {
@@ -266,10 +271,13 @@ el('load-entities').addEventListener('click', async () => {
       }));
     }
     configuration = {...configuration, settings:configuration?.settings || null, detectedTimezone:result.timezone};
+    entitiesLoaded = true;
     showMessage('connection-result', 'connected');
   } catch (error) { showMessage('connection-result', error.message); }
   finally { button.disabled=false; }
-});
+}
+
+el('load-entities').addEventListener('click', () => loadEntities(true));
 
 form.addEventListener('submit', async event => {
   event.preventDefault();

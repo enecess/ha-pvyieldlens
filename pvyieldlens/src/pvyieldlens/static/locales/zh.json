@@ -31,7 +31,7 @@
   "ha_url": "Home Assistant 地址",
   "ha_token": "长期访问令牌",
   "token_help": "URL 不变时可留空以复用已保存的令牌。更改 URL 时请输入令牌。",
-  "connect": "加载传感器",
+  "connect": "刷新传感器",
   "connecting": "正在连接…",
   "connected": "连接已验证",
   "solar": "光伏组件",
@@ -82,5 +82,6 @@
   "stat_value_hint": "数据缺失的时段不计入平均值。",
   "language": "语言",
   "daily_energy_incomplete": "今日电量不完整：旧时段无法按新时区的午夜精确拆分。",
-  "auto": "自动"
+  "auto": "自动",
+  "coverage_help": "数据完整率表示计算窗口内，三个输入同时有效的时长占比。实时数据对应最近的滑动窗口；历史统计对应最近一个已结算时段，而非图表所选的日期范围。"
 }

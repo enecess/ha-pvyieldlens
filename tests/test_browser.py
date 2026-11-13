@@ -1,3 +1,4 @@
+import asyncio
 import os
 import time
 from pathlib import Path
@@ -56,6 +57,8 @@ async def test_dashboard_configuration_locales_and_mobile(tmp_path):
             artifacts = Path('artifacts')
             artifacts.mkdir(exist_ok=True)
             await page.screenshot(path=str(artifacts/'dashboard-desktop.png'), full_page=True)
+            dashboard_width = (await page.locator('#dashboard').bounding_box())['width']
+            assert dashboard_width <= 1200
             updated = await page.locator('#updated').inner_text()
             stable_snapshot['calculated_at'] += 1
             await page.get_by_role('button', name='Settings', exact=True).click()
@@ -93,6 +96,8 @@ async def test_dashboard_configuration_locales_and_mobile(tmp_path):
             assert len(history_requests) == initial_requests + 3
             await page.unroute('**/api/snapshot')
             await page.locator('#settings-tab').click()
+            assert (await page.locator('#configuration').bounding_box())['width'] == dashboard_width
+            await page.screenshot(path=str(artifacts/'configuration-desktop.png'), full_page=True)
             coefficient = page.locator('[name=temperature_coefficient_pct_per_c]')
             await coefficient.fill('-0.4')
             await page.locator('#language-select').select_option('fr')
@@ -117,10 +122,19 @@ async def test_dashboard_configuration_locales_and_mobile(tmp_path):
             await page.set_viewport_size({'width':390,'height':844})
             await page.screenshot(path=str(artifacts/'configuration-mobile.png'), full_page=True)
             assert await page.evaluate('document.documentElement.scrollWidth <= innerWidth')
+            configuration_width = (await page.locator('#configuration').bounding_box())['width']
+            await page.locator('#overview-tab').click()
+            assert (await page.locator('#dashboard').bounding_box())['width'] == configuration_width
+            assert await page.evaluate('document.documentElement.scrollWidth <= innerWidth')
+            await page.screenshot(path=str(artifacts/'dashboard-mobile.png'), full_page=True)
+            await page.locator('#settings-tab').click()
             for locale, language in [('zh-CN','zh'), ('fr-CA','fr'), ('pl-PL','pl'), ('it-IT','it'), ('es-ES','en')]:
                 await page.evaluate("locale=>{Object.defineProperty(navigator,'languages',{get:()=>[locale],configurable:true});window.dispatchEvent(new Event('languagechange'))}", locale)
                 await expect(page.locator('html')).to_have_attribute('lang', language)
                 await expect(coefficient).to_have_value('-0.35')
+                await page.locator('#overview-tab').click()
+                await page.locator('.quality-panel').screenshot(path=str(artifacts/f'quality-{language}.png'))
+                await page.locator('#settings-tab').click()
             await page.locator('#language-select').select_option('it')
             await page.reload()
             await expect(page.locator('html')).to_have_attribute('lang','it')
@@ -151,6 +165,10 @@ async def test_dashboard_configuration_locales_and_mobile(tmp_path):
                 await ingress_page.goto(ingress_url + '/api/hassio_ingress/test-prefix/')
                 await expect(ingress_page.locator('#live-pr')).to_have_text('90', timeout=15000)
                 await expect(ingress_page.locator('#history-chart svg')).to_be_visible()
+                await ingress_page.locator('#settings-tab').click()
+                await expect(ingress_page.locator('#power-options option')).to_have_attribute('value', 'sensor.power')
+                await expect(ingress_page.locator('#temperature-options option')).to_have_attribute('value', 'sensor.temp')
+                await expect(ingress_page.locator('#irradiance-options option')).to_have_attribute('value', 'sensor.sun')
                 await ingress_page.close()
             assert errors == []
             await browser.close()
@@ -240,3 +258,164 @@ async def test_rolling_history_expires_cached_windows_without_refetch(tmp_path):
         assert errors == []
         await browser.close()
     service.store.close()
+
+@pytest.mark.parametrize(('mode', 'pending_configuration'), [
+    ('docker', False), ('app', False), ('docker', True), ('app', True),
+])
+async def test_settings_discovers_once_and_preserves_edits(tmp_path, mode, pending_configuration):
+    from playwright.async_api import async_playwright, expect
+    from test_engine import settings
+    from test_integration import fake_server
+    from pvyieldlens.service import Service
+    from pvyieldlens.storage import Store
+    from pvyieldlens.web import Runtime, create_app
+
+    async with fake_server() as ha_url:
+        service = Service(Store(tmp_path / 'data.sqlite'))
+        await service.configure(settings(update_seconds=1))
+        web = create_app(service, Runtime(web_password='browser-test', ha_url=ha_url,
+                                         ha_token='simulation-token'), run_background=False)
+        async with fake_server(web) as url, async_playwright() as playwright:
+            browser = await playwright.chromium.launch(args=['--no-sandbox'])
+            page = await browser.new_page(locale='en-US',
+                                          http_credentials={'username':'admin', 'password':'browser-test'})
+            config_requested = asyncio.Event()
+            config_ready = asyncio.Event()
+            discovery_ready = asyncio.Event()
+            requests = []
+            errors = []
+            page.on('pageerror', lambda error: errors.append(str(error)))
+
+            async def configuration(route):
+                response = await route.fetch()
+                body = await response.json()
+                body['mode'] = mode
+                config_requested.set()
+                if pending_configuration:
+                    await config_ready.wait()
+                await route.fulfill(response=response, json=body)
+
+            async def discovery(route):
+                requests.append(route.request.post_data_json)
+                await discovery_ready.wait()
+                await route.continue_()
+
+            await page.route('**/api/config', configuration)
+            await page.route('**/api/connection', discovery)
+            await page.goto(url, wait_until='domcontentloaded')
+            await asyncio.wait_for(config_requested.wait(), 10)
+            if not pending_configuration:
+                await expect(page.locator('[name=rated_power_w]')).to_have_value('5000')
+                async with page.expect_response(lambda response: response.url.endswith('/api/snapshot')):
+                    pass
+            assert requests == []
+            await expect(page.locator('#power-options option')).to_have_count(0)
+            await page.locator('#settings-tab').click()
+            await page.locator('[name=power_entity]').fill('sensor.typed_power')
+            await page.locator('[name=temperature_entity]').fill('sensor.typed_temperature')
+            await page.locator('[name=irradiance_entity]').fill('sensor.typed_irradiance')
+            await page.locator('[name=temperature_coefficient_pct_per_c]').fill('-0.4')
+            if pending_configuration:
+                await page.locator('#ha-url').fill(ha_url)
+            unsaved = await page.locator('#settings-form').evaluate('form => [...new FormData(form)]')
+            config_ready.set()
+            await expect(page.locator('#load-entities')).to_be_disabled()
+            await page.locator('#overview-tab').click()
+            await page.locator('#settings-tab').click()
+            await page.locator('#language-select').select_option('fr')
+            async with page.expect_response(lambda response: response.url.endswith('/api/snapshot')):
+                pass
+            assert requests == [None if mode == 'app' else {'url':ha_url, 'token':''}]
+            assert await page.locator('#settings-form').evaluate('form => [...new FormData(form)]') == unsaved
+            discovery_ready.set()
+            await expect(page.locator('#load-entities')).to_be_enabled()
+            for role, entity in [('power', 'sensor.power'), ('temperature', 'sensor.temp'), ('irradiance', 'sensor.sun')]:
+                await expect(page.locator(f'#{role}-options option')).to_have_attribute('value', entity)
+            await page.locator('#overview-tab').click()
+            await page.locator('#settings-tab').click()
+            await page.locator('#language-select').select_option('en')
+            async with page.expect_response(lambda response: response.url.endswith('/api/snapshot')):
+                pass
+            assert len(requests) == 1
+            assert await page.locator('#settings-form').evaluate('form => [...new FormData(form)]') == unsaved
+            if mode == 'docker':
+                await page.locator('#ha-url').fill(ha_url + '/')
+                await page.locator('#ha-token').fill('simulation-token')
+            async with page.expect_response(lambda response: response.url.endswith('/api/connection')):
+                await page.locator('#load-entities').click()
+            await expect(page.locator('#load-entities')).to_be_enabled()
+            assert requests == [
+                None if mode == 'app' else {'url':ha_url, 'token':''},
+                None if mode == 'app' else {'url':ha_url + '/', 'token':'simulation-token'},
+            ]
+            assert await page.locator('#settings-form').evaluate(
+                "form => [...new FormData(form)].filter(([key]) => key.endsWith('_entity') || key === 'temperature_coefficient_pct_per_c')"
+            ) == [entry for entry in unsaved if entry[0].endswith('_entity') or entry[0] == 'temperature_coefficient_pct_per_c']
+            assert errors == []
+            await browser.close()
+        service.store.close()
+
+
+@pytest.mark.parametrize('saved_credentials', [False, True])
+async def test_settings_first_connection_failure_keeps_polling_and_allows_retry(tmp_path, saved_credentials):
+    from playwright.async_api import async_playwright, expect
+    from test_engine import settings
+    from test_integration import fake_server
+    from pvyieldlens.service import Service
+    from pvyieldlens.storage import Store
+    from pvyieldlens.web import Runtime, create_app
+
+    async with fake_server() as ha_url:
+        service = Service(Store(tmp_path / 'data.sqlite'))
+        await service.configure(settings(update_seconds=1))
+        web = create_app(service, Runtime(web_password='browser-test', ha_url=ha_url,
+                                         ha_token='simulation-token' if saved_credentials else ''), run_background=False)
+        async with fake_server(web) as url, async_playwright() as playwright:
+            browser = await playwright.chromium.launch(args=['--no-sandbox'])
+            page = await browser.new_page(locale='en-US',
+                                          http_credentials={'username':'admin', 'password':'browser-test'})
+            fail_ready = asyncio.Event()
+            requests = []
+
+            async def discovery(route):
+                requests.append(route.request.post_data_json)
+                if len(requests) == 1:
+                    await fail_ready.wait()
+                    await route.fulfill(status=502, json={'error':'ha_connection_failed'})
+                else:
+                    await route.continue_()
+
+            await page.route('**/api/connection', discovery)
+            await page.goto(url)
+            await expect(page.locator('[name=rated_power_w]')).to_have_value('5000')
+            await page.locator('#settings-tab').click()
+            async with page.expect_response(lambda response: response.url.endswith('/api/snapshot')):
+                pass
+            if not saved_credentials:
+                assert requests == []
+                await expect(page.locator('#power-options option')).to_have_count(0)
+                await page.locator('#ha-url').fill(ha_url)
+                await page.locator('#ha-token').fill('simulation-token')
+                await page.locator('#load-entities').click()
+            await expect(page.locator('#load-entities')).to_be_disabled()
+            async with page.expect_response(lambda response: response.url.endswith('/api/snapshot')):
+                pass
+            assert requests == [{'url':ha_url, 'token':'' if saved_credentials else 'simulation-token'}]
+            fail_ready.set()
+            await expect(page.locator('#connection-result')).to_contain_text('Cannot reach Home Assistant')
+            await expect(page.locator('#load-entities')).to_be_enabled()
+            await expect(page.locator('#power-options option')).to_have_count(0)
+            async with page.expect_response(lambda response: response.url.endswith('/api/snapshot')):
+                pass
+            async with page.expect_response(lambda response: response.url.endswith('/api/connection')):
+                if saved_credentials:
+                    await page.locator('#overview-tab').click()
+                    await page.locator('#settings-tab').click()
+                else:
+                    await page.locator('#load-entities').click()
+            await expect(page.locator('#power-options option')).to_have_attribute('value', 'sensor.power')
+            assert requests == [{'url':ha_url, 'token':'' if saved_credentials else 'simulation-token'}] * 2
+            await expect(page.locator('#ha-url')).to_have_value(ha_url)
+            await expect(page.locator('#ha-token')).to_have_value('' if saved_credentials else 'simulation-token')
+            await browser.close()
+        service.store.close()

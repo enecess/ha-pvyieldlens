@@ -46,7 +46,7 @@ cp .env.example .env
 docker compose up -d --build
 ```
 
-打开 [localhost:8099](http://localhost:8099)，用户名为 `admin`，密码为刚设置的密码。在**设置**中填写 Home Assistant 地址，以及属于 Home Assistant **管理员**的长期访问令牌，然后点击**加载传感器**。发布输出实体需要管理员权限。
+打开 [localhost:8099](http://localhost:8099)，用户名为 `admin`，密码为刚设置的密码。首次连接时，在**设置**中填写 Home Assistant 地址，以及属于 Home Assistant **管理员**的长期访问令牌，然后点击**刷新传感器**。已配置地址和令牌时，首次进入**设置**会自动加载传感器。修改连接后、需要更新列表或请求失败后重试时，可点击**刷新传感器**。发布输出实体需要管理员权限。
 
 默认只能在运行 Docker 的电脑上打开页面。如需其他设备访问，将 `compose.yaml` 中的 `127.0.0.1:8099:8099` 改为 `8099:8099`。
 

@@ -31,7 +31,7 @@
   "ha_url": "URL di Home Assistant",
   "ha_token": "Token di accesso a lunga durata",
   "token_help": "Lascia vuoto per riutilizzare il token salvato per lo stesso URL. Inserisci un token quando cambi l’URL.",
-  "connect": "Carica sensori",
+  "connect": "Aggiorna sensori",
   "connecting": "Connessione…",
   "connected": "Connessione verificata",
   "solar": "Pannelli solari",
@@ -82,5 +82,6 @@
   "stat_value_hint": "Le letture mancanti sono escluse dalla media.",
   "language": "Lingua",
   "daily_energy_incomplete": "L’energia di oggi è incompleta: i periodi precedenti non possono essere divisi alla nuova mezzanotte.",
-  "auto": "Auto"
+  "auto": "Auto",
+  "coverage_help": "La completezza dei dati è la quota della finestra di calcolo in cui tutti e tre gli ingressi sono validi contemporaneamente. I dati in tempo reale usano la finestra mobile più recente; lo storico usa l’ultimo periodo concluso, non l’intervallo di date selezionato nel grafico."
 }

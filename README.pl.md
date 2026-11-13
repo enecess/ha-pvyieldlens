@@ -46,7 +46,7 @@ W pliku `.env` ustaw swoje hasło w `PVYL_WEB_PASSWORD`, a następnie uruchom ap
 docker compose up -d --build
 ```
 
-Otwórz [localhost:8099](http://localhost:8099). Zaloguj się jako `admin`, używając ustawionego hasła. W **Ustawieniach** wpisz adres Home Assistant i długoterminowy token dostępu należący do **administratora** Home Assistant, a następnie kliknij **Wczytaj czujniki**. Publikowanie czujników wynikowych wymaga uprawnień administratora.
+Otwórz [localhost:8099](http://localhost:8099). Zaloguj się jako `admin`, używając ustawionego hasła. Przy pierwszym połączeniu wpisz w **Ustawieniach** adres Home Assistant i długoterminowy token dostępu należący do **administratora** Home Assistant, a następnie kliknij **Odśwież czujniki**. Jeśli adres i token są już skonfigurowane, czujniki zostaną wczytane automatycznie przy pierwszym otwarciu **Ustawień**. Użyj przycisku **Odśwież czujniki** po zmianie połączenia, aby odświeżyć listę lub ponowić nieudaną próbę. Publikowanie czujników wynikowych wymaga uprawnień administratora.
 
 Domyślnie strona działa na komputerze z Dockerem. Aby otworzyć ją na innym urządzeniu, w `compose.yaml` zmień `127.0.0.1:8099:8099` na `8099:8099`.
 

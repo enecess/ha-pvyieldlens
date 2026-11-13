@@ -46,7 +46,7 @@ Tragen Sie in `.env` Ihr Passwort bei `PVYL_WEB_PASSWORD` ein und starten Sie di
 docker compose up -d --build
 ```
 
-Öffnen Sie [localhost:8099](http://localhost:8099). Melden Sie sich als `admin` mit Ihrem Passwort an. Geben Sie unter **Einstellungen** die Home-Assistant-Adresse und ein langlebiges Zugriffstoken eines Home-Assistant-**Administrators** ein. Klicken Sie auf **Sensoren laden**. Zum Veröffentlichen der Ergebnis-Sensoren sind Administratorrechte erforderlich.
+Öffnen Sie [localhost:8099](http://localhost:8099). Melden Sie sich als `admin` mit Ihrem Passwort an. Geben Sie für die erste Verbindung unter **Einstellungen** die Home-Assistant-Adresse und ein langlebiges Zugriffstoken eines Home-Assistant-**Administrators** ein und klicken Sie auf **Sensoren aktualisieren**. Wenn Adresse und Token bereits konfiguriert sind, werden die Sensoren beim ersten Öffnen der **Einstellungen** automatisch geladen. Verwenden Sie **Sensoren aktualisieren** nach einer Verbindungsänderung, zum Aktualisieren der Liste oder für einen erneuten Versuch nach einem Fehler. Zum Veröffentlichen der Ergebnis-Sensoren sind Administratorrechte erforderlich.
 
 Die Seite ist zunächst nur auf dem Docker-Rechner erreichbar. Für andere Geräte ändern Sie `127.0.0.1:8099:8099` in `compose.yaml` zu `8099:8099`.
 
