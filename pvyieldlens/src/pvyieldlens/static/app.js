@@ -13,6 +13,9 @@ let language = selectLanguage(navigator.languages?.length ? navigator.languages 
 let configuration = null;
 let snapshot = null;
 let history = [];
+let historySummary = null;
+let currentPage = 'live';
+let previousDataPage = 'live';
 let livePoints = [];
 let lastHistoryKey = null;
 let historyVersion = 0;
@@ -39,22 +42,51 @@ async function api(path, options = {}) {
   return body;
 }
 
-function showPage(settings) {
-  const returning = el('dashboard').hidden && !settings;
-  if (el('dashboard').hidden !== settings) window.scrollTo(0, 0);
-  el('dashboard').hidden = settings;
-  el('configuration').hidden = !settings;
-  el('overview-tab').classList.toggle('active', !settings);
-  el('settings-tab').classList.toggle('active', settings);
-  if (settings) loadEntities();
-  else {
-    if (returning) lastHistoryDraw = '';
-    render();
-    if (returning) fetchHistory().then(render).catch(error => {
-      el('banner').hidden = false;
-      el('banner').textContent = t(error.message);
-    });
+function showPage(page) {
+  if (page === currentPage) return;
+  if (page === 'settings') previousDataPage = currentPage;
+  currentPage = page;
+  window.scrollTo(0, 0);
+  ['live', 'history', 'forecast'].forEach(name => {
+    el(`${name}-page`).hidden = page !== name;
+    el(`${name}-tab`).classList.toggle('active', page === name);
+    el(`${name}-tab`).setAttribute('aria-current', page === name ? 'page' : 'false');
+  });
+  el('configuration').hidden = page !== 'settings';
+  el('data-navigation').hidden = page === 'settings';
+  render();
+  if (page === 'settings') loadEntities();
+  if (page === 'history') fetchHistory().then(render).catch(error => {
+    el('banner').hidden = false;
+    el('banner').textContent = t(error.message);
+  });
+}
+
+function showSettingsCategory(category) {
+  document.querySelectorAll('[data-settings-section]').forEach(section => {
+    section.hidden = section.dataset.settingsSection !== category;
+  });
+  document.querySelectorAll('[data-settings-category]').forEach(button => {
+    button.setAttribute('aria-pressed', String(button.dataset.settingsCategory === category));
+  });
+}
+
+function updateForecastControls() {
+  ['forecast_tilt_deg', 'forecast_azimuth_deg'].forEach(name => {
+    form.elements.namedItem(name).required = form.elements.namedItem('forecast_enabled').checked;
+  });
+  el('forecast-azimuth-row').hidden = el('forecast-direction').value !== 'custom';
+}
+
+function revealInvalid(input) {
+  showSettingsCategory(input.closest('[data-settings-section]').dataset.settingsSection);
+  const details = input.closest('details');
+  if (details) details.open = true;
+  if (input.name === 'forecast_azimuth_deg') {
+    el('forecast-direction').value = 'custom';
+    updateForecastControls();
   }
+  input.focus();
 }
 
 function showMessage(id, key) {
@@ -67,6 +99,9 @@ function applyLanguage() {
   document.documentElement.lang = language;
   document.querySelectorAll('[data-i18n]').forEach(node => { node.textContent = t(node.dataset.i18n); });
   document.querySelectorAll('[data-i18n-placeholder]').forEach(node => { node.placeholder = t(node.dataset.i18nPlaceholder); });
+  el('settings-button').setAttribute('aria-label', t('settings'));
+  el('data-navigation').setAttribute('aria-label', t('data_pages'));
+  el('settings-categories').setAttribute('aria-label', t('settings_categories'));
   el('history-range').setAttribute('aria-label', t('history'));
   el('language-select').setAttribute('aria-label', t('language'));
   el('language-select').value = languageChoice;
@@ -157,10 +192,18 @@ function render() {
   el('live-reason').textContent = live?.reason ? t(live.reason) : '';
   el('daily-energy').textContent = number(snapshot?.energy?.daily_kwh, 3);
   el('total-energy').textContent = number(snapshot?.energy?.total_kwh, 3);
-  el('stat-estimated').textContent = `${number(stat?.estimated_power)} W`;
-  el('stat-actual').textContent = `${number(stat?.actual_power)} W`;
-  el('stat-pr').textContent = `${number(stat?.pr)}%`;
-  el('stat-coverage').textContent = `${t('coverage')} ${number(stat?.coverage_percent)}% · ${t(stat?.quality || 'waiting')}`;
+  el('history-energy').textContent = number(historySummary?.estimated_energy_kwh, 3);
+  el('history-pr').textContent = number(historySummary?.pr);
+  el('stat-coverage').textContent = `${number(historySummary?.coverage_percent)}%`;
+  const boundaryFormat = new Intl.DateTimeFormat(language, {year:'numeric', month:'short', day:'numeric',
+    hour:'2-digit', minute:'2-digit', second:'2-digit', timeZone:snapshot?.timezone || settings?.timezone || 'UTC'});
+  el('history-boundaries').textContent = historySummary?.start == null ? t('history_no_periods') :
+    t('history_boundaries', {start:boundaryFormat.format(new Date(historySummary.start*1000)),
+      end:boundaryFormat.format(new Date(historySummary.end*1000)), timezone:snapshot?.timezone || settings?.timezone || 'UTC'});
+  el('settings-back').textContent = `← ${t('back_to', {page:t(previousDataPage === 'live' ? 'live_page' : previousDataPage)})}`;
+  el('draft-status').hidden = !editedFields.size;
+  const location = configuration?.location;
+  el('forecast-location').textContent = location ? `${location.location_name || t('ha_location')} · ${number(location.latitude, 5)}, ${number(location.longitude, 5)} · ${location.timezone}` : t('location_unavailable');
   el('last-settled').textContent = t('last_settled', {time:stamp(stat?.end)});
   el('timezone-note').textContent = `${t('timezone')}: ${snapshot?.timezone || settings?.timezone || 'UTC'}`;
   const warnings = [snapshot?.error, snapshot?.history_available === false ? 'history_unavailable' : null,
@@ -176,8 +219,8 @@ function render() {
     return row;
   }));
   el('source-empty').hidden = Boolean(snapshot?.sources?.length);
-  if (!el('dashboard').hidden) {
-    plot('live-chart', livePoints, powerSeries, 'W');
+  if (currentPage === 'live') plot('live-chart', livePoints, powerSeries, 'W');
+  if (currentPage === 'history') {
     const drawKey = `${historyVersion}|${language}|${snapshot?.timezone}|${['history-chart', 'pr-chart'].map(id => `${el(id).clientWidth},${el(id).clientHeight}`).join('|')}`;
     if (drawKey !== lastHistoryDraw) {
       plot('history-chart', history, powerSeries, 'W');
@@ -193,6 +236,18 @@ async function loadConfiguration() {
     const input = form.elements.namedItem(key);
     if (input && !editedFields.has(key)) input.value = value;
   });
+  Object.entries(configuration.forecast_settings).forEach(([key, value]) => {
+    const input = form.elements.namedItem(`forecast_${key}`);
+    if (!editedFields.has(input.name)) {
+      if (key === 'enabled') input.checked = value;
+      else input.value = value ?? '';
+    }
+  });
+  if (!editedFields.has('forecast_azimuth_deg')) {
+    const azimuth = form.elements.namedItem('forecast_azimuth_deg').value;
+    el('forecast-direction').value = ['0', '90', '180', '270'].includes(azimuth) ? azimuth : azimuth ? 'custom' : '';
+  }
+  updateForecastControls();
   if (!editedFields.has('ha-url')) el('ha-url').value = configuration.connection.url;
   el('connection-fields').hidden = configuration.mode === 'app';
   el('app-connection-note').hidden = configuration.mode !== 'app';
@@ -200,11 +255,16 @@ async function loadConfiguration() {
   if (!el('configuration').hidden) loadEntities();
 }
 
-async function fetchHistory() {
-  if (el('dashboard').hidden) return;
+async function fetchHistory(force = false) {
+  if (currentPage !== 'history') return;
   const key = `${snapshot?.statistics?.revision}|${snapshot?.statistics?.end}|${el('history-range').value}`;
   const end = Date.now()/1000;
-  history = (await api(`history?start=${Math.max(0,end-Number(el('history-range').value)*86400)}&end=${end}`)).windows.map(point => ({...point, at:point.end}));
+  const start = Math.max(0, end - Number(el('history-range').value)*86400);
+  if (!force && key === lastHistoryKey && !history.some(point => point.start < start)) return;
+  const result = await api(`history?start=${start}&end=${end}`);
+  history = result.windows.filter(point => point.start >= result.requested_range.start && point.end <= result.requested_range.end)
+    .map(point => ({...point, at:point.end}));
+  historySummary = result.summary;
   historyVersion += 1;
   lastHistoryKey = key;
 }
@@ -216,14 +276,7 @@ async function poll() {
       livePoints.push({at:snapshot.calculated_at,estimated_power:snapshot.realtime?.estimated_power ?? null,actual_power:snapshot.realtime?.actual_power ?? null});
       livePoints = livePoints.filter(point => point.at >= Date.now()/1000 - 1800).slice(-600);
     }
-    if (!el('dashboard').hidden) {
-      if (lastHistoryKey !== `${snapshot?.statistics?.revision}|${snapshot?.statistics?.end}|${el('history-range').value}`) await fetchHistory();
-      const start = Math.max(0, Date.now()/1000 - Number(el('history-range').value)*86400);
-      if (history[0]?.end <= start) {
-        history = history.filter(point => point.end > start);
-        historyVersion += 1;
-      }
-    }
+    await fetchHistory();
     render();
   } catch (error) {
     el('banner').hidden = false;
@@ -235,12 +288,33 @@ async function poll() {
   }
 }
 
-el('overview-tab').addEventListener('click', () => showPage(false));
-el('settings-tab').addEventListener('click', () => showPage(true));
-el('open-settings').addEventListener('click', () => showPage(true));
-form.addEventListener('input', event => editedFields.add(event.target.name || event.target.id));
+['live', 'history', 'forecast'].forEach(page => el(`${page}-tab`).addEventListener('click', () => showPage(page)));
+el('settings-button').addEventListener('click', () => showPage('settings'));
+el('settings-back').addEventListener('click', () => showPage(previousDataPage));
+el('open-settings').addEventListener('click', () => showPage('settings'));
+el('open-forecast-settings').addEventListener('click', () => {
+  showPage('settings');
+  showSettingsCategory('forecast');
+});
+document.querySelectorAll('[data-settings-category]').forEach(button => {
+  button.addEventListener('click', () => showSettingsCategory(button.dataset.settingsCategory));
+});
+form.addEventListener('input', event => {
+  editedFields.add(event.target.name || event.target.id);
+  if (event.target.setCustomValidity) event.target.setCustomValidity('');
+  event.target.removeAttribute('aria-invalid');
+  el('draft-status').hidden = false;
+  el('save-result').textContent = '';
+  delete el('save-result').dataset.i18n;
+  updateForecastControls();
+});
+el('forecast-direction').addEventListener('change', event => {
+  if (event.target.value !== 'custom') form.elements.namedItem('forecast_azimuth_deg').value = event.target.value;
+  editedFields.add('forecast_azimuth_deg');
+  updateForecastControls();
+});
 el('history-range').addEventListener('change', async () => {
-  try { await fetchHistory(); render(); } catch (error) { el('banner').hidden = false; el('banner').textContent=t(error.message); }
+  try { await fetchHistory(true); render(); } catch (error) { el('banner').hidden = false; el('banner').textContent=t(error.message); }
 });
 window.addEventListener('languagechange', () => {
   language = selectLanguage(navigator.languages?.length ? navigator.languages : [navigator.language || 'en'], languageChoice);
@@ -282,21 +356,54 @@ el('load-entities').addEventListener('click', () => loadEntities(true));
 
 form.addEventListener('submit', async event => {
   event.preventDefault();
-  const button=el('save-button'); button.disabled=true; showMessage('save-button', 'saving');
   form.querySelectorAll('[aria-invalid]').forEach(input => input.removeAttribute('aria-invalid'));
-  const settings=Object.fromEntries([...new FormData(form)].map(([key,value]) => [key,key.endsWith('_entity') ? value.trim() : Number(value)]));
-  settings.timezone=configuration?.detectedTimezone || configuration?.settings?.timezone || 'UTC';
+  const azimuth = form.elements.namedItem('forecast_azimuth_deg');
+  azimuth.setCustomValidity(azimuth.value !== '' && azimuth.valueAsNumber >= 360 ? t('azimuth_help') : '');
+  const noct = form.elements.namedItem('forecast_noct_c');
+  noct.setCustomValidity(noct.value !== '' && noct.valueAsNumber <= 20 ? t('noct_help') : '');
+  const invalid = [...form.elements].find(input => input.willValidate && !input.validity.valid);
+  if (invalid) {
+    revealInvalid(invalid);
+    invalid.reportValidity();
+    return;
+  }
+  const button = el('save-button');
+  button.disabled = true;
+  showMessage('save-button', 'saving');
+  const settings = Object.fromEntries([...new FormData(form)].filter(([key]) => !key.startsWith('forecast_'))
+    .map(([key, value]) => [key, key.endsWith('_entity') ? value.trim() : Number(value)]));
+  settings.timezone = configuration?.detectedTimezone || configuration?.settings?.timezone || 'UTC';
+  const forecast_settings = {
+    enabled:form.elements.namedItem('forecast_enabled').checked,
+    tilt_deg:form.elements.namedItem('forecast_tilt_deg').value === '' ? null : form.elements.namedItem('forecast_tilt_deg').valueAsNumber,
+    azimuth_deg:azimuth.value === '' ? null : azimuth.valueAsNumber,
+    noct_c:noct.valueAsNumber,
+  };
   try {
-    configuration=await api('config',{method:'PUT',body:JSON.stringify({settings,...(configuration?.mode==='app' ? {} : {connection:{url:el('ha-url').value,token:el('ha-token').value}})})});
-    editedFields.clear(); el('ha-token').value=''; showMessage('save-result', 'saved'); livePoints=[]; lastHistoryKey=null; render();
+    configuration = await api('config', {method:'PUT', body:JSON.stringify({settings, forecast_settings,
+      ...(configuration?.mode === 'app' ? {} : {connection:{url:el('ha-url').value, token:el('ha-token').value}})})});
+    editedFields.clear();
+    el('ha-token').value = '';
+    showMessage('save-result', 'saved');
+    livePoints = [];
+    lastHistoryKey = null;
+    render();
   } catch (error) {
     showMessage('save-result', error.message);
-    error.fields?.forEach(field => { const input=form.elements.namedItem(field.replace(/^settings\./,'')); if(input) input.setAttribute('aria-invalid','true'); });
-  } finally { button.disabled=false; showMessage('save-button', 'save'); }
+    const invalidInputs = (error.fields || []).map(field => field.startsWith('connection.') ? el(`ha-${field.split('.')[1]}`) :
+      form.elements.namedItem(field.replace(/^settings\./, '').replace(/^forecast_settings\./, 'forecast_'))).filter(Boolean);
+    if (error.message === 'connection_required') invalidInputs.push(el('ha-token'));
+    invalidInputs.forEach(input => input.setAttribute('aria-invalid', 'true'));
+    const first = [...form.elements].find(input => invalidInputs.includes(input));
+    if (first) revealInvalid(first);
+  } finally {
+    button.disabled = false;
+    showMessage('save-button', 'save');
+  }
 });
 
 const chartResize = new ResizeObserver(() => render());
-['history-chart', 'pr-chart'].forEach(id => chartResize.observe(el(id)));
+['live-chart', 'history-chart', 'pr-chart'].forEach(id => chartResize.observe(el(id)));
 applyLanguage();
 try { await loadConfiguration(); } catch (error) { el('banner').hidden=false; el('banner').textContent=t(error.message); }
 poll();

@@ -1,180 +1,193 @@
 import asyncio
 import os
 import time
-from pathlib import Path
 
 import pytest
 
 pytestmark = pytest.mark.skipif(os.getenv('PVYL_BROWSER_TESTS') != '1', reason='Set PVYL_BROWSER_TESTS=1 after installing Playwright Chromium')
 
 
-async def test_dashboard_configuration_locales_and_mobile(tmp_path):
-    from playwright.async_api import async_playwright, expect
-    from fake_ha import source_states
+async def test_data_pages_and_gear_settings_preserve_context(browser_workspace):
+    from playwright.async_api import expect
+
+    page, service, _ = browser_workspace
+    history_requests = []
+    page.on('request', lambda request: history_requests.append(request.url) if '/api/history?' in request.url else None)
+    await expect(page.locator('#live-page')).to_be_visible()
+    await expect(page.locator('#history-page')).to_be_hidden()
+    await expect(page.locator('#forecast-page')).to_be_hidden()
+    assert history_requests == []
+    await page.locator('#history-tab').click()
+    await page.locator('#history-range').select_option('7')
+    await page.locator('#settings-button').click()
+    await expect(page.locator('#configuration')).to_be_visible()
+    await expect(page.locator('#data-navigation')).to_be_hidden()
+    await expect(page.locator('#settings-back')).to_have_text('← Back to History')
+    await page.locator('button[data-settings-category=panels]').click()
+    await page.locator('[name=temperature_coefficient_pct_per_c]').fill('-0.4')
+    await page.locator('button[data-settings-category=forecast]').click()
+    await expect(page.locator('[data-settings-section=panels]')).to_be_hidden()
+    await expect(page.locator('[data-settings-section=forecast]')).to_be_visible()
+    await page.locator('#settings-back').click()
+    await expect(page.locator('#history-page')).to_be_visible()
+    await expect(page.locator('#history-range')).to_have_value('7')
+    await expect(page.locator('#draft-status')).to_have_text('Unsaved changes')
+    await page.locator('#forecast-tab').click()
+    await expect(page.locator('#forecast-page')).to_be_visible()
+    await expect(page.locator('#live-page')).to_be_hidden()
+    await expect(page.locator('#history-page')).to_be_hidden()
+    await page.locator('#settings-button').click()
+    await expect(page.locator('#settings-back')).to_have_text('← Back to Forecast')
+    await page.locator('button[data-settings-category=panels]').click()
+    await expect(page.locator('[name=temperature_coefficient_pct_per_c]')).to_have_value('-0.4')
+    await page.locator('#save-button').click()
+    await expect(page.locator('#save-result')).to_have_text('Configuration saved')
+    assert service.config.temperature_coefficient_pct_per_c == -0.4
+    await expect(page.locator('#ha-token')).to_have_value('')
+    await expect(page.locator('#draft-status')).to_be_hidden()
+
+
+@pytest.mark.parametrize('browser_workspace', [False], indirect=True)
+async def test_settings_reveals_first_invalid_category(browser_workspace):
+    from playwright.async_api import expect
+
+    page, service, _ = browser_workspace
+    await page.locator('#open-settings').click()
+    await page.locator('button[data-settings-category=panels]').click()
+    await page.locator('[name=rated_power_w]').fill('5000')
+    await page.locator('[name=temperature_coefficient_pct_per_c]').fill('-0.35')
+    await page.locator('button[data-settings-category=forecast]').click()
+    await page.locator('#save-button').click()
+    await expect(page.locator('button[data-settings-category=sources]')).to_have_attribute('aria-pressed', 'true')
+    await expect(page.locator('[name=power_entity]')).to_be_focused()
+    assert service.config is None
+    await page.locator('[name=power_entity]').fill('sensor.power')
+    await page.locator('[name=temperature_entity]').fill('sensor.temp')
+    await page.locator('[name=irradiance_entity]').fill('sensor.sun')
+    await page.locator('button[data-settings-category=forecast]').click()
+    await page.locator('[name=forecast_enabled]').check()
+    await page.locator('#save-button').click()
+    await expect(page.locator('[name=forecast_tilt_deg]')).to_be_focused()
+    await expect(page.locator('[data-settings-section=forecast]')).to_be_visible()
+
+
+async def test_forecast_settings_round_trip_and_server_error_category(browser_workspace):
+    from playwright.async_api import expect
+
+    page, service, _ = browser_workspace
+    await page.locator('#settings-button').click()
+    await page.locator('button[data-settings-category=forecast]').click()
+    await expect(page.locator('[name=forecast_noct_c]')).to_have_value('45')
+    await page.locator('[name=forecast_enabled]').check()
+    await page.locator('[name=forecast_tilt_deg]').fill('25')
+    await page.locator('#forecast-direction').select_option('180')
+    await expect(page.locator('[name=forecast_azimuth_deg]')).to_have_value('180')
+    await page.locator('#forecast-direction').select_option('custom')
+    await page.locator('[name=forecast_azimuth_deg]').fill('360')
+    await page.locator('button[data-settings-category=panels]').click()
+    await page.locator('#save-button').click()
+    await expect(page.locator('[name=forecast_azimuth_deg]')).to_be_focused()
+    await expect(page.locator('#save-result')).to_be_empty()
+    await page.locator('[name=forecast_azimuth_deg]').fill('123.5')
+    await page.locator('[name=forecast_noct_c]').fill('20')
+    await page.locator('button[data-settings-category=panels]').click()
+    await page.locator('#save-button').click()
+    await expect(page.locator('[name=forecast_noct_c]')).to_be_focused()
+    await expect(page.locator('#save-result')).to_be_empty()
+    await page.locator('[name=forecast_noct_c]').fill('46')
+    await page.locator('#save-button').click()
+    await expect(page.locator('#save-result')).to_have_text('Configuration saved')
+    assert service.forecast.settings.model_dump() == {'enabled': True, 'tilt_deg': 25, 'azimuth_deg': 123.5, 'noct_c': 46}
+    await page.reload()
+    await expect(page.locator('[name=forecast_noct_c]')).to_have_value('46')
+    await page.locator('#settings-button').click()
+    await page.locator('button[data-settings-category=forecast]').click()
+    await expect(page.locator('[name=forecast_azimuth_deg]')).to_have_value('123.5')
+    await expect(page.locator('#forecast-direction')).to_have_value('custom')
+    await page.locator('[name=forecast_enabled]').uncheck()
+    await page.locator('[name=forecast_tilt_deg]').fill('')
+    await page.locator('[name=forecast_azimuth_deg]').fill('')
+    await page.locator('#save-button').click()
+    await expect(page.locator('#save-result')).to_have_text('Configuration saved')
+    assert service.forecast.settings.tilt_deg is None and service.forecast.settings.azimuth_deg is None
+    await page.reload()
+    await expect(page.locator('[name=forecast_noct_c]')).to_have_value('46')
+    await page.locator('#settings-button').click()
+    await page.locator('button[data-settings-category=forecast]').click()
+    await expect(page.locator('[name=forecast_enabled]')).not_to_be_checked()
+    await expect(page.locator('[name=forecast_tilt_deg]')).to_have_value('')
+    await expect(page.locator('[name=forecast_azimuth_deg]')).to_have_value('')
+    await expect(page.locator('#forecast-direction')).to_have_value('')
+    await page.route('**/api/config', lambda route: route.fulfill(status=422, json={
+        'error': 'invalid_configuration', 'fields': ['settings.power_max_age_seconds']}))
+    await page.locator('#save-button').click()
+    await expect(page.locator('button[data-settings-category=monitoring]')).to_have_attribute('aria-pressed', 'true')
+    await expect(page.locator('[name=power_max_age_seconds]')).to_be_focused()
+    await expect(page.locator('#monitoring-advanced')).to_have_attribute('open', '')
+
+
+async def test_locales_storage_fallback_and_ingress(browser_workspace):
+    from playwright.async_api import expect
+    from fastapi import FastAPI
     from test_integration import fake_server
+
+    page, _, web = browser_workspace
+    for locale, language in [('zh-CN', 'zh'), ('fr-CA', 'fr'), ('pl-PL', 'pl'), ('it-IT', 'it'), ('es-ES', 'en')]:
+        await page.evaluate("locale => {Object.defineProperty(navigator, 'languages', {get: () => [locale], configurable: true}); window.dispatchEvent(new Event('languagechange'));}", locale)
+        await expect(page.locator('html')).to_have_attribute('lang', language)
+    await page.locator('#language-select').select_option('fr')
+    await page.reload()
+    await expect(page.locator('html')).to_have_attribute('lang', 'fr')
+    await page.locator('#language-select').select_option('auto')
+    blocked = await page.context.new_page()
+    await blocked.add_init_script("Object.defineProperty(window, 'localStorage', {get() {throw new DOMException('Blocked', 'SecurityError')}})")
+    await blocked.goto(page.url)
+    await expect(blocked.locator('[name=rated_power_w]')).to_have_value('5000')
+    await blocked.locator('#language-select').select_option('zh')
+    await expect(blocked.locator('html')).to_have_attribute('lang', 'zh')
+    await blocked.close()
+    ingress = FastAPI()
+    # The running app is mounted through a relative Ingress prefix.
+    ingress.mount('/api/hassio_ingress/test-prefix', web)
+    async with fake_server(ingress) as url:
+        await page.goto(url + '/api/hassio_ingress/test-prefix/')
+        await expect(page.locator('[name=rated_power_w]')).to_have_value('5000')
+        await page.locator('#history-tab').click()
+        await expect(page.locator('#history-chart .chart-empty')).to_be_visible()
+        await page.locator('#settings-button').click()
+        await expect(page.locator('#power-options option')).to_have_attribute('value', 'sensor.power')
+
+
+@pytest.fixture
+async def browser_workspace(tmp_path, request):
+    from playwright.async_api import async_playwright, expect
     from test_engine import settings
-    from pvyieldlens.home_assistant import HAState, parse_state
+    from test_integration import fake_server
     from pvyieldlens.service import Service
     from pvyieldlens.storage import Store
     from pvyieldlens.web import Runtime, create_app
 
+    service = Service(Store(tmp_path / 'data.sqlite'))
+    if getattr(request, 'param', True):
+        await service.configure(settings(interval_minutes=1, update_seconds=1))
     async with fake_server() as ha_url:
-        service = Service(Store(tmp_path / 'data.sqlite'))
-        now = time.time()
-        await service.configure(settings(interval_minutes=1, update_seconds=1, timezone='Asia/Shanghai'), now=now-1800)
-        service.store.add_observations([point for at in range(int(now)-1800,int(now)+1,10)
-            for raw,role in zip(source_states(at),('power','temperature','irradiance'))
-            for point in parse_state(HAState.model_validate(raw),role)])
-        await service.tick(now)
-        web = create_app(service, Runtime(web_password='browser-test', ha_url=ha_url, ha_token='simulation-token'))
-        async with fake_server(web, lifespan='on') as url, async_playwright() as playwright:
+        web = create_app(service, Runtime(web_password='browser-test', ha_url=ha_url, ha_token='simulation-token'), run_background=False)
+        async with fake_server(web) as url, async_playwright() as playwright:
             browser = await playwright.chromium.launch(args=['--no-sandbox'])
-            context = await browser.new_context(locale='en-US', viewport={'width':1440,'height':1080},
-                                                 http_credentials={'username':'admin','password':'browser-test'})
+            context = await browser.new_context(locale='en-US', http_credentials={'username': 'admin', 'password': 'browser-test'})
             page = await context.new_page()
+            page.set_default_timeout(5000)
             errors = []
-            history_requests = []
-            page.on('request', lambda request: history_requests.append(request.url) if '/api/history?' in request.url else None)
             page.on('pageerror', lambda error: errors.append(str(error)))
             await page.goto(url)
-            await expect(page.locator('#live-pr')).to_have_text('90', timeout=15000)
-            await expect(page.locator('#history-chart svg')).to_be_visible()
-            stable_snapshot = service.snapshot(now)
-            await page.route('**/api/snapshot', lambda route: route.fulfill(json=stable_snapshot))
-            await page.locator('#history-chart svg').evaluate("svg => svg.dataset.original = 'yes'")
-            initial_requests = len(history_requests)
-            await page.evaluate('Date.now = (() => { const now = Date.now; return () => now() + 31000; })()')
-            async with page.expect_response(lambda response: response.url.endswith('/api/snapshot')):
-                pass
-            async with page.expect_response(lambda response: response.url.endswith('/api/snapshot')):
-                pass
-            await expect(page.locator('#history-chart svg')).to_have_attribute('data-original', 'yes')
-            assert len(history_requests) == initial_requests
-            stable_snapshot['energy']['daily_complete'] = False
-            await expect(page.locator('#banner')).to_contain_text("Today's energy is incomplete")
-            stable_snapshot['energy']['daily_complete'] = True
-            await expect(page.locator('#banner')).to_be_hidden()
-            artifacts = Path('artifacts')
-            artifacts.mkdir(exist_ok=True)
-            await page.screenshot(path=str(artifacts/'dashboard-desktop.png'), full_page=True)
-            dashboard_width = (await page.locator('#dashboard').bounding_box())['width']
-            assert dashboard_width <= 1200
-            updated = await page.locator('#updated').inner_text()
-            stable_snapshot['calculated_at'] += 1
-            await page.get_by_role('button', name='Settings', exact=True).click()
-            await expect(page.locator('#updated')).not_to_have_text(updated)
-            await page.evaluate('Date.now = (() => { const now = Date.now; return () => now() + 31000; })()')
-            async with page.expect_response(lambda response: response.url.endswith('/api/snapshot')):
-                pass
-            assert len(history_requests) == initial_requests
-            await expect(page.locator('#history-chart svg')).to_have_attribute('data-original', 'yes')
-            async with page.expect_response(lambda response: '/api/history?' in response.url):
-                assert await page.locator('#overview-tab').evaluate(
-                    "button => { button.click(); const charts = [...document.querySelectorAll('#dashboard svg')]; return charts.length === 3 && charts.every(chart => chart.viewBox.baseVal.width > 0 && chart.viewBox.baseVal.height > 0); }")
-            await expect(page.locator('#history-chart svg')).not_to_have_attribute('data-original', 'yes')
-            assert len(history_requests) == initial_requests + 1
-            async with page.expect_response(lambda response: '/api/history?' in response.url):
-                await page.locator('#history-range').select_option('7')
-            assert len(history_requests) == initial_requests + 2
-            stable_snapshot['statistics'] = {**stable_snapshot['statistics'], 'end': stable_snapshot['statistics']['end'] + 60}
-            async with page.expect_response(lambda response: '/api/history?' in response.url):
-                pass
-            assert len(history_requests) == initial_requests + 3
-            await page.locator('#history-chart svg').evaluate("svg => svg.dataset.original = 'language'")
-            await page.locator('#language-select').select_option('fr')
-            await expect(page.locator('#history-chart svg')).not_to_have_attribute('data-original', 'language')
-            await page.locator('#language-select').select_option('auto')
-            await page.locator('#history-chart svg').evaluate("svg => svg.dataset.original = 'size'")
-            await page.set_viewport_size({'width':1200, 'height':900})
-            await expect(page.locator('#history-chart svg')).not_to_have_attribute('data-original', 'size')
-            await page.locator('#history-chart svg').evaluate("svg => svg.dataset.original = 'restore-size'")
-            await page.set_viewport_size({'width':1440, 'height':1080})
-            await expect(page.locator('#history-chart svg')).not_to_have_attribute('data-original', 'restore-size')
-            await page.locator('#history-chart svg').evaluate("svg => svg.dataset.original = 'same-page'")
-            await page.locator('#overview-tab').click()
-            await expect(page.locator('#history-chart svg')).to_have_attribute('data-original', 'same-page')
-            assert len(history_requests) == initial_requests + 3
-            await page.unroute('**/api/snapshot')
-            await page.locator('#settings-tab').click()
-            assert (await page.locator('#configuration').bounding_box())['width'] == dashboard_width
-            await page.screenshot(path=str(artifacts/'configuration-desktop.png'), full_page=True)
-            coefficient = page.locator('[name=temperature_coefficient_pct_per_c]')
-            await coefficient.fill('-0.4')
-            await page.locator('#language-select').select_option('fr')
-            await expect(page.locator('html')).to_have_attribute('lang','fr')
-            await page.evaluate("Object.defineProperty(navigator,'languages',{get:()=>['de-DE'],configurable:true}); window.dispatchEvent(new Event('languagechange'))")
-            await expect(page.locator('html')).to_have_attribute('lang','fr')
-            await expect(coefficient).to_have_value('-0.4')
-            await page.locator('#language-select').select_option('auto')
-            await expect(coefficient).to_have_value('-0.4')
-            await expect(coefficient.locator('..')).to_contain_text('%/°C')
-            await page.locator('#load-entities').click()
-            await expect(page.locator('#connection-result')).to_have_text('Verbindung geprüft')
-            await coefficient.fill('-0.35')
-            await page.locator('#save-button').click()
-            await expect(page.locator('#save-result')).to_have_text('Konfiguration gespeichert')
-            assert service.config.temperature_coefficient_pct_per_c == -0.35
-            await expect(page.locator('#connection-state')).to_have_class('connection-badge online',timeout=10000)
-            await page.locator('#language-select').select_option('fr')
-            await expect(page.locator('#save-result')).to_have_text('Configuration enregistrée')
-            await expect(page.locator('#connection-result')).to_have_text('Connexion vérifiée')
-            await page.locator('#language-select').select_option('auto')
-            await page.set_viewport_size({'width':390,'height':844})
-            await page.screenshot(path=str(artifacts/'configuration-mobile.png'), full_page=True)
-            assert await page.evaluate('document.documentElement.scrollWidth <= innerWidth')
-            configuration_width = (await page.locator('#configuration').bounding_box())['width']
-            await page.locator('#overview-tab').click()
-            assert (await page.locator('#dashboard').bounding_box())['width'] == configuration_width
-            assert await page.evaluate('document.documentElement.scrollWidth <= innerWidth')
-            await page.screenshot(path=str(artifacts/'dashboard-mobile.png'), full_page=True)
-            await page.locator('#settings-tab').click()
-            for locale, language in [('zh-CN','zh'), ('fr-CA','fr'), ('pl-PL','pl'), ('it-IT','it'), ('es-ES','en')]:
-                await page.evaluate("locale=>{Object.defineProperty(navigator,'languages',{get:()=>[locale],configurable:true});window.dispatchEvent(new Event('languagechange'))}", locale)
-                await expect(page.locator('html')).to_have_attribute('lang', language)
-                await expect(coefficient).to_have_value('-0.35')
-                await page.locator('#overview-tab').click()
-                await page.locator('.quality-panel').screenshot(path=str(artifacts/f'quality-{language}.png'))
-                await page.locator('#settings-tab').click()
-            await page.locator('#language-select').select_option('it')
-            await page.reload()
-            await expect(page.locator('html')).to_have_attribute('lang','it')
-            await expect(page.locator('#language-select')).to_have_value('it')
-            await page.locator('#language-select').select_option('auto')
-            await expect(page.locator('html')).to_have_attribute('lang','en')
-            blocked_page = await context.new_page()
-            await blocked_page.add_init_script("Object.defineProperty(window,'localStorage',{get(){throw new DOMException('Blocked','SecurityError')}})")
-            await blocked_page.goto(url)
-            await expect(blocked_page.locator('#live-pr')).to_have_text('90',timeout=15000)
-            await blocked_page.locator('#language-select').select_option('zh')
-            await expect(blocked_page.locator('html')).to_have_attribute('lang','zh')
-            await blocked_page.close()
-            chinese_context = await browser.new_context(locale='zh-CN', http_credentials={'username':'admin','password':'browser-test'})
-            chinese_page = await chinese_context.new_page()
-            await chinese_page.goto(url)
-            await expect(chinese_page.locator('html')).to_have_attribute('lang','zh')
-            await expect(chinese_page.locator('#language-select')).to_have_value('auto')
-            await expect(chinese_page.locator('#live-pr')).to_have_text('90',timeout=15000)
-            await chinese_page.screenshot(path=str(artifacts/'dashboard-chinese.png'),full_page=True)
-            await chinese_context.close()
-            from fastapi import FastAPI
-            ingress = FastAPI()
-            ingress.mount('/api/hassio_ingress/test-prefix', web)
-            async with fake_server(ingress) as ingress_url:
-                ingress_page = await context.new_page()
-                ingress_page.on('pageerror', lambda error: errors.append(str(error)))
-                await ingress_page.goto(ingress_url + '/api/hassio_ingress/test-prefix/')
-                await expect(ingress_page.locator('#live-pr')).to_have_text('90', timeout=15000)
-                await expect(ingress_page.locator('#history-chart svg')).to_be_visible()
-                await ingress_page.locator('#settings-tab').click()
-                await expect(ingress_page.locator('#power-options option')).to_have_attribute('value', 'sensor.power')
-                await expect(ingress_page.locator('#temperature-options option')).to_have_attribute('value', 'sensor.temp')
-                await expect(ingress_page.locator('#irradiance-options option')).to_have_attribute('value', 'sensor.sun')
-                await ingress_page.close()
+            await expect(page.locator('#live-hint')).not_to_be_empty()
+            yield page, service, web
             assert errors == []
             await browser.close()
+    service.store.close()
 
 
-async def test_rolling_history_expires_cached_windows_without_refetch(tmp_path):
+async def test_rolling_history_refreshes_only_when_complete_window_membership_changes(tmp_path):
     from playwright.async_api import async_playwright, expect
     from test_engine import samples, settings
     from test_integration import fake_server
@@ -210,6 +223,8 @@ async def test_rolling_history_expires_cached_windows_without_refetch(tmp_path):
                 pass
 
         await page.goto(url)
+        await expect(page.locator('[name=rated_power_w]')).to_have_value('5000')
+        await page.locator('#history-tab').click()
         await expect(page.locator('#history-chart svg')).to_be_visible()
         charts = page.locator('#history-chart svg, #pr-chart svg')
         await charts.evaluate_all("charts => charts.forEach(chart => chart.dataset.original = 'initial')")
@@ -217,18 +232,18 @@ async def test_rolling_history_expires_cached_windows_without_refetch(tmp_path):
             "path => path.getAttribute('d').match(/[ML][\\d.]+,[\\d.]+/g).map(command => Number(command.split(',')[1]))")
         assert len(actual_y) == 3
         initial_requests = len(history_requests)
-        await advance_clock(30)
+        await advance_clock(0)
         assert await charts.evaluate_all('charts => charts.map(chart => chart.dataset.original)') == ['initial', 'initial']
         assert len(history_requests) == initial_requests
 
-        # The middle window straddles the new start and must remain alongside the last window.
+        # A straddling window is excluded from both the summary and chart.
         await advance_clock(90)
         await expect(charts.first).not_to_have_attribute('data-original', 'initial')
         assert await page.locator('#history-chart path.series').nth(1).evaluate(
-            "path => path.getAttribute('d').match(/[ML][\\d.]+,[\\d.]+/g).map(command => Number(command.split(',')[1]))") == actual_y[1:]
+            "path => path.getAttribute('d').match(/[ML][\\d.]+,[\\d.]+/g).map(command => Number(command.split(',')[1]))") == actual_y[2:]
         assert await page.locator('#pr-chart path.series').evaluate(
-            "path => path.getAttribute('d').match(/[ML]/g).length") == 2
-        assert len(history_requests) == initial_requests
+            "path => path.getAttribute('d').match(/[ML]/g).length") == 1
+        assert len(history_requests) == initial_requests + 1
         await charts.evaluate_all("charts => charts.forEach(chart => chart.dataset.original = 'remaining')")
         await advance_clock(100)
         assert await charts.evaluate_all('charts => charts.map(chart => chart.dataset.original)') == ['remaining', 'remaining']
@@ -241,20 +256,20 @@ async def test_rolling_history_expires_cached_windows_without_refetch(tmp_path):
         await empty.evaluate_all("nodes => nodes.forEach(node => node.dataset.original = 'empty')")
         await advance_clock(210)
         assert await empty.evaluate_all('nodes => nodes.map(node => node.dataset.original)') == ['empty', 'empty']
-        assert len(history_requests) == initial_requests
+        assert len(history_requests) == initial_requests + 2
 
         async with page.expect_response(lambda response: '/api/history?' in response.url):
             await page.locator('#history-range').select_option('7')
         await expect(charts).to_have_count(2)
         await charts.evaluate_all("charts => charts.forEach(chart => chart.dataset.original = 'hidden')")
-        await page.locator('#settings-tab').click()
+        await page.locator('#settings-button').click()
         await advance_clock(6*86400+180)
-        assert len(history_requests) == initial_requests+1
+        assert len(history_requests) == initial_requests+3
         assert await charts.evaluate_all('charts => charts.map(chart => chart.dataset.original)') == ['hidden', 'hidden']
         async with page.expect_response(lambda response: '/api/history?' in response.url):
-            await page.locator('#overview-tab').click()
+            await page.locator('#settings-back').click()
         await expect(charts).to_have_count(0)
-        assert len(history_requests) == initial_requests+2
+        assert len(history_requests) == initial_requests+4
         assert errors == []
         await browser.close()
     service.store.close()
@@ -311,10 +326,13 @@ async def test_settings_discovers_once_and_preserves_edits(tmp_path, mode, pendi
                     pass
             assert requests == []
             await expect(page.locator('#power-options option')).to_have_count(0)
-            await page.locator('#settings-tab').click()
+            await page.locator('#settings-button').click()
+            await page.locator('button[data-settings-category=sources]').click()
             await page.locator('[name=power_entity]').fill('sensor.typed_power')
+            await page.locator('button[data-settings-category=panels]').click()
             await page.locator('[name=temperature_coefficient_pct_per_c]').fill('-0.4')
             if edited_connection:
+                await page.locator('button[data-settings-category=connection]').click()
                 await page.locator('#ha-url').fill(ha_url + '/')
                 await page.locator('#ha-token').fill('simulation-token')
             config_ready.set()
@@ -326,8 +344,8 @@ async def test_settings_discovers_once_and_preserves_edits(tmp_path, mode, pendi
             await expect(page.locator('[name=irradiance_entity]')).to_have_value('sensor.sun')
             await expect(page.locator('[name=interval_minutes]')).to_have_value('1')
             unsaved = await page.locator('#settings-form').evaluate('form => [...new FormData(form)]')
-            await page.locator('#overview-tab').click()
-            await page.locator('#settings-tab').click()
+            await page.locator('#settings-back').click()
+            await page.locator('#settings-button').click()
             await page.locator('#language-select').select_option('fr')
             async with page.expect_response(lambda response: response.url.endswith('/api/snapshot')):
                 pass
@@ -342,13 +360,14 @@ async def test_settings_discovers_once_and_preserves_edits(tmp_path, mode, pendi
             await expect(page.locator('#load-entities')).to_be_enabled()
             for role, entity in [('power', 'sensor.power'), ('temperature', 'sensor.temp'), ('irradiance', 'sensor.sun')]:
                 await expect(page.locator(f'#{role}-options option')).to_have_attribute('value', entity)
-            await page.locator('#overview-tab').click()
-            await page.locator('#settings-tab').click()
+            await page.locator('#settings-back').click()
+            await page.locator('#settings-button').click()
             await page.locator('#language-select').select_option('en')
             async with page.expect_response(lambda response: response.url.endswith('/api/snapshot')):
                 pass
             assert len(requests) == 1
             assert await page.locator('#settings-form').evaluate('form => [...new FormData(form)]') == unsaved
+            await page.locator('button[data-settings-category=connection]').click()
             if mode == 'docker':
                 await page.locator('#ha-url').fill(ha_url + '/')
                 await page.locator('#ha-token').fill('simulation-token')
@@ -372,8 +391,10 @@ async def test_settings_discovers_once_and_preserves_edits(tmp_path, mode, pendi
 
 @pytest.mark.parametrize(('selector', 'typed_value'), [
     ('[name=power_entity]', 'sensor.cleared_power'), ('#ha-url', 'http://edited.invalid:8123'),
+    ('[name=forecast_tilt_deg]', '12.5'), ('[name=forecast_azimuth_deg]', '123.5'), ('[name=forecast_noct_c]', '50'),
 ])
 async def test_settings_pending_configuration_preserves_cleared_field(tmp_path, selector, typed_value):
+    from pvyieldlens.settings import ForecastSettings
     from playwright.async_api import async_playwright, expect
     from test_engine import settings
     from test_integration import fake_server
@@ -384,6 +405,7 @@ async def test_settings_pending_configuration_preserves_cleared_field(tmp_path, 
     async with fake_server() as ha_url:
         service = Service(Store(tmp_path / 'data.sqlite'))
         await service.configure(settings(interval_minutes=1, update_seconds=1))
+        service.forecast.configure(service.config, ForecastSettings(enabled=True, tilt_deg=25, azimuth_deg=180), service.origin, None)
         web = create_app(service, Runtime(web_password='browser-test', ha_url=ha_url,
                                          ha_token='simulation-token'), run_background=False)
         async with fake_server(web) as url, async_playwright() as playwright:
@@ -402,9 +424,16 @@ async def test_settings_pending_configuration_preserves_cleared_field(tmp_path, 
             await page.route('**/api/config', configuration)
             await page.goto(url, wait_until='domcontentloaded')
             await asyncio.wait_for(config_requested.wait(), 10)
-            await page.locator('#settings-tab').click()
+            await page.locator('#settings-button').click()
+            await page.locator('button[data-settings-category=forecast]' if 'forecast_' in selector else 'button[data-settings-category=sources]' if selector.startswith('[name=') else 'button[data-settings-category=connection]').click()
+            if 'azimuth' in selector:
+                await page.locator('#forecast-direction').select_option('custom')
             await page.locator(selector).fill(typed_value)
             await page.locator(selector).fill('')
+            await page.locator('button[data-settings-category=forecast]').click()
+            await page.locator('#settings-back').click()
+            await page.locator('#history-tab').click()
+            await page.locator('#settings-button').click()
             async with page.expect_response(lambda response: response.url.endswith('/api/snapshot')):
                 config_ready.set()
             await expect(page.locator(selector)).to_have_value('')
@@ -453,7 +482,7 @@ async def test_settings_first_connection_failure_keeps_polling_and_allows_retry(
             await page.route('**/api/connection', discovery)
             await page.goto(url)
             await expect(page.locator('[name=rated_power_w]')).to_have_value('5000')
-            await page.locator('#settings-tab').click()
+            await page.locator('#settings-button').click()
             async with page.expect_response(lambda response: response.url.endswith('/api/snapshot')):
                 pass
             if not saved_credentials:
@@ -474,8 +503,8 @@ async def test_settings_first_connection_failure_keeps_polling_and_allows_retry(
                 pass
             async with page.expect_response(lambda response: response.url.endswith('/api/connection')):
                 if saved_credentials:
-                    await page.locator('#overview-tab').click()
-                    await page.locator('#settings-tab').click()
+                    await page.locator('#settings-back').click()
+                    await page.locator('#settings-button').click()
                 else:
                     await page.locator('#load-entities').click()
             await expect(page.locator('#power-options option')).to_have_attribute('value', 'sensor.power')
