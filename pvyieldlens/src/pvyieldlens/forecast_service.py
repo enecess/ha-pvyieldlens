@@ -25,6 +25,7 @@ class ForecastController:
         self._task: asyncio.Task[None] | None = None
         self._request_task: asyncio.Task[None] | None = None
         self._inflight: asyncio.Future[None] | None = None
+        self._request_scope: asyncio.Timeout | None = None
         self._wake = asyncio.Event()
         self._next_refresh = 0.0
         self.configure(store.settings(), self.settings, store.latest_origin(), self.location)
@@ -44,6 +45,8 @@ class ForecastController:
         ) if config and location and settings.tilt_deg is not None and settings.azimuth_deg is not None else None
         changed = inputs != self.inputs or settings.enabled != self.settings.enabled
         self.settings = settings
+        if not settings.enabled and self._request_scope is not None:
+            self._request_scope.reschedule(asyncio.get_running_loop().time())
         self.location = location
         self.inputs = inputs
         if self.batch and self.batch.inputs != inputs:
@@ -55,7 +58,7 @@ class ForecastController:
 
     def view(self, now: float) -> ForecastView:
         return forecast_view(self.batch, self.inputs, self.settings, now,
-                             refreshing=self._inflight is not None, last_error=self.last_error)
+                             refreshing=self.settings.enabled and self._inflight is not None, last_error=self.last_error)
 
     def request_refresh(self) -> bool:
         if not self.settings.enabled or self.inputs is None:
@@ -76,17 +79,19 @@ class ForecastController:
         inputs = self.inputs
         self._inflight = asyncio.get_running_loop().create_future()
         self._request_task = asyncio.current_task()
+        self._request_scope = asyncio.timeout(None)
         try:
             if self.client is None:
                 self.client = OpenMeteoClient()
             try:
-                intervals = await self.client.fetch(inputs)
+                async with self._request_scope:
+                    intervals = await self.client.fetch(inputs)
             except (httpx.HTTPError, OSError, ValueError):
-                if self.settings.enabled and self.inputs == inputs:
+                if self._request_scope.when() is None and self.settings.enabled and self.inputs == inputs:
                     self.last_error = 'forecast_fetch_failed'
                     self._next_refresh = asyncio.get_running_loop().time() + 900
             else:
-                if self.settings.enabled and self.inputs == inputs:
+                if self._request_scope.when() is None and self.settings.enabled and self.inputs == inputs:
                     self.batch = ForecastBatch(inputs=inputs, fetched_at=time.time() if now is None else now,
                                                intervals=intervals)
                     self.store.set_meta('forecast_cache', self.batch.model_dump_json())
@@ -96,6 +101,7 @@ class ForecastController:
             self._inflight.set_result(None)
             self._inflight = None
             self._request_task = None
+            self._request_scope = None
             self._wake.set()
 
     async def _run(self) -> None:

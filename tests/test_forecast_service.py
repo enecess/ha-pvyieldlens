@@ -179,8 +179,9 @@ async def test_success_failure_and_stale_deadlines(tmp_path, monkeypatch):
     real_timeout = asyncio.timeout
 
     def timeout(delay):
-        delays.append(delay)
-        scheduled.set()
+        if delay is not None:
+            delays.append(delay)
+            scheduled.set()
         return real_timeout(None)
 
     def respond(request):
@@ -353,8 +354,9 @@ async def test_direct_refresh_failure_reschedules_sleeping_worker(tmp_path, monk
     real_timeout = asyncio.timeout
 
     def timeout(delay):
-        delays.append(delay)
-        sleeping.set()
+        if delay is not None:
+            delays.append(delay)
+            sleeping.set()
         return real_timeout(None)
 
     def respond(request):
@@ -380,6 +382,96 @@ async def test_direct_refresh_failure_reschedules_sleeping_worker(tmp_path, monk
             await asyncio.wait_for(sleeping.wait(), 1)
             assert delays[-1] == pytest.approx(900, abs=0.1)
             assert forecast.view(120).status == 'stale'
+        finally:
+            await forecast.stop()
+    store.close()
+
+
+@pytest.mark.parametrize('background', [True, False])
+async def test_disabling_cancels_inflight_weather_and_retains_parameters(tmp_path, background):
+    entered, cancelled, release = asyncio.Event(), asyncio.Event(), asyncio.Event()
+    second_received = asyncio.Event()
+    requests = []
+
+    async def respond(request):
+        requests.append(request)
+        if len(requests) > 1:
+            second_received.set()
+            return httpx.Response(200, json=hourly_payload(0, poa_w_m2=400.0))
+        entered.set()
+        try:
+            await release.wait()
+        except asyncio.CancelledError:
+            cancelled.set()
+            raise
+        return httpx.Response(200, json=hourly_payload(0))
+
+    store = Store(tmp_path / 'data.sqlite')
+    async with httpx.AsyncClient(transport=httpx.MockTransport(respond)) as http:
+        forecast = controller(store, http)
+        refresh = None
+        if background:
+            await forecast.start()
+        else:
+            refresh = asyncio.create_task(forecast.refresh(now=120))
+        try:
+            await asyncio.wait_for(entered.wait(), 1)
+            disabled = ENABLED.model_copy(update={'enabled': False})
+            forecast.configure(settings(), disabled, ORIGIN, LOCATION)
+            assert forecast.view(120).status == 'disabled'
+            assert forecast.view(120).refreshing is False
+            assert not forecast.request_refresh()
+            await asyncio.wait_for(cancelled.wait(), 1)
+            if refresh is not None:
+                await refresh
+            assert store.get_meta('forecast_cache') is None
+            assert store.forecast_settings() == disabled
+            assert not http.is_closed
+            forecast.configure(settings(), ENABLED, ORIGIN, LOCATION)
+            if background:
+                await asyncio.wait_for(second_received.wait(), 1)
+            else:
+                await forecast.refresh(now=180)
+            assert len(requests) == 2
+            assert forecast.view(180).today.kwh == pytest.approx(46.74)
+            assert forecast.view(180).refreshing is False
+        finally:
+            await forecast.stop()
+    store.close()
+
+
+async def test_reenabling_before_cancelled_fetch_unwinds_requests_new_weather(tmp_path):
+    entered, second_entered = asyncio.Event(), asyncio.Event()
+    release, second_release = asyncio.Event(), asyncio.Event()
+    requests = []
+
+    async def respond(request):
+        requests.append(request)
+        if len(requests) == 1:
+            entered.set()
+            await release.wait()
+            return httpx.Response(200, json=hourly_payload(0))
+        second_entered.set()
+        await second_release.wait()
+        return httpx.Response(200, json=hourly_payload(0, poa_w_m2=400.0))
+
+    store = Store(tmp_path / 'data.sqlite')
+    async with httpx.AsyncClient(transport=httpx.MockTransport(respond)) as http:
+        forecast = controller(store, http)
+        await forecast.start()
+        try:
+            await asyncio.wait_for(entered.wait(), 1)
+            forecast.configure(settings(), ENABLED.model_copy(update={'enabled': False}), ORIGIN, LOCATION)
+            forecast.configure(settings(), ENABLED, ORIGIN, LOCATION)
+            release.set()
+            await asyncio.wait_for(second_entered.wait(), 1)
+            assert forecast.view(120).fetched_at is None
+            assert store.get_meta('forecast_cache') is None
+            second_release.set()
+            await forecast.refresh(now=180)
+            assert len(requests) == 2
+            assert forecast.view(180).today.kwh == pytest.approx(46.74)
+            assert forecast.view(180).refreshing is False
         finally:
             await forecast.stop()
     store.close()
