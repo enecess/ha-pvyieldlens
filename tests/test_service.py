@@ -389,3 +389,291 @@ async def test_history_unavailable_warning_clears_after_successful_recovery(tmp_
         finally:
             await client.close()
             store.close()
+
+
+async def test_http_location_bootstraps_forecast_before_websocket_ready(tmp_path, monkeypatch):
+    import asyncio
+    import httpx
+    from forecast_fixtures import hourly_payload
+    from pvyieldlens.forecast_service import ForecastController
+    from pvyieldlens.home_assistant import HomeAssistantClient
+    from pvyieldlens.open_meteo import OpenMeteoClient
+    from pvyieldlens.settings import ForecastSettings
+
+    received, ready = asyncio.Event(), asyncio.Event()
+    requests = []
+
+    def ha_response(request):
+        requests.append(request.url.path)
+        return httpx.Response(200, json={'time_zone': 'UTC', 'latitude': 31.23, 'longitude': 121.47,
+                                       'location_name': 'Home'})
+
+    async def events():
+        await ready.wait()
+        yield None
+        await asyncio.Event().wait()
+
+    def weather_response(request):
+        received.set()
+        return httpx.Response(200, json=hourly_payload(0))
+
+    monkeypatch.setattr('pvyieldlens.service.time.time', lambda: 180)
+    store = Store(tmp_path / 'data.sqlite')
+    store.save_settings(settings(interval_minutes=1), 120, 'http://ha.test')
+    store.save_forecast_settings(ForecastSettings(enabled=True, tilt_deg=25.0, azimuth_deg=180.0))
+    async with httpx.AsyncClient(transport=httpx.MockTransport(ha_response)) as ha_http, \
+            httpx.AsyncClient(transport=httpx.MockTransport(weather_response)) as weather_http:
+        ha_client = HomeAssistantClient('http://ha.test', 'secret', ha_http)
+        monkeypatch.setattr(ha_client, 'events', events)
+        service = Service(store, ha_client)
+        service.forecast = ForecastController(store, OpenMeteoClient(weather_http))
+        await service.start()
+        try:
+            await asyncio.wait_for(received.wait(), 1)
+            assert service.forecast.view(180).fetched_at == 180
+            assert service.forecast.location.latitude == 31.23
+            assert requests == ['/api/config']
+            assert store.cursor == 120
+            assert service.subscribed.is_set() is False
+        finally:
+            await service.stop()
+    store.close()
+
+
+async def test_om_timeout_does_not_stop_monitoring(tmp_path, monkeypatch):
+    import asyncio
+    import httpx
+    from datetime import datetime, timezone
+    from pvyieldlens.forecast_service import ForecastController
+    from pvyieldlens.home_assistant import HAConfig, HAState
+    from pvyieldlens.open_meteo import OpenMeteoClient
+    from pvyieldlens.settings import ForecastSettings, HALocation
+
+    received = asyncio.Event()
+    location = HALocation(origin='http://ha.test', latitude=0.0, longitude=0.0, timezone='UTC')
+
+    class LiveClient:
+        async def events(self):
+            yield None
+            await asyncio.Event().wait()
+
+        async def configuration(self):
+            return HAConfig(time_zone='UTC', location=location)
+
+        async def history(self, entities, start, end):
+            return self._states(120)
+
+        def _states(self, at):
+            stamp = datetime.fromtimestamp(at, timezone.utc)
+            return [HAState(entity_id=entity, state=str(value), attributes={'unit_of_measurement': unit},
+                            last_updated=stamp, last_changed=stamp)
+                    for entity, value, unit in [('sensor.power', 3348, 'W'), ('sensor.temp', 45, '°C'),
+                                                 ('sensor.sun', 800, 'W/m²')]]
+
+        async def states(self, entities):
+            return self._states(180)
+
+        async def publish(self, payloads):
+            pass
+
+        async def close(self):
+            pass
+
+    def timeout(request):
+        received.set()
+        raise httpx.ReadTimeout('timeout', request=request)
+
+    monkeypatch.setattr('pvyieldlens.service.time.time', lambda: 180)
+    store = Store(tmp_path / 'data.sqlite')
+    store.save_settings(settings(interval_minutes=1), 120, location.origin)
+    store.save_forecast_settings(ForecastSettings(enabled=True, tilt_deg=25.0, azimuth_deg=180.0))
+    async with httpx.AsyncClient(transport=httpx.MockTransport(timeout)) as http:
+        service = Service(store, LiveClient())
+        service.forecast = ForecastController(store, OpenMeteoClient(http))
+        await service.start()
+        try:
+            await asyncio.wait_for(received.wait(), 1)
+            async with asyncio.timeout(1):
+                while store.cursor != 180:
+                    await asyncio.sleep(0)
+            assert service.snapshot(180)['energy']['total_kwh'] == pytest.approx(.062)
+            assert service.snapshot(180)['connected'] is True
+            assert service.snapshot(180)['error'] is None
+            assert service.forecast.view(180).status == 'unavailable'
+        finally:
+            await service.stop()
+    store.close()
+
+
+async def test_ha_outage_uses_cached_location(tmp_path, monkeypatch):
+    import asyncio
+    import httpx
+    from forecast_fixtures import hourly_payload
+    from pvyieldlens.forecast_service import ForecastController
+    from pvyieldlens.open_meteo import OpenMeteoClient
+    from pvyieldlens.settings import ForecastSettings, HALocation
+
+    received = asyncio.Event()
+    path = tmp_path / 'data.sqlite'
+    store = Store(path)
+    store.save_settings(settings(), 120, 'http://ha.test')
+    forecast = ForecastController(store)
+    forecast.configure(settings(), ForecastSettings(enabled=True, tilt_deg=25.0, azimuth_deg=180.0),
+                       'http://ha.test', HALocation(origin='http://ha.test', latitude=0.0, longitude=0.0,
+                                                  timezone='UTC'))
+    store.close()
+    store = Store(path)
+
+    class OfflineClient:
+        async def events(self):
+            raise OSError('offline')
+            yield None
+
+        async def configuration(self):
+            raise OSError('offline')
+
+        async def publish(self, payloads):
+            pass
+
+        async def close(self):
+            pass
+
+    def respond(request):
+        received.set()
+        return httpx.Response(200, json=hourly_payload(0))
+
+    monkeypatch.setattr('pvyieldlens.service.time.time', lambda: 180)
+    async with httpx.AsyncClient(transport=httpx.MockTransport(respond)) as http:
+        service = Service(store, OfflineClient())
+        service.forecast = ForecastController(store, OpenMeteoClient(http))
+        await service.start()
+        try:
+            await asyncio.wait_for(received.wait(), 1)
+            assert service.forecast.view(180).today.kwh == pytest.approx(89.28)
+            assert service.forecast.location.origin == 'http://ha.test'
+            assert service.snapshot(180)['connected'] is False
+            assert store.cursor == 120
+        finally:
+            await service.stop()
+    store.close()
+
+
+async def test_unchanged_monitoring_configuration_keeps_realtime_and_sources(tmp_path):
+    store = Store(tmp_path / 'data.sqlite')
+    service = Service(store)
+    await service.configure(settings(interval_minutes=1), now=0)
+    store.add_observations(samples())
+    await service.tick(60)
+    service.sources = [{'entity_id': 'sensor.sun', 'valid': True}]
+    before = service.snapshot(60)
+    changes = store.db.total_changes
+    await service.configure(settings(interval_minutes=1), now=61)
+    assert service.snapshot(60) == before
+    assert store.db.total_changes == changes
+    store.close()
+
+
+async def test_service_restart_recreates_separate_owned_weather_client(tmp_path, monkeypatch):
+    import asyncio
+    import httpx
+    from forecast_fixtures import hourly_payload
+    from pvyieldlens.settings import ForecastSettings, HALocation
+
+    received = asyncio.Event()
+    clients, requests = [], []
+    original_client = httpx.AsyncClient
+
+    def respond(request):
+        requests.append(request)
+        received.set()
+        return httpx.Response(200, json=hourly_payload(0))
+
+    def weather_client(**kwargs):
+        client = original_client(transport=httpx.MockTransport(respond), **kwargs)
+        clients.append(client)
+        return client
+
+    monkeypatch.setattr('pvyieldlens.open_meteo.httpx.AsyncClient', weather_client)
+    monkeypatch.setattr('pvyieldlens.service.time.time', lambda: 180)
+    store = Store(tmp_path / 'data.sqlite')
+    service = Service(store)
+    await service.configure(settings(interval_minutes=1), now=120, origin='http://ha.test')
+    service.forecast.configure(service.config, ForecastSettings(enabled=True, tilt_deg=25.0, azimuth_deg=180.0),
+                               service.origin, HALocation(origin=service.origin, latitude=0.0, longitude=0.0,
+                                                          timezone='UTC'))
+    for _ in range(2):
+        received.clear()
+        await service.start()
+        await asyncio.wait_for(received.wait(), 1)
+        await service.stop()
+        assert clients[-1].is_closed is True
+    assert len(clients) == 2
+    assert clients[0] is not clients[1]
+    assert all('authorization' not in request.headers and 'cookie' not in request.headers for request in requests)
+    assert all(request.url.host == 'api.open-meteo.com' for request in requests)
+    store.close()
+
+
+async def test_successful_invalid_ha_location_clears_cached_site(tmp_path, monkeypatch):
+    import asyncio
+    import httpx
+    from forecast_fixtures import hourly_payload
+    from pvyieldlens.forecast_service import ForecastController
+    from pvyieldlens.home_assistant import HomeAssistantClient
+    from pvyieldlens.open_meteo import OpenMeteoClient
+    from pvyieldlens.settings import ForecastSettings, HALocation
+
+    async def events():
+        await asyncio.Event().wait()
+        yield None
+
+    path = tmp_path / 'data.sqlite'
+    store = Store(path)
+    service = Service(store)
+    await service.configure(settings(), now=120, origin='http://ha.test')
+    service.forecast.configure(service.config, ForecastSettings(enabled=True, tilt_deg=25.0, azimuth_deg=180.0),
+                               service.origin, HALocation(origin=service.origin, latitude=0.0, longitude=0.0,
+                                                          timezone='UTC'))
+    monkeypatch.setattr('pvyieldlens.service.time.time', lambda: 180)
+    async with httpx.AsyncClient(transport=httpx.MockTransport(lambda request: httpx.Response(
+        200, json={'time_zone': 'UTC', 'latitude': 95.0, 'longitude': 0.0},
+    ))) as ha_http, httpx.AsyncClient(transport=httpx.MockTransport(lambda request: httpx.Response(
+        200, json=hourly_payload(0),
+    ))) as weather_http:
+        client = HomeAssistantClient(service.origin, 'secret', ha_http)
+        monkeypatch.setattr(client, 'events', events)
+        service.client = client
+        service.forecast = ForecastController(store, OpenMeteoClient(weather_http))
+        await service.start()
+        try:
+            async with asyncio.timeout(1):
+                while service.forecast.location is not None:
+                    await asyncio.sleep(0)
+            assert service.forecast.view(180).status == 'location_unavailable'
+            assert store.cursor == 120
+        finally:
+            await service.stop()
+    store.close()
+    store = Store(path)
+    restored = ForecastController(store)
+    assert restored.location is None
+    assert restored.view(180).status == 'location_unavailable'
+    store.close()
+
+
+async def test_shared_monitoring_inputs_update_forecast_and_new_origin_drops_site(tmp_path):
+    from pvyieldlens.settings import ForecastSettings, HALocation
+
+    store = Store(tmp_path / 'data.sqlite')
+    service = Service(store)
+    await service.configure(settings(), now=0, origin='http://ha.test')
+    service.forecast.configure(service.config, ForecastSettings(enabled=True, tilt_deg=25.0, azimuth_deg=180.0),
+                               service.origin, HALocation(origin=service.origin, latitude=0.0, longitude=0.0,
+                                                          timezone='UTC'))
+    await service.configure(settings(rated_power_w=6000, temperature_coefficient_pct_per_c=-0.4), now=30)
+    assert service.forecast.inputs.rated_power_w == 6000
+    assert service.forecast.inputs.temperature_coefficient_pct_per_c == -0.4
+    await service.configure(service.config, now=60, origin='http://new-ha.test')
+    assert service.forecast.location is None
+    assert service.forecast.view(60).status == 'location_unavailable'
+    store.close()

@@ -85,3 +85,33 @@ def test_statistics_keep_their_own_configuration_revision():
     payloads = entity_payloads({'statistics':{'estimated_power':3720,'revision':1},
         'realtime':None,'energy':{},'calculated_at':200,'revision':2})
     assert payloads['sensor.pvyieldlens_estimated_power']['attributes']['configuration_revision'] == 1
+
+
+@pytest.mark.parametrize('latitude,longitude', [(31.23, 121.47), (0.0, 0.0), (-90.0, 180.0)])
+async def test_configuration_parses_optional_site_with_active_origin(latitude, longitude):
+    async with httpx.AsyncClient(transport=httpx.MockTransport(lambda request: httpx.Response(200, json={
+        'latitude': latitude, 'longitude': longitude, 'location_name': 'Home', 'time_zone': 'Asia/Shanghai',
+        'unit_system': {'length': 'km'}, 'version': '2026.11.0',
+    }))) as http:
+        client = HomeAssistantClient('http://ha.test/', 'secret', http=http)
+        config = await client.configuration()
+        assert config.time_zone == 'Asia/Shanghai'
+        assert config.location.origin == 'http://ha.test'
+        assert config.location.latitude == latitude
+        assert config.location.longitude == longitude
+        assert config.location.location_name == 'Home'
+        assert config.location.timezone == 'Asia/Shanghai'
+
+
+@pytest.mark.parametrize('site', [
+    {}, {'latitude': 91.0, 'longitude': 0.0}, {'latitude': 0.0, 'longitude': -181.0},
+    {'latitude': '31.23', 'longitude': 121.47}, {'latitude': None, 'longitude': 0.0},
+    {'latitude': 0.0, 'longitude': 0.0, 'location_name': 123},
+])
+async def test_invalid_optional_location_does_not_break_monitoring_timezone(site):
+    async with httpx.AsyncClient(transport=httpx.MockTransport(lambda request: httpx.Response(
+        200, json={'time_zone': 'UTC', **site},
+    ))) as http:
+        config = await HomeAssistantClient('http://ha.test', 'secret', http=http).configuration()
+        assert config.time_zone == 'UTC'
+        assert config.location is None

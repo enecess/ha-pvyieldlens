@@ -33,7 +33,7 @@ async def authenticate(request: Request, call_next):
 
 @app.get('/api/config')
 async def config():
-    return {'time_zone': 'Asia/Shanghai'}
+    return {'time_zone': 'Asia/Shanghai', 'latitude': 31.23, 'longitude': 121.47, 'location_name': 'Home'}
 
 
 @app.get('/api/states')

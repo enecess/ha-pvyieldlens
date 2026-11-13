@@ -85,3 +85,33 @@ def test_detail_retention_preserves_three_days_and_committed_history(tmp_path):
     ]
     assert store.totals(5 * 86400, 'UTC')['total_kwh'] == before
     store.close()
+
+
+def test_legacy_store_defaults_forecast_disabled(tmp_path):
+    from pvyieldlens.settings import ForecastSettings
+
+    path = tmp_path / 'legacy.sqlite'
+    store = Store(path)
+    store.save_settings(settings(), 0)
+    store.close()
+    store = Store(path)
+    assert store.forecast_settings() == ForecastSettings()
+    assert store.get_meta('forecast_settings') is None
+    assert store.revision == 1
+    store.close()
+
+
+def test_forecast_settings_round_trip_keeps_monitoring_metadata(tmp_path):
+    from pvyieldlens.settings import ForecastSettings
+
+    path = tmp_path / 'data.sqlite'
+    store = Store(path)
+    store.save_settings(settings(), 0)
+    forecast = ForecastSettings(enabled=False, tilt_deg=25.0, azimuth_deg=180.0, noct_c=47.0)
+    store.save_forecast_settings(forecast)
+    store.close()
+    store = Store(path)
+    assert store.forecast_settings() == forecast
+    assert store.revision == 1
+    assert store.cursor == 0
+    store.close()

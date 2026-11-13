@@ -8,6 +8,7 @@ import httpx
 from websockets.exceptions import WebSocketException
 
 from .engine import calculate
+from .forecast_service import ForecastController
 from .home_assistant import HomeAssistantClient, entity_payloads, parse_state
 from .settings import Settings
 from .storage import Store
@@ -32,11 +33,14 @@ class Service:
         self._recovery_needed = True
         self.origin = store.latest_origin()
         self.subscribed = asyncio.Event()
+        self.forecast = ForecastController(store)
 
     async def configure(self, config: Settings, now: float | None = None, origin: str | None = None):
         now = time.time() if now is None else now
         origin = self.origin if origin is None else origin
         async with self.lock:
+            if self.config == config and self.origin == origin:
+                return
             if self.config and self.config.timezone != config.timezone:
                 self.store.rebuild_day(now, config.timezone)
             realtime_fields = {'realtime_window_seconds', 'update_seconds'}
@@ -51,6 +55,7 @@ class Service:
             self.sources = []
             self.realtime = None
             self._recovery_needed = True
+        self.forecast.configure(config, self.forecast.settings, origin, self.forecast.location)
 
     async def _settle(self, now: float):
         cursor = self.store.cursor
@@ -170,10 +175,15 @@ class Service:
             started = time.time()
             try:
                 if self.client and self.config:
-                    await self.subscribed.wait()
-                    ha_config = await self.client.configuration()
+                    client = self.client
+                    origin = self.origin
+                    ha_config = await client.configuration()
+                    if client is not self.client or origin != self.origin:
+                        continue
                     if self.config.timezone != ha_config.time_zone:
                         await self.configure(Settings.model_validate({**self.config.model_dump(), 'timezone': ha_config.time_zone}))
+                    self.forecast.configure(self.config, self.forecast.settings, origin, ha_config.location)
+                    await self.subscribed.wait()
                     if self._recovery_needed:
                         await self.recover()
                     else:
@@ -197,6 +207,9 @@ class Service:
             await asyncio.sleep(max(0.1, interval - (time.time() - started)))
 
     async def start(self):
+        if self.tasks:
+            return
+        await self.forecast.start()
         self.subscribed.clear()
         self.store.set_meta('started_at', str(time.time()))
         self.tasks = [asyncio.create_task(self._events()), asyncio.create_task(self._run())]
@@ -208,6 +221,7 @@ class Service:
             with suppress(asyncio.CancelledError):
                 await task
         self.tasks = []
+        await self.forecast.stop()
         if self.client:
             with suppress(httpx.HTTPError, OSError):
                 payloads = entity_payloads(self.snapshot())

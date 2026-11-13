@@ -6,7 +6,7 @@ from pathlib import Path
 from zoneinfo import ZoneInfo
 
 from .engine import Observation, WindowResult
-from .settings import Settings
+from .settings import ForecastSettings, Settings
 
 
 @dataclass(frozen=True)
@@ -70,6 +70,13 @@ class Store:
     def settings(self) -> Settings | None:
         row = self.db.execute("SELECT settings FROM configs ORDER BY revision DESC LIMIT 1").fetchone()
         return Settings.model_validate_json(row[0]) if row else None
+
+    def forecast_settings(self) -> ForecastSettings:
+        value = self.get_meta('forecast_settings')
+        return ForecastSettings.model_validate_json(value) if value else ForecastSettings()
+
+    def save_forecast_settings(self, settings: ForecastSettings) -> None:
+        self.set_meta('forecast_settings', settings.model_dump_json())
 
     def save_settings(self, settings: Settings, effective_at: float, origin='') -> int:
         with self.db:

@@ -7,10 +7,11 @@ from typing import Literal
 from urllib.parse import urlsplit, urlunsplit
 
 import httpx
-from pydantic import AwareDatetime, BaseModel, Field, JsonValue, TypeAdapter
+from pydantic import AwareDatetime, BaseModel, Field, JsonValue, TypeAdapter, ValidationError
 from websockets.asyncio.client import connect
 
 from .engine import Observation
+from .settings import HALocation
 
 
 class StateAttributes(BaseModel):
@@ -29,6 +30,7 @@ class HAState(BaseModel):
 
 class HAConfig(BaseModel):
     time_zone: str
+    location: HALocation | None = None
 
 
 class EventData(BaseModel):
@@ -91,7 +93,17 @@ class HomeAssistantClient:
         return response.json()
 
     async def configuration(self) -> HAConfig:
-        return HAConfig.model_validate(await self.request('GET', 'config'))
+        response = await self.request('GET', 'config')
+        config = HAConfig.model_validate(response)
+        try:
+            location = HALocation.model_validate({
+                'origin': self.base_url, 'latitude': response.get('latitude'),
+                'longitude': response.get('longitude'), 'location_name': response.get('location_name'),
+                'timezone': config.time_zone,
+            })
+        except ValidationError:
+            location = None
+        return config.model_copy(update={'location': location})
 
     async def states(self, entities: tuple[str, ...] | None = None) -> list[HAState]:
         if entities is None:
