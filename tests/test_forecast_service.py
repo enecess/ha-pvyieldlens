@@ -475,3 +475,49 @@ async def test_reenabling_before_cancelled_fetch_unwinds_requests_new_weather(tm
         finally:
             await forecast.stop()
     store.close()
+
+
+async def test_repeated_disabled_configuration_is_idempotent_during_cancellation_cleanup(tmp_path):
+    entered, cancelling, release_cleanup = asyncio.Event(), asyncio.Event(), asyncio.Event()
+    cleaned_up, second_received = asyncio.Event(), asyncio.Event()
+    requests = []
+
+    async def respond(request):
+        requests.append(request)
+        if len(requests) > 1:
+            second_received.set()
+            return httpx.Response(200, json=hourly_payload(0, poa_w_m2=400.0))
+        entered.set()
+        try:
+            await asyncio.Event().wait()
+        finally:
+            cancelling.set()
+            await release_cleanup.wait()
+            cleaned_up.set()
+
+    store = Store(tmp_path / 'data.sqlite')
+    async with httpx.AsyncClient(transport=httpx.MockTransport(respond)) as http:
+        forecast = controller(store, http)
+        await forecast.start()
+        try:
+            await asyncio.wait_for(entered.wait(), 1)
+            disabled = ENABLED.model_copy(update={'enabled': False})
+            forecast.configure(settings(), disabled, ORIGIN, LOCATION)
+            await asyncio.wait_for(cancelling.wait(), 1)
+            changes = store.db.total_changes
+            forecast.configure(settings(), disabled, ORIGIN, LOCATION)
+            forecast.configure(settings(), disabled, ORIGIN, LOCATION)
+            assert store.db.total_changes == changes
+            assert forecast.view(120).status == 'disabled'
+            assert forecast.view(120).refreshing is False
+            assert not cleaned_up.is_set()
+            release_cleanup.set()
+            await asyncio.wait_for(cleaned_up.wait(), 1)
+            forecast.configure(settings(), ENABLED, ORIGIN, LOCATION)
+            await asyncio.wait_for(second_received.wait(), 1)
+            assert len(requests) == 2
+            assert forecast.view(180).today.kwh == pytest.approx(46.74)
+        finally:
+            release_cleanup.set()
+            await forecast.stop()
+    store.close()

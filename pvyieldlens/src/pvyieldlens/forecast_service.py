@@ -45,7 +45,7 @@ class ForecastController:
         ) if config and location and settings.tilt_deg is not None and settings.azimuth_deg is not None else None
         changed = inputs != self.inputs or settings.enabled != self.settings.enabled
         self.settings = settings
-        if not settings.enabled and self._request_scope is not None:
+        if not settings.enabled and self._request_scope is not None and self._request_scope.when() is None:
             self._request_scope.reschedule(asyncio.get_running_loop().time())
         self.location = location
         self.inputs = inputs
