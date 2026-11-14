@@ -246,6 +246,8 @@ async def test_rolling_history_refreshes_only_when_complete_window_membership_ch
 
         await page.goto(url)
         await expect(page.locator('[name=rated_power_w]')).to_have_value('5000')
+        # Wait for the initial snapshot to seed the history statistics key.
+        await expect(page.locator('#last-settled')).not_to_contain_text('—')
         await page.locator('#history-tab').click()
         await expect(page.locator('#history-chart svg')).to_be_visible()
         charts = page.locator('#history-chart svg, #pr-chart svg')
