@@ -1,5 +1,7 @@
 {
   "settings": "Settings",
+  "cancel_settings": "Cancel settings",
+  "settings_loading": "Updating configuration…",
   "live": "Connected",
   "waiting": "Waiting for data",
   "offline": "Disconnected",

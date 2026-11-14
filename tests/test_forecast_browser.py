@@ -306,10 +306,11 @@ async def test_forecast_and_monitoring_layout_evidence(forecast_page, browser_wo
     path.mkdir(parents=True, exist_ok=True)
     for size, width in [('desktop',1440),('mobile',390)]:
         await page.set_viewport_size({'width':width,'height':900 if width>600 else 844})
-        # Task 4 restores the Settings forecast-category capture here using
-        # [data-settings-category=forecast], once the Settings form is migrated.
-        for name, control in [('live','live-tab'),('history','history-tab'),('forecast','forecast-tab')]:
+        for name, control in [('live','live-tab'),('history','history-tab'),('forecast','forecast-tab'),('settings','settings-button')]:
             await page.locator(f'#{control}').click()
+            if name == 'settings':
+                await page.emulate_media(reduced_motion='reduce')
+                await page.locator('[data-settings-category=forecast]').click()
             if name == 'forecast':
                 await expect(page.locator('#forecast-days button')).to_have_count(7)
                 await expect(page.locator('#forecast-chart path')).to_be_visible()

@@ -1,5 +1,7 @@
 {
   "settings": "Paramètres",
+  "cancel_settings": "Annuler les modifications",
+  "settings_loading": "Mise à jour de la configuration…",
   "live": "Connecté",
   "waiting": "En attente de données",
   "offline": "Déconnecté",

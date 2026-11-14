@@ -20,24 +20,15 @@ async def test_data_pages_and_gear_settings_preserve_context(browser_workspace):
     await page.locator('#history-tab').click()
     await page.locator('#history-range').select_option('7')
     await page.locator('#settings-button').click()
-    await expect(page.locator('#configuration')).to_be_visible()
-    await expect(page.locator('#data-navigation')).to_be_hidden()
-    await expect(page.locator('#settings-back')).to_have_text('← Back to History')
+    await expect(page.locator('#settings-page')).to_be_visible()
+    await expect(page.locator('#data-navigation')).to_be_visible()
     await page.locator('button[data-settings-category=panels]').click()
     await page.locator('[name=temperature_coefficient_pct_per_c]').fill('-0.4')
     await page.locator('button[data-settings-category=forecast]').click()
-    await expect(page.locator('[data-settings-section=panels]')).to_be_hidden()
+    await expect(page.locator('[data-settings-section=panels]')).to_be_visible()
     await expect(page.locator('[data-settings-section=forecast]')).to_be_visible()
-    await page.locator('#settings-back').click()
-    await expect(page.locator('#history-page')).to_be_visible()
-    await expect(page.locator('#history-range')).to_have_value('7')
     await expect(page.locator('#draft-status')).to_have_text('Unsaved changes')
-    await page.locator('#forecast-tab').click()
-    await expect(page.locator('#forecast-page')).to_be_visible()
-    await expect(page.locator('#live-page')).to_be_hidden()
-    await expect(page.locator('#history-page')).to_be_hidden()
     await page.locator('#settings-button').click()
-    await expect(page.locator('#settings-back')).to_have_text('← Back to Forecast')
     await page.locator('button[data-settings-category=panels]').click()
     await expect(page.locator('[name=temperature_coefficient_pct_per_c]')).to_have_value('-0.4')
     await page.locator('#save-button').click()
@@ -45,6 +36,12 @@ async def test_data_pages_and_gear_settings_preserve_context(browser_workspace):
     assert service.config.temperature_coefficient_pct_per_c == -0.4
     await expect(page.locator('#ha-token')).to_have_value('')
     await expect(page.locator('#draft-status')).to_be_hidden()
+    await page.locator('#history-tab').click()
+    await expect(page.locator('#history-range')).to_have_value('7')
+    await page.locator('#forecast-tab').click()
+    await expect(page.locator('#forecast-page')).to_be_visible()
+    await expect(page.locator('#live-page')).to_be_hidden()
+    await expect(page.locator('#history-page')).to_be_hidden()
 
 
 @pytest.mark.parametrize('width', [700, 768])
@@ -57,15 +54,16 @@ async def test_french_tablet_settings_returns_to_selected_history_range(browser_
     await page.locator('#history-tab').click()
     await page.locator('#history-range').select_option('7')
     await page.locator('#settings-button').click()
-    await expect(page.locator('#configuration')).to_be_visible()
-    await expect(page.locator('#data-navigation')).to_be_hidden()
-    await expect(page.locator('#settings-back')).to_have_text('← Retour à Historique')
+    await expect(page.locator('#settings-page')).to_be_visible()
+    await expect(page.locator('#data-navigation')).to_be_visible()
     await page.locator('button[data-settings-category=panels]').click()
     await page.locator('[name=rated_power_w]').fill('6000')
-    await page.locator('#settings-back').click()
+    await expect(page.locator('#draft-status')).to_have_text('Modifications non enregistrées')
+    await page.locator('#cancel-settings').click()
+    await expect(page.locator('#draft-status')).to_be_hidden()
+    await page.locator('#history-tab').click()
     await expect(page.locator('#history-page')).to_be_visible()
     await expect(page.locator('#history-range')).to_have_value('7')
-    await expect(page.locator('#draft-status')).to_have_text('Modifications non enregistrées')
     assert await page.evaluate('scrollX') == 0
 
 
@@ -121,9 +119,9 @@ async def test_forecast_settings_round_trip_and_server_error_category(browser_wo
     await expect(page.locator('#save-result')).to_have_text('Configuration saved')
     assert service.forecast.settings.model_dump() == {'enabled': True, 'tilt_deg': 25, 'azimuth_deg': 123.5, 'noct_c': 46}
     await page.reload()
-    await expect(page.locator('[name=forecast_noct_c]')).to_have_value('46')
     await page.locator('#settings-button').click()
     await page.locator('button[data-settings-category=forecast]').click()
+    await expect(page.locator('[name=forecast_noct_c]')).to_have_value('46')
     await expect(page.locator('[name=forecast_azimuth_deg]')).to_have_value('123.5')
     await expect(page.locator('#forecast-direction')).to_have_value('custom')
     await page.locator('[name=forecast_enabled]').uncheck()
@@ -133,19 +131,22 @@ async def test_forecast_settings_round_trip_and_server_error_category(browser_wo
     await expect(page.locator('#save-result')).to_have_text('Configuration saved')
     assert service.forecast.settings.tilt_deg is None and service.forecast.settings.azimuth_deg is None
     await page.reload()
-    await expect(page.locator('[name=forecast_noct_c]')).to_have_value('46')
     await page.locator('#settings-button').click()
     await page.locator('button[data-settings-category=forecast]').click()
+    await expect(page.locator('[name=forecast_noct_c]')).to_have_value('46')
     await expect(page.locator('[name=forecast_enabled]')).not_to_be_checked()
     await expect(page.locator('[name=forecast_tilt_deg]')).to_have_value('')
     await expect(page.locator('[name=forecast_azimuth_deg]')).to_have_value('')
     await expect(page.locator('#forecast-direction')).to_have_value('')
     await page.route('**/api/config', lambda route: route.fulfill(status=422, json={
         'error': 'invalid_configuration', 'fields': ['settings.power_max_age_seconds']}))
+    await page.locator('[name=forecast_noct_c]').fill('47')
     await page.locator('#save-button').click()
     await expect(page.locator('button[data-settings-category=monitoring]')).to_have_attribute('aria-pressed', 'true')
     await expect(page.locator('[name=power_max_age_seconds]')).to_be_focused()
     await expect(page.locator('#monitoring-advanced')).to_have_attribute('open', '')
+    await expect(page.locator('[name=forecast_noct_c]')).to_have_value('47')
+    await expect(page.locator('#save-button')).to_be_enabled()
 
 
 async def test_locales_storage_fallback_and_ingress(browser_workspace):
@@ -164,7 +165,7 @@ async def test_locales_storage_fallback_and_ingress(browser_workspace):
     blocked = await page.context.new_page()
     await blocked.add_init_script("Object.defineProperty(window, 'localStorage', {get() {throw new DOMException('Blocked', 'SecurityError')}})")
     await blocked.goto(page.url)
-    await expect(blocked.locator('[name=rated_power_w]')).to_have_value('5000')
+    await expect(blocked.locator('main')).to_have_attribute('data-configuration-ready', 'true')
     await blocked.locator('#language-select').select_option('zh')
     await expect(blocked.locator('html')).to_have_attribute('lang', 'zh')
     await blocked.close()
@@ -173,7 +174,7 @@ async def test_locales_storage_fallback_and_ingress(browser_workspace):
     ingress.mount('/api/hassio_ingress/test-prefix', web)
     async with fake_server(ingress) as url:
         await page.goto(url + '/api/hassio_ingress/test-prefix/')
-        await expect(page.locator('[name=rated_power_w]')).to_have_value('5000')
+        await expect(page.locator('main')).to_have_attribute('data-configuration-ready', 'true')
         await page.locator('#history-tab').click()
         await expect(page.locator('#history-chart .chart-empty')).to_be_visible()
         await page.locator('#settings-button').click()
@@ -208,6 +209,104 @@ async def browser_workspace(tmp_path, request):
             assert errors == []
             await browser.close()
     service.store.close()
+
+
+async def test_cancel_settings_reloads_persisted_configuration(browser_workspace):
+    from playwright.async_api import expect
+
+    page, service, _ = browser_workspace
+    await page.locator('#settings-button').click()
+    await expect(page.locator('[name=rated_power_w]')).to_have_value('5000')
+    await service.configure(service.config.model_copy(update={'rated_power_w': 6200}))
+    await page.locator('[name=rated_power_w]').fill('6100')
+    await page.locator('#ha-token').fill('replacement-token')
+    async with page.expect_response(lambda r: r.request.method == 'GET' and r.url.endswith('/api/config')):
+        await page.locator('#cancel-settings').click()
+    await expect(page.locator('[name=rated_power_w]')).to_have_value('6200')
+    await expect(page.locator('#ha-token')).to_have_value('')
+    await expect(page.locator('#save-button')).to_be_disabled()
+    await expect(page.locator('#settings-page')).to_be_visible()
+
+
+async def test_cancel_settings_failure_preserves_draft(browser_workspace):
+    from playwright.async_api import expect
+
+    page, _, _ = browser_workspace
+    await page.locator('#settings-button').click()
+    await expect(page.locator('[name=rated_power_w]')).to_have_value('5000')
+    await page.locator('[name=rated_power_w]').fill('6100')
+    await page.locator('#ha-token').fill('replacement-token')
+    await page.route('**/api/config', lambda route: route.fulfill(status=502, json={'error': 'ha_connection_failed'}))
+    async with page.expect_response(lambda r: r.request.method == 'GET' and r.url.endswith('/api/config')):
+        await page.locator('#cancel-settings').click()
+    await expect(page.locator('[name=rated_power_w]')).to_have_value('6100')
+    await expect(page.locator('#ha-token')).to_have_value('replacement-token')
+    await expect(page.locator('#save-button')).to_be_enabled()
+    await expect(page.locator('#save-result')).to_contain_text('Cannot reach Home Assistant')
+
+
+async def test_settings_loading_disables_edit_until_config_ready(browser_workspace):
+    from playwright.async_api import expect
+
+    page, _, _ = browser_workspace
+    requested = asyncio.Event()
+    ready = asyncio.Event()
+    requests = []
+
+    async def configuration(route):
+        requests.append(route.request.method)
+        response = await route.fetch()
+        requested.set()
+        await ready.wait()
+        await route.fulfill(response=response)
+
+    await page.route('**/api/config', configuration)
+    await page.reload(wait_until='domcontentloaded')
+    await asyncio.wait_for(requested.wait(), 5)
+    await page.locator('#settings-button').click()
+    for selector in ['[name=rated_power_w]', '#ha-url', '#ha-token', '#load-entities', '#save-button', '#cancel-settings']:
+        await expect(page.locator(selector)).to_be_disabled()
+    await expect(page.locator('#live-tab')).to_be_disabled()
+    await expect(page.locator('#theme-select')).to_be_enabled()
+    await expect(page.locator('#language-select')).to_be_enabled()
+    assert requests == ['GET']
+    ready.set()
+    await expect(page.locator('[name=rated_power_w]')).to_be_enabled()
+    await expect(page.locator('[name=rated_power_w]')).to_have_value('5000')
+    await expect(page.locator('#save-button')).to_be_disabled()
+    await expect(page.locator('#live-tab')).to_be_enabled()
+
+
+async def test_settings_forecast_geometry_bounds_and_numeric_equivalence(browser_workspace):
+    from playwright.async_api import expect
+
+    page, service, _ = browser_workspace
+    await page.locator('#settings-button').click()
+    await expect(page.locator('[name=rated_power_w]')).to_have_value('5000')
+    await page.locator('[name=rated_power_w]').fill('5000.0')
+    await expect(page.locator('#save-button')).to_be_disabled()
+    await page.locator('[name=rated_power_w]').fill('')
+    await expect(page.locator('#save-button')).to_be_enabled()
+    await page.locator('#save-button').click()
+    await expect(page.locator('[name=rated_power_w]')).to_be_focused()
+    assert service.config.rated_power_w == 5000
+    await page.locator('[name=rated_power_w]').fill('5000')
+    await page.locator('[data-settings-category=forecast]').click()
+    await page.locator('[name=forecast_enabled]').check()
+    await page.locator('[name=forecast_tilt_deg]').fill('90')
+    await page.locator('#forecast-direction').select_option('custom')
+    await page.locator('[name=forecast_azimuth_deg]').fill('360')
+    await page.locator('#save-button').click()
+    await expect(page.locator('[name=forecast_azimuth_deg]')).to_be_focused()
+    await page.locator('[name=forecast_azimuth_deg]').fill('359.9')
+    await page.locator('[name=forecast_noct_c]').fill('20')
+    await page.locator('#save-button').click()
+    await expect(page.locator('[name=forecast_noct_c]')).to_be_focused()
+    await page.locator('[name=forecast_noct_c]').fill('45')
+    await page.locator('#save-button').click()
+    await expect(page.locator('#save-result')).to_have_text('Configuration saved')
+    assert service.forecast.settings.tilt_deg == 90
+    assert service.forecast.settings.azimuth_deg == 359.9
 
 
 @pytest.mark.parametrize('superseded_result', ['success', 'error'])
@@ -353,180 +452,120 @@ async def test_rolling_history_refreshes_only_when_complete_window_membership_ch
         await browser.close()
     service.store.close()
 
-@pytest.mark.parametrize(('mode', 'pending_configuration', 'edited_connection'), [
-    ('docker', False, False), ('app', False, False), ('docker', True, False),
-    ('app', True, False), ('docker', True, True),
-])
-async def test_settings_discovers_once_and_preserves_edits(tmp_path, mode, pending_configuration, edited_connection):
-    from playwright.async_api import async_playwright, expect
-    from test_engine import settings
-    from test_integration import fake_server
-    from pvyieldlens.service import Service
-    from pvyieldlens.storage import Store
-    from pvyieldlens.web import Runtime, create_app
+@pytest.mark.parametrize(('mode', 'edited_connection'), [('app', False), ('docker', False), ('docker', True)])
+async def test_settings_discovers_once_and_preserves_edits(browser_workspace, mode, edited_connection):
+    from playwright.async_api import expect
 
-    async with fake_server() as ha_url:
-        service = Service(Store(tmp_path / 'data.sqlite'))
-        await service.configure(settings(interval_minutes=1, update_seconds=1))
-        web = create_app(service, Runtime(web_password='browser-test', ha_url=ha_url,
-                                         ha_token='simulation-token'), run_background=False)
-        async with fake_server(web) as url, async_playwright() as playwright:
-            browser = await playwright.chromium.launch(args=['--no-sandbox'])
-            page = await browser.new_page(locale='en-US',
-                                          http_credentials={'username':'admin', 'password':'browser-test'})
-            config_requested = asyncio.Event()
-            config_ready = asyncio.Event()
-            discovery_ready = asyncio.Event()
-            requests = []
-            errors = []
-            page.on('pageerror', lambda error: errors.append(str(error)))
+    page, _, _ = browser_workspace
+    configuration_reads = []
+    requests = []
+    discovery_ready = asyncio.Event()
 
-            async def configuration(route):
-                response = await route.fetch()
-                body = await response.json()
-                body['mode'] = mode
-                config_requested.set()
-                if pending_configuration:
-                    await config_ready.wait()
-                await route.fulfill(response=response, json=body)
+    async def configuration(route):
+        configuration_reads.append(route.request.method)
+        response = await route.fetch()
+        body = await response.json()
+        body['mode'] = mode
+        await route.fulfill(response=response, json=body)
 
-            async def discovery(route):
-                requests.append(route.request.post_data_json)
-                await discovery_ready.wait()
-                await route.continue_()
+    async def discovery(route):
+        requests.append(route.request.post_data_json)
+        await discovery_ready.wait()
+        await route.continue_()
 
-            await page.route('**/api/config', configuration)
-            await page.route('**/api/connection', discovery)
-            await page.goto(url, wait_until='domcontentloaded')
-            await asyncio.wait_for(config_requested.wait(), 10)
-            if not pending_configuration:
-                await expect(page.locator('[name=rated_power_w]')).to_have_value('5000')
-                async with page.expect_response(lambda response: response.url.endswith('/api/snapshot')):
-                    pass
-            assert requests == []
-            await expect(page.locator('#power-options option')).to_have_count(0)
-            await page.locator('#settings-button').click()
-            await page.locator('button[data-settings-category=sources]').click()
-            await page.locator('[name=power_entity]').fill('sensor.typed_power')
-            await page.locator('button[data-settings-category=panels]').click()
-            await page.locator('[name=temperature_coefficient_pct_per_c]').fill('-0.4')
-            if edited_connection:
-                await page.locator('button[data-settings-category=connection]').click()
-                await page.locator('#ha-url').fill(ha_url + '/')
-                await page.locator('#ha-token').fill('simulation-token')
-            config_ready.set()
-            await expect(page.locator('#load-entities')).to_be_disabled()
-            await expect(page.locator('[name=power_entity]')).to_have_value('sensor.typed_power')
-            await expect(page.locator('[name=temperature_coefficient_pct_per_c]')).to_have_value('-0.4')
-            await expect(page.locator('[name=rated_power_w]')).to_have_value('5000')
-            await expect(page.locator('[name=temperature_entity]')).to_have_value('sensor.temp')
-            await expect(page.locator('[name=irradiance_entity]')).to_have_value('sensor.sun')
-            await expect(page.locator('[name=interval_minutes]')).to_have_value('1')
-            unsaved = await page.locator('#settings-form').evaluate('form => [...new FormData(form)]')
-            await page.locator('#settings-back').click()
-            await page.locator('#settings-button').click()
-            await page.locator('#language-select').select_option('fr')
-            async with page.expect_response(lambda response: response.url.endswith('/api/snapshot')):
-                pass
-            assert requests == [None if mode == 'app' else {
-                'url':ha_url + '/' if edited_connection else ha_url,
-                'token':'simulation-token' if edited_connection else '',
-            }]
-            await expect(page.locator('#ha-url')).to_have_value(ha_url + '/' if edited_connection else ha_url)
-            await expect(page.locator('#ha-token')).to_have_value('simulation-token' if edited_connection else '')
-            assert await page.locator('#settings-form').evaluate('form => [...new FormData(form)]') == unsaved
-            discovery_ready.set()
-            await expect(page.locator('#load-entities')).to_be_enabled()
-            for role, entity in [('power', 'sensor.power'), ('temperature', 'sensor.temp'), ('irradiance', 'sensor.sun')]:
-                await expect(page.locator(f'#{role}-options option')).to_have_attribute('value', entity)
-            await page.locator('#settings-back').click()
-            await page.locator('#settings-button').click()
-            await page.locator('#language-select').select_option('en')
-            async with page.expect_response(lambda response: response.url.endswith('/api/snapshot')):
-                pass
-            assert len(requests) == 1
-            assert await page.locator('#settings-form').evaluate('form => [...new FormData(form)]') == unsaved
-            await page.locator('button[data-settings-category=connection]').click()
-            if mode == 'docker':
-                await page.locator('#ha-url').fill(ha_url + '/')
-                await page.locator('#ha-token').fill('simulation-token')
-            async with page.expect_response(lambda response: response.url.endswith('/api/connection')):
-                await page.locator('#load-entities').click()
-            await expect(page.locator('#load-entities')).to_be_enabled()
-            assert requests == [
-                None if mode == 'app' else {
-                    'url':ha_url + '/' if edited_connection else ha_url,
-                    'token':'simulation-token' if edited_connection else '',
-                },
-                None if mode == 'app' else {'url':ha_url + '/', 'token':'simulation-token'},
-            ]
-            assert await page.locator('#settings-form').evaluate(
-                "form => [...new FormData(form)].filter(([key]) => key.endsWith('_entity') || key === 'temperature_coefficient_pct_per_c')"
-            ) == [entry for entry in unsaved if entry[0].endswith('_entity') or entry[0] == 'temperature_coefficient_pct_per_c']
-            assert errors == []
-            await browser.close()
-        service.store.close()
+    await page.route('**/api/config', configuration)
+    await page.route('**/api/connection', discovery)
+    assert requests == []
+    await page.locator('#settings-button').click()
+    await expect(page.locator('[name=rated_power_w]')).to_be_enabled()
+    await expect(page.locator('#load-entities')).to_be_disabled()
+    ha_url = await page.locator('#ha-url').input_value()
+    await page.locator('[data-settings-category=sources]').click()
+    await page.locator('[name=power_entity]').fill('sensor.typed_power')
+    await page.locator('[data-settings-category=panels]').click()
+    await page.locator('[name=temperature_coefficient_pct_per_c]').fill('-0.4')
+    if edited_connection:
+        await page.locator('[data-settings-category=connection]').click()
+        await page.locator('#ha-url').fill(ha_url + '/')
+        await page.locator('#ha-token').fill('simulation-token')
+    unsaved = await page.locator('#settings-form').evaluate('form => [...new FormData(form)]')
+    await page.locator('#settings-button').click()
+    await page.locator('#language-select').select_option('fr')
+    await page.locator('#theme-select').select_option('dark')
+    async with page.expect_response(lambda response: response.url.endswith('/api/snapshot')):
+        pass
+    assert configuration_reads == ['GET']
+    assert requests == [None if mode == 'app' else {'url': ha_url, 'token': ''}]
+    assert await page.locator('#settings-form').evaluate('form => [...new FormData(form)]') == unsaved
+    discovery_ready.set()
+    await expect(page.locator('#load-entities')).to_be_enabled()
+    if edited_connection:
+        await expect(page.locator('#power-options option')).to_have_count(0)
+        async with page.expect_response(lambda response: response.url.endswith('/api/connection')):
+            await page.locator('#load-entities').click()
+    for role, entity in [('power', 'sensor.power'), ('temperature', 'sensor.temp'), ('irradiance', 'sensor.sun')]:
+        await expect(page.locator(f'#{role}-options option')).to_have_attribute('value', entity)
+    await page.locator('#settings-button').click()
+    await page.locator('#language-select').select_option('en')
+    assert len(requests) == (2 if edited_connection else 1)
+    assert configuration_reads == ['GET']
+    assert await page.locator('#settings-form').evaluate('form => [...new FormData(form)]') == unsaved
+    await page.locator('[data-settings-category=connection]').click()
+    if mode == 'docker':
+        await page.locator('#ha-url').fill(ha_url + '/')
+        await page.locator('#ha-token').fill('simulation-token')
+    async with page.expect_response(lambda response: response.url.endswith('/api/connection')):
+        await page.locator('#load-entities').click()
+    assert requests[-1] == (None if mode == 'app' else {'url': ha_url + '/', 'token': 'simulation-token'})
+    assert await page.locator('#settings-form').evaluate('form => [...new FormData(form)]') == unsaved
+    await expect(page.locator('[name=power_entity]')).to_have_value('sensor.typed_power')
+    await expect(page.locator('[name=temperature_coefficient_pct_per_c]')).to_have_value('-0.4')
 
 
-@pytest.mark.parametrize(('selector', 'typed_value'), [
-    ('[name=power_entity]', 'sensor.cleared_power'), ('#ha-url', 'http://edited.invalid:8123'),
-    ('[name=forecast_tilt_deg]', '12.5'), ('[name=forecast_azimuth_deg]', '123.5'), ('[name=forecast_noct_c]', '50'),
-])
-async def test_settings_pending_configuration_preserves_cleared_field(tmp_path, selector, typed_value):
-    from pvyieldlens.settings import ForecastSettings
-    from playwright.async_api import async_playwright, expect
-    from test_engine import settings
-    from test_integration import fake_server
-    from pvyieldlens.service import Service
-    from pvyieldlens.storage import Store
-    from pvyieldlens.web import Runtime, create_app
+async def test_cancel_settings_retires_temporary_connection_candidates(browser_workspace):
+    from playwright.async_api import expect
 
-    async with fake_server() as ha_url:
-        service = Service(Store(tmp_path / 'data.sqlite'))
-        await service.configure(settings(interval_minutes=1, update_seconds=1))
-        service.forecast.configure(service.config, ForecastSettings(enabled=True, tilt_deg=25, azimuth_deg=180), service.origin, None)
-        web = create_app(service, Runtime(web_password='browser-test', ha_url=ha_url,
-                                         ha_token='simulation-token'), run_background=False)
-        async with fake_server(web) as url, async_playwright() as playwright:
-            browser = await playwright.chromium.launch(args=['--no-sandbox'])
-            page = await browser.new_page(locale='en-US',
-                                          http_credentials={'username':'admin', 'password':'browser-test'})
-            config_requested = asyncio.Event()
-            config_ready = asyncio.Event()
+    page, _, _ = browser_workspace
+    await page.locator('#settings-button').click()
+    await expect(page.locator('#power-options option')).to_have_attribute('value', 'sensor.power')
+    saved_url = await page.locator('#ha-url').input_value()
+    await page.route('**/api/connection', lambda route: route.fulfill(json={
+        'timezone': 'Europe/Paris', 'location': None,
+        'entities': [{'entity_id': 'sensor.preview_power', 'name': 'Preview power', 'unit': 'W', 'state': '2'},
+                     {'entity_id': 'sensor.pvyieldlens_output', 'name': 'Feedback', 'unit': 'W', 'state': '3'}]}))
+    await page.locator('#ha-url').fill('http://preview.invalid:8123')
+    await page.locator('#ha-token').fill('preview-token')
+    await expect(page.locator('#power-options option')).to_have_count(0)
+    await page.locator('#load-entities').click()
+    await expect(page.locator('#power-options option')).to_have_attribute('value', 'sensor.preview_power')
+    await page.locator('#cancel-settings').click()
+    await expect(page.locator('#ha-url')).to_have_value(saved_url)
+    await expect(page.locator('#ha-token')).to_have_value('')
+    await expect(page.locator('#power-options option')).to_have_attribute('value', 'sensor.power')
+    await expect(page.locator('#save-button')).to_be_disabled()
+    await page.locator('#live-tab').click()
+    await page.locator('#settings-button').click()
+    await expect(page.locator('#power-options option')).to_have_attribute('value', 'sensor.power')
 
-            async def configuration(route):
-                response = await route.fetch()
-                config_requested.set()
-                await config_ready.wait()
-                await route.fulfill(response=response)
 
-            await page.route('**/api/config', configuration)
-            await page.goto(url, wait_until='domcontentloaded')
-            await asyncio.wait_for(config_requested.wait(), 10)
-            await page.locator('#settings-button').click()
-            await page.locator('button[data-settings-category=forecast]' if 'forecast_' in selector else 'button[data-settings-category=sources]' if selector.startswith('[name=') else 'button[data-settings-category=connection]').click()
-            if 'azimuth' in selector:
-                await page.locator('#forecast-direction').select_option('custom')
-            await page.locator(selector).fill(typed_value)
-            await page.locator(selector).fill('')
-            await page.locator('button[data-settings-category=forecast]').click()
-            await page.locator('#settings-back').click()
-            await page.locator('#history-tab').click()
-            await page.locator('#settings-button').click()
-            async with page.expect_response(lambda response: response.url.endswith('/api/snapshot')):
-                config_ready.set()
-            await expect(page.locator(selector)).to_have_value('')
-            await expect(page.locator('[name=rated_power_w]')).to_have_value('5000')
-            await expect(page.locator('[name=temperature_entity]')).to_have_value('sensor.temp')
-            await expect(page.locator('[name=irradiance_entity]')).to_have_value('sensor.sun')
-            await expect(page.locator('[name=interval_minutes]')).to_have_value('1')
-            await expect(page.locator('[name=temperature_coefficient_pct_per_c]')).to_have_value('-0.35')
-            if selector == '[name=power_entity]':
-                await expect(page.locator('#ha-url')).to_have_value(ha_url)
-            else:
-                await expect(page.locator('[name=power_entity]')).to_have_value('sensor.power')
-            await browser.close()
-        service.store.close()
+@pytest.mark.parametrize('change_url', [False, True])
+async def test_settings_saving_new_credentials_retires_old_candidates(browser_workspace, change_url):
+    from playwright.async_api import expect
+
+    page, _, _ = browser_workspace
+    await page.locator('#settings-button').click()
+    await expect(page.locator('#power-options option')).to_have_attribute('value', 'sensor.power')
+    saved_url = await page.locator('#ha-url').input_value()
+    if change_url:
+        await page.locator('#ha-url').fill('http://preview.invalid:8123')
+    await page.locator('#ha-token').fill('replacement-token')
+    await expect(page.locator('#power-options option')).to_have_count(0)
+    await page.locator('#save-button').click()
+    await expect(page.locator('#save-result')).to_have_text('Configuration saved')
+    await expect(page.locator('#power-options option')).to_have_count(0)
+    if change_url:
+        await page.locator('#ha-url').fill(saved_url)
+        await expect(page.locator('#power-options option')).to_have_count(0)
 
 
 @pytest.mark.parametrize('saved_credentials', [False, True])
@@ -560,8 +599,8 @@ async def test_settings_first_connection_failure_keeps_polling_and_allows_retry(
 
             await page.route('**/api/connection', discovery)
             await page.goto(url)
-            await expect(page.locator('[name=rated_power_w]')).to_have_value('5000')
             await page.locator('#settings-button').click()
+            await expect(page.locator('[name=rated_power_w]')).to_have_value('5000')
             async with page.expect_response(lambda response: response.url.endswith('/api/snapshot')):
                 pass
             if not saved_credentials:
@@ -581,11 +620,7 @@ async def test_settings_first_connection_failure_keeps_polling_and_allows_retry(
             async with page.expect_response(lambda response: response.url.endswith('/api/snapshot')):
                 pass
             async with page.expect_response(lambda response: response.url.endswith('/api/connection')):
-                if saved_credentials:
-                    await page.locator('#settings-back').click()
-                    await page.locator('#settings-button').click()
-                else:
-                    await page.locator('#load-entities').click()
+                await page.locator('#load-entities').click()
             await expect(page.locator('#power-options option')).to_have_attribute('value', 'sensor.power')
             assert requests == [{'url':ha_url, 'token':'' if saved_credentials else 'simulation-token'}] * 2
             await expect(page.locator('#ha-url')).to_have_value(ha_url)
@@ -607,8 +642,8 @@ async def test_settings_refreshes_active_location_without_changing_drafts(browse
     if initial_location:
         service.forecast.configure(service.config, service.forecast.settings, service.origin, location)
     await page.reload()
-    await expect(page.locator('[name=rated_power_w]')).to_have_value('5000')
     await page.locator('#settings-button').click()
+    await expect(page.locator('[name=rated_power_w]')).to_have_value('5000')
     await page.locator('button[data-settings-category=forecast]').click()
     await expect(page.locator('#forecast-location')).to_have_text('Active · 1, 2 · UTC' if initial_location else 'HA location is not available yet.')
     await page.locator('[name=forecast_noct_c]').fill('48')
@@ -639,7 +674,6 @@ async def test_settings_refreshes_active_location_without_changing_drafts(browse
             await expect(page.locator('#ha-url')).to_have_value(preview_url)
             await expect(page.locator('#ha-token')).to_have_value('simulation-token')
             await expect(page.locator('#draft-status')).to_have_text('Unsaved changes')
-            await page.locator('#settings-back').click()
             await page.locator('#settings-button').click()
             await expect(page.locator('#forecast-location')).to_have_text(expected)
         assert service.forecast.settings.enabled is False
@@ -655,7 +689,7 @@ async def test_live_curve_save_resets_only_for_monitoring_changes(browser_worksp
     connection = (await response.json())['connection']
     await service.configure(service.config.model_copy(update={'timezone': 'Asia/Shanghai'}), origin=connection['url'])
     await page.reload()
-    await expect(page.locator('[name=rated_power_w]')).to_have_value('5000')
+    await expect(page.locator('main')).to_have_attribute('data-configuration-ready', 'true')
     now = time.time()
     service.store.add_observations(samples(at=now-60), origin=service.origin)
     for index in range(3):
@@ -682,7 +716,7 @@ async def test_live_curve_save_resets_only_for_monitoring_changes(browser_worksp
     await page.locator('#save-button').click()
     await expect(page.locator('#save-result')).to_have_text('Configuration saved')
     await expect(page.locator('#ha-token')).to_have_value('')
-    await page.locator('#settings-back').click()
+    await page.locator('#live-tab').click()
     if change == 'forecast':
         await expect(page.locator('#live-chart path.series').first).to_have_attribute('d', curve)
     else:

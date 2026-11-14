@@ -149,6 +149,7 @@ async def test_settings_mobile_categories_and_long_locale_fit(layout_page, layou
 
     page, _ = layout_page
     await page.set_viewport_size({'width': width, 'height': 844})
+    await page.emulate_media(reduced_motion='reduce')
     await page.locator('#language-select').select_option(language)
     await page.locator('#settings-button').click()
     selected_language = await page.locator('#language-select').evaluate('''select => {
@@ -164,9 +165,9 @@ async def test_settings_mobile_categories_and_long_locale_fit(layout_page, layou
     for category in ['connection', 'panels', 'sources', 'monitoring', 'forecast']:
         await page.locator(f'button[data-settings-category={category}]').click()
         await expect(page.locator(f'[data-settings-section={category}]')).to_be_visible()
-        await expect(page.locator('[data-settings-section]:visible')).to_have_count(1)
+        await expect(page.locator('[data-settings-section]:visible')).to_have_count(5)
         assert await page.evaluate('document.documentElement.scrollWidth <= innerWidth')
-        section = await page.locator(f'[data-settings-section={category}]').bounding_box()
+        section = await page.locator(f'[data-settings-section={category}] h2').bounding_box()
         nav = await page.locator('#settings-categories').bounding_box()
         if width < 600:
             assert section['y'] >= nav['y'] + nav['height']
@@ -174,7 +175,7 @@ async def test_settings_mobile_categories_and_long_locale_fit(layout_page, layou
         else:
             assert section['x'] > nav['x'] + nav['width']
         await page.screenshot(path=str(layout_artifacts / f'settings-{width}-{language}-{category}.png'), full_page=True)
-    await page.locator('#settings-back').click()
+    await page.locator('#live-tab').click()
     await page.screenshot(path=str(layout_artifacts / f'live-{width}-{language}.png'), full_page=True)
     await page.locator('#history-tab').click()
     await page.screenshot(path=str(layout_artifacts / f'history-{width}-{language}.png'), full_page=True)
@@ -344,10 +345,15 @@ async def test_live_readings_keep_polling_while_configuring(layout_page, layout_
     await page.locator('#live-chart svg').evaluate("node => node.dataset.original = 'hidden'")
     await page.locator('#settings-button').click()
     await expect(page.locator('#settings-page')).to_be_visible()
+    await expect(page.locator('[name=rated_power_w]')).to_have_value('5000')
+    await page.locator('[name=rated_power_w]').fill('6100')
     service.store.add_observations(samples(power=3000, at=now))
     await service.tick(now+60)
     await expect(page.locator('#live-actual')).to_have_text('3,000')
     await expect(page.locator('#live-chart svg')).to_have_attribute('data-original', 'hidden')
+    await expect(page.locator('[name=rated_power_w]')).to_have_value('6100')
+    await page.locator('#cancel-settings').click()
+    await expect(page.locator('[name=rated_power_w]')).to_have_value('5000')
     await page.locator('#live-tab').click()
     await expect(page.locator('#live-chart svg')).not_to_have_attribute('data-original', 'hidden')
     curve = await page.locator('#live-chart path.series').nth(1).get_attribute('d')
@@ -373,3 +379,52 @@ async def test_live_readings_keep_polling_while_configuring(layout_page, layout_
     await expect(page.locator('#history-range')).to_have_value('7')
     await page.locator('#live-tab').click()
     await expect(page.locator('#live-chart path.series').nth(1)).to_have_attribute('d', curve)
+
+
+@pytest.mark.parametrize('width', [1440, 390])
+async def test_settings_scrollspy_and_bottom_actions(layout_page, width):
+    from playwright.async_api import expect
+
+    page, _ = layout_page
+    await page.set_viewport_size({'width': width, 'height': 700 if width > 600 else 844})
+    await page.emulate_media(reduced_motion='reduce')
+    await page.locator('#settings-button').click()
+    await expect(page.locator('[name=rated_power_w]')).to_be_enabled()
+    await expect(page.locator('[data-settings-section]')).to_have_count(5)
+    for category in ['connection', 'panels', 'sources', 'monitoring', 'forecast']:
+        await page.locator(f'[data-settings-category={category}]').click()
+        await expect(page.locator(f'[data-settings-category={category}]')).to_have_attribute('aria-pressed', 'true')
+        position = await page.locator('#settings-scroll').evaluate('node => node.scrollTop')
+        assert 0 <= position <= 24 if category == 'connection' else position > 24
+    await page.locator('#settings-scroll').evaluate('node => node.scrollTop = 0')
+    await expect(page.locator('[data-settings-category=connection]')).to_have_attribute('aria-pressed', 'true')
+    await page.locator('#settings-scroll').evaluate('''node => {
+        node.scrollTop += node.querySelector('[data-settings-section=sources] h2').getBoundingClientRect().top
+            - node.getBoundingClientRect().top - 20;
+    }''')
+    await expect(page.locator('[data-settings-category=sources]')).to_have_attribute('aria-pressed', 'true')
+    await page.locator('#settings-scroll').evaluate('node => node.scrollTop = node.scrollHeight')
+    await expect(page.locator('[data-settings-category=forecast]')).to_have_attribute('aria-pressed', 'true')
+    boxes = await page.evaluate('''() => {
+        const box = selector => {
+            const {left, right, top, bottom} = document.querySelector(selector).getBoundingClientRect();
+            return {left, right, top, bottom};
+        };
+        return {actions: box('#settings-actions'), last: box('[name=forecast_noct_c]'),
+            scroll: box('#settings-scroll'), width: innerWidth, height: innerHeight,
+            documentWidth: document.documentElement.scrollWidth};
+    }''')
+    assert boxes['actions']['bottom'] <= boxes['height']
+    assert boxes['actions']['left'] >= 0 and boxes['actions']['right'] <= boxes['width']
+    assert boxes['last']['top'] >= boxes['scroll']['top']
+    assert boxes['last']['bottom'] < boxes['actions']['top']
+    assert boxes['documentWidth'] <= boxes['width']
+    await page.locator('[data-settings-category=panels]').click()
+    await page.locator('[name=rated_power_w]').fill('')
+    await page.locator('[data-settings-category=forecast]').click()
+    await page.locator('#save-button').click()
+    await expect(page.locator('[name=rated_power_w]')).to_be_focused()
+    await expect(page.locator('[data-settings-category=panels]')).to_have_attribute('aria-pressed', 'true')
+    focused = await page.locator('[name=rated_power_w]').bounding_box()
+    assert focused['y'] >= boxes['scroll']['top']
+    assert focused['y'] + focused['height'] < boxes['actions']['top']

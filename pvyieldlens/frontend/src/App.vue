@@ -7,13 +7,17 @@ import { useI18n, type LanguageChoice } from './i18n';
 import LivePage from './LivePage.vue';
 import HistoryPage from './HistoryPage.vue';
 import ForecastPage from './pages/ForecastPage.vue';
+import SettingsPage from './pages/SettingsPage.vue';
+import type { SettingsSection } from './settings';
 
 type Page = 'live' | 'history' | 'forecast' | 'settings';
 const page = ref<Page>('live');
-const settingsSection = ref('connection');
+const settingsSection = ref<SettingsSection>('connection');
+const settingsState = ref({ dirty: false, busy: false });
+const settingsPage = ref<InstanceType<typeof SettingsPage>>();
 const theme = createThemeController(window);
 const { preference, mode, source } = theme;
-const { configuration, snapshot, livePoints, error } = useDashboard();
+const { configuration, snapshot, livePoints, error, acceptConfiguration, acceptSavedConfiguration } = useDashboard();
 const { languageChoice, language, t, setLanguage } = useI18n();
 const warnings = computed(() => [error.value, snapshot.value?.error,
   snapshot.value?.history_available === false ? 'history_unavailable' : null,
@@ -26,7 +30,7 @@ function changeTheme(event: Event) {
 }
 function changeLanguage(event: Event) { setLanguage((event.target as HTMLSelectElement).value as LanguageChoice); }
 function showPage(value: Page) {
-  if (page.value === value) return;
+  if (page.value === value || settingsState.value.busy) return;
   page.value = value;
   window.scrollTo(0, 0);
 }
@@ -43,13 +47,13 @@ function openForecastSettings(section: 'forecast') {
       PVYieldLens
     </a>
     <nav id="data-navigation" :aria-label="t('data_pages')">
-      <button id="live-tab" :aria-current="page === 'live' ? 'page' : undefined" @click="showPage('live')">
+      <button id="live-tab" :disabled="settingsState.busy" :aria-current="page === 'live' ? 'page' : undefined" @click="showPage('live')">
         <Activity :size="17" aria-hidden="true" />{{ t('live_page') }}
       </button>
-      <button id="history-tab" :aria-current="page === 'history' ? 'page' : undefined" @click="showPage('history')">
+      <button id="history-tab" :disabled="settingsState.busy" :aria-current="page === 'history' ? 'page' : undefined" @click="showPage('history')">
         <ChartNoAxesCombined :size="17" aria-hidden="true" />{{ t('history') }}
       </button>
-      <button id="forecast-tab" :aria-current="page === 'forecast' ? 'page' : undefined" @click="showPage('forecast')">
+      <button id="forecast-tab" :disabled="settingsState.busy" :aria-current="page === 'forecast' ? 'page' : undefined" @click="showPage('forecast')">
         <Sun :size="17" aria-hidden="true" />{{ t('forecast') }}
       </button>
     </nav>
@@ -66,7 +70,7 @@ function openForecastSettings(section: 'forecast') {
       <label class="language-picker"><Languages :size="16" aria-hidden="true" /><select id="language-select" :value="languageChoice" :aria-label="t('language')" @change="changeLanguage">
         <option value="auto">{{ t('auto') }}</option><option value="en">English</option><option value="zh">中文</option><option value="fr">Français</option><option value="de">Deutsch</option><option value="pl">Polski</option><option value="it">Italiano</option>
       </select></label>
-      <button id="settings-button" :aria-current="page === 'settings' ? 'page' : undefined" @click="showPage('settings')">
+      <button id="settings-button" :disabled="settingsState.busy" :aria-current="page === 'settings' ? 'page' : undefined" @click="showPage('settings')">
         <Settings :size="17" aria-hidden="true" />{{ t('settings') }}
       </button>
     </div>
@@ -75,14 +79,11 @@ function openForecastSettings(section: 'forecast') {
     <span id="connection-state" role="status"><span class="status-dot" :class="{ good: snapshot?.connected && !error }"></span>{{ t(!configuration?.settings ? 'unconfigured' : snapshot?.connected && !error ? 'live' : 'offline') }}</span>
     <span id="theme-mode" :data-source="source">{{ t(`theme_source_${source}`) }} · {{ t(mode) }}</span>
   </div>
-  <main :data-configuration-ready="configuration !== null" :data-snapshot-ready="snapshot !== null">
+  <main :class="{ 'settings-active': page === 'settings' }" :data-configuration-ready="configuration !== null" :data-snapshot-ready="snapshot !== null">
     <div v-show="warnings.length" id="banner" class="banner" role="status">{{ warnings.map(key => t(key)).join(' ') }}</div>
     <LivePage v-show="page === 'live'" :active="page === 'live'" :configuration="configuration" :snapshot="snapshot" :points="livePoints" :language="language" :theme="mode" @open-settings="showPage('settings')" />
     <HistoryPage v-show="page === 'history'" :active="page === 'history'" :configuration="configuration" :snapshot="snapshot" :language="language" :theme="mode" />
     <ForecastPage v-show="page === 'forecast'" :active="page === 'forecast'" :summary="snapshot?.forecast ?? null" :language="language" :theme="mode" @open-settings="openForecastSettings" />
-    <section v-show="page === 'settings'" id="settings-page" :data-settings-section="settingsSection" aria-labelledby="settings-heading">
-      <h1 id="settings-heading">{{ t('settings') }}</h1>
-      <div class="empty-panel"><p>{{ t('waiting') }}</p></div>
-    </section>
+    <SettingsPage v-show="page === 'settings'" ref="settingsPage" :active="page === 'settings'" :initial-section="settingsSection" :location="configuration?.location ?? null" @loaded="acceptConfiguration" @saved="acceptSavedConfiguration" @state-change="settingsState = $event" />
   </main>
 </template>

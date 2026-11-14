@@ -1,5 +1,7 @@
 {
   "settings": "Einstellungen",
+  "cancel_settings": "Änderungen verwerfen",
+  "settings_loading": "Konfiguration wird aktualisiert…",
   "live": "Verbunden",
   "waiting": "Warte auf Daten",
   "offline": "Getrennt",

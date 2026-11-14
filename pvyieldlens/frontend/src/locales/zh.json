@@ -1,5 +1,7 @@
 {
   "settings": "设置",
+  "cancel_settings": "取消设置",
+  "settings_loading": "正在更新配置…",
   "live": "已连接",
   "waiting": "等待数据",
   "offline": "连接中断",
