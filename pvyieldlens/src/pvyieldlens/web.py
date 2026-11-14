@@ -218,8 +218,9 @@ def create_app(service: Service, runtime: Runtime, run_background=True) -> FastA
 
     @app.get('/')
     async def index():
-        return FileResponse(static / 'index.html')
+        return FileResponse(static / 'dist' / 'index.html')
 
+    app.mount('/assets', StaticFiles(directory=static / 'dist' / 'assets', check_dir=False), name='assets')
     app.mount('/static', StaticFiles(directory=static, check_dir=False), name='static')
     return app
 
