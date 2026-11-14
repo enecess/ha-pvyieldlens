@@ -52,7 +52,11 @@ Par défaut, la page est accessible sur la machine Docker. Pour y accéder depui
 
 ## Réglages
 
-**Temps réel** affiche les moyennes actuelles et les diagnostics ; **Historique**, les périodes clôturées et l’énergie/PR de la plage choisie ; **Prévisions**, les estimations météo. Les totaux du jour et depuis l’installation restent indépendants de cette plage. La roue dentée ouvre les **Paramètres** : Connexion Home Assistant, Panneaux solaires, Capteurs, Surveillance et Prévisions. Revenez ensuite à la vue précédente ; le menu de langue reste en haut à droite.
+**Temps réel** affiche les moyennes actuelles et les diagnostics ; **Historique**, les périodes clôturées et l’énergie/PR de la plage choisie ; **Prévisions**, les estimations météo. Les totaux du jour et depuis l’installation restent indépendants de cette plage. L’entrée **Paramètres**, avec roue dentée et texte, est séparée en haut à droite ; les trois onglets de données restent accessibles. Le répertoire fait défiler un formulaire continu : Connexion Home Assistant, Panneaux solaires, Capteurs, Surveillance et Prévisions.
+
+**Enregistrer** vous laisse dans les Paramètres. **Annuler** recharge la configuration enregistrée sur le serveur et remplace vos modifications ; en cas d’échec, le brouillon est conservé pour réessayer. Quitter avec des modifications demande de poursuivre l’édition ou de les abandonner. Revenir aux Paramètres recharge la configuration enregistrée.
+
+Le menu **Mode du thème**, en haut à droite, propose Auto, Clair et Sombre. Auto suit le mode de Home Assistant dans son interface et la préférence système si son contexte est inaccessible. Clair ou Sombre impose un choix local ; Auto rétablit le suivi. Changer de langue ou de thème conserve le brouillon.
 
 | Réglage | Valeur à saisir |
 | --- | --- |

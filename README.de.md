@@ -52,7 +52,11 @@ Die Seite ist zunächst nur auf dem Docker-Rechner erreichbar. Für andere Gerä
 
 ## Einstellungen
 
-**Live** zeigt aktuelle Sensormittelwerte und Diagnosen, **Verlauf** abgeschlossene Zeiträume samt Energie/PR im gewählten Bereich und **Prognose** wetterbasierte Erträge. Tages- und Gesamtsummen bleiben vom gewählten Bereich unabhängig. Das Zahnrad öffnet **Einstellungen** mit Home-Assistant-Verbindung, Solarmodule, Sensoren, Überwachung und Prognose. Danach können Sie zur vorherigen Datenansicht zurückkehren; die Sprachauswahl bleibt oben rechts.
+**Live** zeigt aktuelle Sensormittelwerte und Diagnosen, **Verlauf** abgeschlossene Zeiträume samt Energie/PR im gewählten Bereich und **Prognose** wetterbasierte Erträge. Tages- und Gesamtsummen bleiben vom gewählten Bereich unabhängig. Der separate Eintrag **Einstellungen** mit Zahnrad und Text liegt oben rechts; alle drei Datenreiter bleiben erreichbar. Das Kategorienverzeichnis scrollt durch ein zusammenhängendes Formular: Home-Assistant-Verbindung, Solarmodule, Sensoren, Überwachung und Prognose.
+
+**Speichern** lässt die Einstellungen geöffnet. **Änderungen verwerfen** lädt die gespeicherte Konfiguration vom Server neu und ersetzt Ihre Änderungen; bei einem Ladefehler bleibt der Entwurf zum erneuten Versuch erhalten. Beim Verlassen mit Änderungen können Sie weiterbearbeiten oder die Änderungen verwerfen. Erneutes Öffnen lädt die gespeicherte Konfiguration.
+
+Der **Darstellungsmodus** oben rechts bietet Auto, Hell und Dunkel. Auto folgt dem Modus von Home Assistant in dessen Oberfläche und sonst der Systemeinstellung, wenn kein nutzbarer Home-Assistant-Kontext besteht. Hell oder Dunkel überschreibt Auto lokal; Auto stellt das Folgen wieder her. Sprach- und Designwechsel erhalten den Entwurf.
 
 | Einstellung | Eingabe |
 | --- | --- |

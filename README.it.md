@@ -52,7 +52,11 @@ La pagina è accessibile dal computer con Docker. Per aprirla da un altro dispos
 
 ## Impostazioni
 
-**Tempo reale** mostra medie attuali e diagnostica, **Storico** i periodi conclusi e l’energia/PR dell’intervallo scelto, **Previsioni** le stime meteo. I totali del giorno e dall’avvio restano indipendenti dall’intervallo. L’ingranaggio apre **Impostazioni**: Connessione a Home Assistant, Pannelli solari, Sensori, Monitoraggio e Previsioni. Poi puoi tornare alla vista precedente; la lingua si sceglie sempre in alto a destra.
+**Tempo reale** mostra medie attuali e diagnostica, **Storico** i periodi conclusi e l’energia/PR dell’intervallo scelto, **Previsioni** le stime meteo. I totali del giorno e dall’avvio restano indipendenti dall’intervallo. La voce separata **Impostazioni**, con ingranaggio e testo, è in alto a destra; le tre schede dati restano disponibili. L’indice delle categorie scorre un unico modulo continuo: Connessione a Home Assistant, Pannelli solari, Sensori, Monitoraggio e Previsioni.
+
+**Salva** mantiene aperte le Impostazioni. **Annulla** ricarica dal server la configurazione salvata e sostituisce le modifiche; se il caricamento fallisce, la bozza resta disponibile per riprovare. Uscendo con modifiche non salvate puoi continuare a modificarle o scartarle. Rientrare nelle Impostazioni ricarica la configurazione salvata.
+
+Il menu **Modalità tema**, in alto a destra, offre Auto, Chiaro e Scuro. Auto segue la modalità di Home Assistant nella sua interfaccia e usa la preferenza di sistema senza un contesto Home Assistant accessibile. Chiaro o Scuro imposta una scelta locale; Auto ripristina il comportamento automatico. Cambiare lingua o tema conserva la bozza.
 
 | Impostazione | Valore da inserire |
 | --- | --- |

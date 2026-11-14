@@ -52,7 +52,11 @@ The default address works on the Docker host. To open the page from another devi
 
 ## Settings
 
-Use **Live** for current sensor averages and diagnostics, **History** for settled periods and the selected range's energy/PR, and **Forecast** for weather-based generation estimates. History's today/lifetime totals remain separate from its selected range. Open the gear for **Settings**: Home Assistant connection, Solar panels, Sensors, Monitoring, and Forecast. Return to the previous data view after saving; the language menu remains at the top right.
+Use **Live** for current sensor averages and diagnostics, **History** for settled periods and the selected range's energy/PR, and **Forecast** for weather-based generation estimates. History's today/lifetime totals remain separate from its selected range. The separate gear-and-text **Settings** entry is at the top right; all three data tabs remain available. Its category directory scrolls one continuous form: Home Assistant connection, Solar panels, Sensors, Monitoring, and Forecast.
+
+**Save** keeps you in Settings. **Cancel** reloads the saved configuration from the server and replaces your edits; if loading fails, your draft remains available to retry. Leaving with unsaved changes asks you to keep editing or discard them. Returning to Settings loads the saved configuration again.
+
+The top-right **Theme mode** menu offers Auto, Light and Dark. Auto follows Home Assistant's Theme mode inside its Web UI and uses the system preference outside a usable Home Assistant context. Light or Dark overrides Auto locally; selecting Auto resumes following the host. Language and theme changes preserve your settings draft.
 
 | Setting | What to enter |
 | --- | --- |

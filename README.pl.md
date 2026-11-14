@@ -52,7 +52,11 @@ Domyślnie strona działa na komputerze z Dockerem. Aby otworzyć ją na innym u
 
 ## Ustawienia
 
-**Na żywo** pokazuje bieżące średnie i diagnostykę, **Historia** zakończone okresy oraz energię/PR wybranego zakresu, a **Prognoza** szacunki na podstawie pogody. Sumy dzienne i całkowite nie zależą od zakresu. Koło zębate otwiera **Ustawienia**: Połączenie z Home Assistant, Panele słoneczne, Czujniki, Monitorowanie i Prognoza. Następnie możesz wrócić do poprzedniego widoku; wybór języka pozostaje w prawym górnym rogu.
+**Na żywo** pokazuje bieżące średnie i diagnostykę, **Historia** zakończone okresy oraz energię/PR wybranego zakresu, a **Prognoza** szacunki na podstawie pogody. Sumy dzienne i całkowite nie zależą od zakresu. Osobny przycisk **Ustawienia** z kołem zębatym i tekstem znajduje się u góry po prawej; trzy karty danych pozostają dostępne. Spis kategorii przewija jeden ciągły formularz: Połączenie z Home Assistant, Panele słoneczne, Czujniki, Monitorowanie i Prognoza.
+
+**Zapisz** pozostawia otwarte Ustawienia. **Anuluj** ponownie pobiera zapisaną konfigurację z serwera i zastępuje zmiany; jeśli odczyt się nie powiedzie, szkic pozostaje do ponowienia próby. Przy opuszczaniu strony ze zmianami możesz kontynuować edycję lub je odrzucić. Powrót do Ustawień ponownie pobiera zapisaną konfigurację.
+
+Menu **Tryb motywu** u góry po prawej oferuje Auto, Jasny i Ciemny. Auto śledzi tryb Home Assistant w jego interfejsie, a bez dostępnego kontekstu Home Assistant korzysta z ustawienia systemu. Jasny lub Ciemny zapisuje lokalne nadpisanie; Auto przywraca śledzenie. Zmiana języka lub motywu zachowuje szkic.
 
 | Ustawienie | Co wpisać |
 | --- | --- |

@@ -13,4 +13,4 @@ dependencies = ["fastapi==0.162.0", "pydantic==2.14.1", "uvicorn==0.54.0", "http
 where = ["src"]
 
 [tool.setuptools.package-data]
-pvyieldlens = ["static/*.html", "static/*.css", "static/*.js", "static/locales/*.json"]
+pvyieldlens = ["static/dist/index.html", "static/dist/assets/*"]

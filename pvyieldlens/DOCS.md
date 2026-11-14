@@ -11,7 +11,11 @@
 
 ## Views and settings
 
-Use **Live** for current averages and sensor diagnostics, **History** for settled periods and the selected range's energy/PR, and **Forecast** for weather-based generation estimates. Today's settled and lifetime totals remain separate from the history range. The gear opens Settings categories: Home Assistant connection, Solar panels, Sensors, Monitoring and Forecast. Return to the previous data view after saving.
+Use **Live** for current averages and sensor diagnostics, **History** for settled periods and the selected range's energy/PR, and **Forecast** for weather-based generation estimates. Today's settled and lifetime totals remain separate from the history range. The separate gear-and-text **Settings** entry sits at the top right while all three data tabs remain available. Its category directory scrolls one continuous form: Home Assistant connection, Solar panels, Sensors, Monitoring and Forecast.
+
+**Save** keeps Settings open. **Cancel** reloads the saved configuration from the server and replaces edits; a failed reload retains your draft for retry. Leaving with unsaved changes asks you to keep editing or discard them. Reentering Settings loads the saved configuration again.
+
+**Theme mode** offers Auto, Light and Dark. Auto follows Home Assistant's Theme mode inside its interface and falls back to the system preference outside a usable HA context. Light and Dark are local overrides; Auto resumes following the host. Language and theme changes preserve the settings draft. All frontend assets are served locally.
 
 ## Updates
 
