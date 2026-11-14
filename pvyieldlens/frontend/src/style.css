@@ -119,6 +119,25 @@ td:first-child { overflow-wrap: anywhere; }
 .primary { display: inline-flex; align-items: center; gap: 8px; padding: 9px 14px; margin-top: 10px; border: 0; border-radius: 7px; background: var(--pv-button); color: var(--pv-on-button); font-size: 12px; }
 .empty-panel { padding: 32px 24px; border: 1px solid var(--pv-line); border-radius: 14px; background: var(--pv-surface); box-shadow: 0 2px 6px var(--pv-shadow); color: var(--pv-muted); }
 .empty-panel p { margin: 0; }
+.secondary { display: inline-flex; align-items: center; justify-content: center; gap: 7px; min-height: 38px; padding: 8px 12px; border: 1px solid var(--pv-line); border-radius: 8px; background: var(--pv-surface); font-size: 12px; }
+.secondary:disabled { cursor: default; opacity: .6; }
+.forecast-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.forecast-status-line { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 20px; margin-bottom: 12px; font-size: 12px; }
+#forecast-error:empty { display: none; }
+#forecast-data > .panel { margin-top: 20px; }
+#forecast-days { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 8px; margin-top: 18px; }
+#forecast-days button { display: flex; flex-direction: column; align-items: center; gap: 10px; min-width: 44px; min-height: 44px; padding: 10px 4px; border: 1px solid transparent; border-radius: 8px; background: transparent; color: var(--pv-muted); font-size: 12px; font-variant-numeric: tabular-nums; }
+#forecast-days button[aria-pressed='true'] { color: var(--pv-accent); background: var(--pv-soft); border-color: var(--pv-line); }
+.day-bar-track { display: flex; align-items: flex-end; height: 70px; width: 25px; }
+.day-bar { display: block; width: 100%; border-radius: 4px 4px 0 0; background: var(--pv-theoretical); }
+.day-bar.unavailable { background: repeating-linear-gradient(135deg, var(--pv-line) 0 4px, transparent 4px 8px); }
+#forecast-details { margin-top: 20px; }
+#forecast-details table { min-width: 640px; table-layout: fixed; }
+#forecast-details th:first-child, #forecast-details td:first-child { width: 136px; padding-left: 0; }
+#forecast-details time { display: block; font-size: 12px; line-height: 1.7; }
+#forecast-details-help { margin-bottom: 12px; }
+#forecast-scroll-hint { display: none; }
+.forecast-meta a { color: var(--pv-accent); }
 @media (max-width: 850px) {
   .app-header { flex-wrap: wrap; gap: 10px; padding: 14px 20px; }
   #data-navigation { order: 3; width: 100%; }
@@ -147,4 +166,8 @@ td:first-child { overflow-wrap: anywhere; }
   .panel { padding: 16px; }
   .chart { height: 230px; }
   .fixed-totals { grid-template-columns: 1fr; }
+  #forecast-days { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 4px; }
+  #forecast-days button { padding: 9px 2px; font-size: 11px; }
+  .day-bar-track { height: 55px; width: 22px; }
+  #forecast-scroll-hint { display: block; }
 }

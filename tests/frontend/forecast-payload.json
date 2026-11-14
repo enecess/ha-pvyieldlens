@@ -1,0 +1,1776 @@
+{
+  "status": "ready",
+  "refreshing": false,
+  "fetched_at": 1793494800.0,
+  "calculated_at": 1793539200.0,
+  "last_error": null,
+  "timezone": "UTC",
+  "today": {
+    "start": 1793491200.0,
+    "end": 1793577600.0,
+    "kwh": 89.28,
+    "coverage_percent": 100,
+    "quality": "complete"
+  },
+  "remaining_today": {
+    "start": 1793539200.0,
+    "end": 1793577600.0,
+    "kwh": 39.68,
+    "coverage_percent": 100,
+    "quality": "complete"
+  },
+  "tomorrow": {
+    "start": 1793577600.0,
+    "end": 1793664000.0,
+    "kwh": 89.28,
+    "coverage_percent": 100,
+    "quality": "complete"
+  },
+  "seven_days": {
+    "start": 1793491200.0,
+    "end": 1794096000.0,
+    "kwh": 624.96,
+    "coverage_percent": 100,
+    "quality": "complete"
+  },
+  "days": [
+    {
+      "start": 1793491200.0,
+      "end": 1793577600.0,
+      "kwh": 89.28,
+      "coverage_percent": 100,
+      "quality": "complete",
+      "day": "2026-11-01"
+    },
+    {
+      "start": 1793577600.0,
+      "end": 1793664000.0,
+      "kwh": 89.28,
+      "coverage_percent": 100,
+      "quality": "complete",
+      "day": "2026-11-02"
+    },
+    {
+      "start": 1793664000.0,
+      "end": 1793750400.0,
+      "kwh": 89.28,
+      "coverage_percent": 100,
+      "quality": "complete",
+      "day": "2026-11-03"
+    },
+    {
+      "start": 1793750400.0,
+      "end": 1793836800.0,
+      "kwh": 89.28,
+      "coverage_percent": 100,
+      "quality": "complete",
+      "day": "2026-11-04"
+    },
+    {
+      "start": 1793836800.0,
+      "end": 1793923200.0,
+      "kwh": 89.28,
+      "coverage_percent": 100,
+      "quality": "complete",
+      "day": "2026-11-05"
+    },
+    {
+      "start": 1793923200.0,
+      "end": 1794009600.0,
+      "kwh": 89.28,
+      "coverage_percent": 100,
+      "quality": "complete",
+      "day": "2026-11-06"
+    },
+    {
+      "start": 1794009600.0,
+      "end": 1794096000.0,
+      "kwh": 89.28,
+      "coverage_percent": 100,
+      "quality": "complete",
+      "day": "2026-11-07"
+    }
+  ],
+  "intervals": [
+    {
+      "start": 1793491200.0,
+      "end": 1793494800.0,
+      "poa_w_m2": 800,
+      "air_temperature_c": 20,
+      "cell_temperature_c": 45,
+      "power_w": 3720,
+      "energy_kwh": 3.72,
+      "quality": "complete"
+    },
+    {
+      "start": 1793494800.0,
+      "end": 1793498400.0,
+      "poa_w_m2": 800,
+      "air_temperature_c": 20,
+      "cell_temperature_c": 45,
+      "power_w": 3720,
+      "energy_kwh": 3.72,
+      "quality": "complete"
+    },
+    {
+      "start": 1793498400.0,
+      "end": 1793502000.0,
+      "poa_w_m2": 800,
+      "air_temperature_c": 20,
+      "cell_temperature_c": 45,
+      "power_w": 3720,
+      "energy_kwh": 3.72,
+      "quality": "complete"
+    },
+    {
+      "start": 1793502000.0,
+      "end": 1793505600.0,
+      "poa_w_m2": 800,
+      "air_temperature_c": 20,
+      "cell_temperature_c": 45,
+      "power_w": 3720,
+      "energy_kwh": 3.72,
+      "quality": "complete"
+    },
+    {
+      "start": 1793505600.0,
+      "end": 1793509200.0,
+      "poa_w_m2": 800,
+      "air_temperature_c": 20,
+      "cell_temperature_c": 45,
+      "power_w": 3720,
+      "energy_kwh": 3.72,
+      "quality": "complete"
+    },
+    {
+      "start": 1793509200.0,
+      "end": 1793512800.0,
+      "poa_w_m2": 800,
+      "air_temperature_c": 20,
+      "cell_temperature_c": 45,
+      "power_w": 3720,
+      "energy_kwh": 3.72,
+      "quality": "complete"
+    },
+    {
+      "start": 1793512800.0,
+      "end": 1793516400.0,
+      "poa_w_m2": 800,
+      "air_temperature_c": 20,
+      "cell_temperature_c": 45,
+      "power_w": 3720,
+      "energy_kwh": 3.72,
+      "quality": "complete"
+    },
+    {
+      "start": 1793516400.0,
+      "end": 1793520000.0,
+      "poa_w_m2": 800,
+      "air_temperature_c": 20,
+      "cell_temperature_c": 45,
+      "power_w": 3720,
+      "energy_kwh": 3.72,
+      "quality": "complete"
+    },
+    {
+      "start": 1793520000.0,
+      "end": 1793523600.0,
+      "poa_w_m2": 800,
+      "air_temperature_c": 20,
+      "cell_temperature_c": 45,
+      "power_w": 3720,
+      "energy_kwh": 3.72,
+      "quality": "complete"
+    },
+    {
+      "start": 1793523600.0,
+      "end": 1793527200.0,
+      "poa_w_m2": 800,
+      "air_temperature_c": 20,
+      "cell_temperature_c": 45,
+      "power_w": 3720,
+      "energy_kwh": 3.72,
+      "quality": "complete"
+    },
+    {
+      "start": 1793527200.0,
+      "end": 1793530800.0,
+      "poa_w_m2": 800,
+      "air_temperature_c": 20,
+      "cell_temperature_c": 45,
+      "power_w": 3720,
+      "energy_kwh": 3.72,
+      "quality": "complete"
+    },
+    {
+      "start": 1793530800.0,
+      "end": 1793534400.0,
+      "poa_w_m2": 800,
+      "air_temperature_c": 20,
+      "cell_temperature_c": 45,
+      "power_w": 3720,
+      "energy_kwh": 3.72,
+      "quality": "complete"
+    },
+    {
+      "start": 1793534400.0,
+      "end": 1793538000.0,
+      "poa_w_m2": 800,
+      "air_temperature_c": 20,
+      "cell_temperature_c": 45,
+      "power_w": 3720,
+      "energy_kwh": 3.72,
+      "quality": "complete"
+    },
+    {
+      "start": 1793538000.0,
+      "end": 1793541600.0,
+      "poa_w_m2": 800,
+      "air_temperature_c": 20,
+      "cell_temperature_c": 45,
+      "power_w": 3720,
+      "energy_kwh": 3.72,
+      "quality": "complete"
+    },
+    {
+      "start": 1793541600.0,
+      "end": 1793545200.0,
+      "poa_w_m2": 800,
+      "air_temperature_c": 20,
+      "cell_temperature_c": 45,
+      "power_w": 3720,
+      "energy_kwh": 3.72,
+      "quality": "complete"
+    },
+    {
+      "start": 1793545200.0,
+      "end": 1793548800.0,
+      "poa_w_m2": 800,
+      "air_temperature_c": 20,
+      "cell_temperature_c": 45,
+      "power_w": 3720,
+      "energy_kwh": 3.72,
+      "quality": "complete"
+    },
+    {
+      "start": 1793548800.0,
+      "end": 1793552400.0,
+      "poa_w_m2": 800,
+      "air_temperature_c": 20,
+      "cell_temperature_c": 45,
+      "power_w": 3720,
+      "energy_kwh": 3.72,
+      "quality": "complete"
+    },
+    {
+      "start": 1793552400.0,
+      "end": 1793556000.0,
+      "poa_w_m2": 800,
+      "air_temperature_c": 20,
+      "cell_temperature_c": 45,
+      "power_w": 3720,
+      "energy_kwh": 3.72,
+      "quality": "complete"
+    },
+    {
+      "start": 1793556000.0,
+      "end": 1793559600.0,
+      "poa_w_m2": 800,
+      "air_temperature_c": 20,
+      "cell_temperature_c": 45,
+      "power_w": 3720,
+      "energy_kwh": 3.72,
+      "quality": "complete"
+    },
+    {
+      "start": 1793559600.0,
+      "end": 1793563200.0,
+      "poa_w_m2": 800,
+      "air_temperature_c": 20,
+      "cell_temperature_c": 45,
+      "power_w": 3720,
+      "energy_kwh": 3.72,
+      "quality": "complete"
+    },
+    {
+      "start": 1793563200.0,
+      "end": 1793566800.0,
+      "poa_w_m2": 800,
+      "air_temperature_c": 20,
+      "cell_temperature_c": 45,
+      "power_w": 3720,
+      "energy_kwh": 3.72,
+      "quality": "complete"
+    },
+    {
+      "start": 1793566800.0,
+      "end": 1793570400.0,
+      "poa_w_m2": 800,
+      "air_temperature_c": 20,
+      "cell_temperature_c": 45,
+      "power_w": 3720,
+      "energy_kwh": 3.72,
+      "quality": "complete"
+    },
+    {
+      "start": 1793570400.0,
+      "end": 1793574000.0,
+      "poa_w_m2": 800,
+      "air_temperature_c": 20,
+      "cell_temperature_c": 45,
+      "power_w": 3720,
+      "energy_kwh": 3.72,
+      "quality": "complete"
+    },
+    {
+      "start": 1793574000.0,
+      "end": 1793577600.0,
+      "poa_w_m2": 800,
+      "air_temperature_c": 20,
+      "cell_temperature_c": 45,
+      "power_w": 3720,
+      "energy_kwh": 3.72,
+      "quality": "complete"
+    },
+    {
+      "start": 1793577600.0,
+      "end": 1793581200.0,
+      "poa_w_m2": 800,
+      "air_temperature_c": 20,
+      "cell_temperature_c": 45,
+      "power_w": 3720,
+      "energy_kwh": 3.72,
+      "quality": "complete"
+    },
+    {
+      "start": 1793581200.0,
+      "end": 1793584800.0,
+      "poa_w_m2": 800,
+      "air_temperature_c": 20,
+      "cell_temperature_c": 45,
+      "power_w": 3720,
+      "energy_kwh": 3.72,
+      "quality": "complete"
+    },
+    {
+      "start": 1793584800.0,
+      "end": 1793588400.0,
+      "poa_w_m2": 800,
+      "air_temperature_c": 20,
+      "cell_temperature_c": 45,
+      "power_w": 3720,
+      "energy_kwh": 3.72,
+      "quality": "complete"
+    },
+    {
+      "start": 1793588400.0,
+      "end": 1793592000.0,
+      "poa_w_m2": 800,
+      "air_temperature_c": 20,
+      "cell_temperature_c": 45,
+      "power_w": 3720,
+      "energy_kwh": 3.72,
+      "quality": "complete"
+    },
+    {
+      "start": 1793592000.0,
+      "end": 1793595600.0,
+      "poa_w_m2": 800,
+      "air_temperature_c": 20,
+      "cell_temperature_c": 45,
+      "power_w": 3720,
+      "energy_kwh": 3.72,
+      "quality": "complete"
+    },
+    {
+      "start": 1793595600.0,
+      "end": 1793599200.0,
+      "poa_w_m2": 800,
+      "air_temperature_c": 20,
+      "cell_temperature_c": 45,
+      "power_w": 3720,
+      "energy_kwh": 3.72,
+      "quality": "complete"
+    },
+    {
+      "start": 1793599200.0,
+      "end": 1793602800.0,
+      "poa_w_m2": 800,
+      "air_temperature_c": 20,
+      "cell_temperature_c": 45,
+      "power_w": 3720,
+      "energy_kwh": 3.72,
+      "quality": "complete"
+    },
+    {
+      "start": 1793602800.0,
+      "end": 1793606400.0,
+      "poa_w_m2": 800,
+      "air_temperature_c": 20,
+      "cell_temperature_c": 45,
+      "power_w": 3720,
+      "energy_kwh": 3.72,
+      "quality": "complete"
+    },
+    {
+      "start": 1793606400.0,
+      "end": 1793610000.0,
+      "poa_w_m2": 800,
+      "air_temperature_c": 20,
+      "cell_temperature_c": 45,
+      "power_w": 3720,
+      "energy_kwh": 3.72,
+      "quality": "complete"
+    },
+    {
+      "start": 1793610000.0,
+      "end": 1793613600.0,
+      "poa_w_m2": 800,
+      "air_temperature_c": 20,
+      "cell_temperature_c": 45,
+      "power_w": 3720,
+      "energy_kwh": 3.72,
+      "quality": "complete"
+    },
+    {
+      "start": 1793613600.0,
+      "end": 1793617200.0,
+      "poa_w_m2": 800,
+      "air_temperature_c": 20,
+      "cell_temperature_c": 45,
+      "power_w": 3720,
+      "energy_kwh": 3.72,
+      "quality": "complete"
+    },
+    {
+      "start": 1793617200.0,
+      "end": 1793620800.0,
+      "poa_w_m2": 800,
+      "air_temperature_c": 20,
+      "cell_temperature_c": 45,
+      "power_w": 3720,
+      "energy_kwh": 3.72,
+      "quality": "complete"
+    },
+    {
+      "start": 1793620800.0,
+      "end": 1793624400.0,
+      "poa_w_m2": 800,
+      "air_temperature_c": 20,
+      "cell_temperature_c": 45,
+      "power_w": 3720,
+      "energy_kwh": 3.72,
+      "quality": "complete"
+    },
+    {
+      "start": 1793624400.0,
+      "end": 1793628000.0,
+      "poa_w_m2": 800,
+      "air_temperature_c": 20,
+      "cell_temperature_c": 45,
+      "power_w": 3720,
+      "energy_kwh": 3.72,
+      "quality": "complete"
+    },
+    {
+      "start": 1793628000.0,
+      "end": 1793631600.0,
+      "poa_w_m2": 800,
+      "air_temperature_c": 20,
+      "cell_temperature_c": 45,
+      "power_w": 3720,
+      "energy_kwh": 3.72,
+      "quality": "complete"
+    },
+    {
+      "start": 1793631600.0,
+      "end": 1793635200.0,
+      "poa_w_m2": 800,
+      "air_temperature_c": 20,
+      "cell_temperature_c": 45,
+      "power_w": 3720,
+      "energy_kwh": 3.72,
+      "quality": "complete"
+    },
+    {
+      "start": 1793635200.0,
+      "end": 1793638800.0,
+      "poa_w_m2": 800,
+      "air_temperature_c": 20,
+      "cell_temperature_c": 45,
+      "power_w": 3720,
+      "energy_kwh": 3.72,
+      "quality": "complete"
+    },
+    {
+      "start": 1793638800.0,
+      "end": 1793642400.0,
+      "poa_w_m2": 800,
+      "air_temperature_c": 20,
+      "cell_temperature_c": 45,
+      "power_w": 3720,
+      "energy_kwh": 3.72,
+      "quality": "complete"
+    },
+    {
+      "start": 1793642400.0,
+      "end": 1793646000.0,
+      "poa_w_m2": 800,
+      "air_temperature_c": 20,
+      "cell_temperature_c": 45,
+      "power_w": 3720,
+      "energy_kwh": 3.72,
+      "quality": "complete"
+    },
+    {
+      "start": 1793646000.0,
+      "end": 1793649600.0,
+      "poa_w_m2": 800,
+      "air_temperature_c": 20,
+      "cell_temperature_c": 45,
+      "power_w": 3720,
+      "energy_kwh": 3.72,
+      "quality": "complete"
+    },
+    {
+      "start": 1793649600.0,
+      "end": 1793653200.0,
+      "poa_w_m2": 800,
+      "air_temperature_c": 20,
+      "cell_temperature_c": 45,
+      "power_w": 3720,
+      "energy_kwh": 3.72,
+      "quality": "complete"
+    },
+    {
+      "start": 1793653200.0,
+      "end": 1793656800.0,
+      "poa_w_m2": 800,
+      "air_temperature_c": 20,
+      "cell_temperature_c": 45,
+      "power_w": 3720,
+      "energy_kwh": 3.72,
+      "quality": "complete"
+    },
+    {
+      "start": 1793656800.0,
+      "end": 1793660400.0,
+      "poa_w_m2": 800,
+      "air_temperature_c": 20,
+      "cell_temperature_c": 45,
+      "power_w": 3720,
+      "energy_kwh": 3.72,
+      "quality": "complete"
+    },
+    {
+      "start": 1793660400.0,
+      "end": 1793664000.0,
+      "poa_w_m2": 800,
+      "air_temperature_c": 20,
+      "cell_temperature_c": 45,
+      "power_w": 3720,
+      "energy_kwh": 3.72,
+      "quality": "complete"
+    },
+    {
+      "start": 1793664000.0,
+      "end": 1793667600.0,
+      "poa_w_m2": 800,
+      "air_temperature_c": 20,
+      "cell_temperature_c": 45,
+      "power_w": 3720,
+      "energy_kwh": 3.72,
+      "quality": "complete"
+    },
+    {
+      "start": 1793667600.0,
+      "end": 1793671200.0,
+      "poa_w_m2": 800,
+      "air_temperature_c": 20,
+      "cell_temperature_c": 45,
+      "power_w": 3720,
+      "energy_kwh": 3.72,
+      "quality": "complete"
+    },
+    {
+      "start": 1793671200.0,
+      "end": 1793674800.0,
+      "poa_w_m2": 800,
+      "air_temperature_c": 20,
+      "cell_temperature_c": 45,
+      "power_w": 3720,
+      "energy_kwh": 3.72,
+      "quality": "complete"
+    },
+    {
+      "start": 1793674800.0,
+      "end": 1793678400.0,
+      "poa_w_m2": 800,
+      "air_temperature_c": 20,
+      "cell_temperature_c": 45,
+      "power_w": 3720,
+      "energy_kwh": 3.72,
+      "quality": "complete"
+    },
+    {
+      "start": 1793678400.0,
+      "end": 1793682000.0,
+      "poa_w_m2": 800,
+      "air_temperature_c": 20,
+      "cell_temperature_c": 45,
+      "power_w": 3720,
+      "energy_kwh": 3.72,
+      "quality": "complete"
+    },
+    {
+      "start": 1793682000.0,
+      "end": 1793685600.0,
+      "poa_w_m2": 800,
+      "air_temperature_c": 20,
+      "cell_temperature_c": 45,
+      "power_w": 3720,
+      "energy_kwh": 3.72,
+      "quality": "complete"
+    },
+    {
+      "start": 1793685600.0,
+      "end": 1793689200.0,
+      "poa_w_m2": 800,
+      "air_temperature_c": 20,
+      "cell_temperature_c": 45,
+      "power_w": 3720,
+      "energy_kwh": 3.72,
+      "quality": "complete"
+    },
+    {
+      "start": 1793689200.0,
+      "end": 1793692800.0,
+      "poa_w_m2": 800,
+      "air_temperature_c": 20,
+      "cell_temperature_c": 45,
+      "power_w": 3720,
+      "energy_kwh": 3.72,
+      "quality": "complete"
+    },
+    {
+      "start": 1793692800.0,
+      "end": 1793696400.0,
+      "poa_w_m2": 800,
+      "air_temperature_c": 20,
+      "cell_temperature_c": 45,
+      "power_w": 3720,
+      "energy_kwh": 3.72,
+      "quality": "complete"
+    },
+    {
+      "start": 1793696400.0,
+      "end": 1793700000.0,
+      "poa_w_m2": 800,
+      "air_temperature_c": 20,
+      "cell_temperature_c": 45,
+      "power_w": 3720,
+      "energy_kwh": 3.72,
+      "quality": "complete"
+    },
+    {
+      "start": 1793700000.0,
+      "end": 1793703600.0,
+      "poa_w_m2": 800,
+      "air_temperature_c": 20,
+      "cell_temperature_c": 45,
+      "power_w": 3720,
+      "energy_kwh": 3.72,
+      "quality": "complete"
+    },
+    {
+      "start": 1793703600.0,
+      "end": 1793707200.0,
+      "poa_w_m2": 800,
+      "air_temperature_c": 20,
+      "cell_temperature_c": 45,
+      "power_w": 3720,
+      "energy_kwh": 3.72,
+      "quality": "complete"
+    },
+    {
+      "start": 1793707200.0,
+      "end": 1793710800.0,
+      "poa_w_m2": 800,
+      "air_temperature_c": 20,
+      "cell_temperature_c": 45,
+      "power_w": 3720,
+      "energy_kwh": 3.72,
+      "quality": "complete"
+    },
+    {
+      "start": 1793710800.0,
+      "end": 1793714400.0,
+      "poa_w_m2": 800,
+      "air_temperature_c": 20,
+      "cell_temperature_c": 45,
+      "power_w": 3720,
+      "energy_kwh": 3.72,
+      "quality": "complete"
+    },
+    {
+      "start": 1793714400.0,
+      "end": 1793718000.0,
+      "poa_w_m2": 800,
+      "air_temperature_c": 20,
+      "cell_temperature_c": 45,
+      "power_w": 3720,
+      "energy_kwh": 3.72,
+      "quality": "complete"
+    },
+    {
+      "start": 1793718000.0,
+      "end": 1793721600.0,
+      "poa_w_m2": 800,
+      "air_temperature_c": 20,
+      "cell_temperature_c": 45,
+      "power_w": 3720,
+      "energy_kwh": 3.72,
+      "quality": "complete"
+    },
+    {
+      "start": 1793721600.0,
+      "end": 1793725200.0,
+      "poa_w_m2": 800,
+      "air_temperature_c": 20,
+      "cell_temperature_c": 45,
+      "power_w": 3720,
+      "energy_kwh": 3.72,
+      "quality": "complete"
+    },
+    {
+      "start": 1793725200.0,
+      "end": 1793728800.0,
+      "poa_w_m2": 800,
+      "air_temperature_c": 20,
+      "cell_temperature_c": 45,
+      "power_w": 3720,
+      "energy_kwh": 3.72,
+      "quality": "complete"
+    },
+    {
+      "start": 1793728800.0,
+      "end": 1793732400.0,
+      "poa_w_m2": 800,
+      "air_temperature_c": 20,
+      "cell_temperature_c": 45,
+      "power_w": 3720,
+      "energy_kwh": 3.72,
+      "quality": "complete"
+    },
+    {
+      "start": 1793732400.0,
+      "end": 1793736000.0,
+      "poa_w_m2": 800,
+      "air_temperature_c": 20,
+      "cell_temperature_c": 45,
+      "power_w": 3720,
+      "energy_kwh": 3.72,
+      "quality": "complete"
+    },
+    {
+      "start": 1793736000.0,
+      "end": 1793739600.0,
+      "poa_w_m2": 800,
+      "air_temperature_c": 20,
+      "cell_temperature_c": 45,
+      "power_w": 3720,
+      "energy_kwh": 3.72,
+      "quality": "complete"
+    },
+    {
+      "start": 1793739600.0,
+      "end": 1793743200.0,
+      "poa_w_m2": 800,
+      "air_temperature_c": 20,
+      "cell_temperature_c": 45,
+      "power_w": 3720,
+      "energy_kwh": 3.72,
+      "quality": "complete"
+    },
+    {
+      "start": 1793743200.0,
+      "end": 1793746800.0,
+      "poa_w_m2": 800,
+      "air_temperature_c": 20,
+      "cell_temperature_c": 45,
+      "power_w": 3720,
+      "energy_kwh": 3.72,
+      "quality": "complete"
+    },
+    {
+      "start": 1793746800.0,
+      "end": 1793750400.0,
+      "poa_w_m2": 800,
+      "air_temperature_c": 20,
+      "cell_temperature_c": 45,
+      "power_w": 3720,
+      "energy_kwh": 3.72,
+      "quality": "complete"
+    },
+    {
+      "start": 1793750400.0,
+      "end": 1793754000.0,
+      "poa_w_m2": 800,
+      "air_temperature_c": 20,
+      "cell_temperature_c": 45,
+      "power_w": 3720,
+      "energy_kwh": 3.72,
+      "quality": "complete"
+    },
+    {
+      "start": 1793754000.0,
+      "end": 1793757600.0,
+      "poa_w_m2": 800,
+      "air_temperature_c": 20,
+      "cell_temperature_c": 45,
+      "power_w": 3720,
+      "energy_kwh": 3.72,
+      "quality": "complete"
+    },
+    {
+      "start": 1793757600.0,
+      "end": 1793761200.0,
+      "poa_w_m2": 800,
+      "air_temperature_c": 20,
+      "cell_temperature_c": 45,
+      "power_w": 3720,
+      "energy_kwh": 3.72,
+      "quality": "complete"
+    },
+    {
+      "start": 1793761200.0,
+      "end": 1793764800.0,
+      "poa_w_m2": 800,
+      "air_temperature_c": 20,
+      "cell_temperature_c": 45,
+      "power_w": 3720,
+      "energy_kwh": 3.72,
+      "quality": "complete"
+    },
+    {
+      "start": 1793764800.0,
+      "end": 1793768400.0,
+      "poa_w_m2": 800,
+      "air_temperature_c": 20,
+      "cell_temperature_c": 45,
+      "power_w": 3720,
+      "energy_kwh": 3.72,
+      "quality": "complete"
+    },
+    {
+      "start": 1793768400.0,
+      "end": 1793772000.0,
+      "poa_w_m2": 800,
+      "air_temperature_c": 20,
+      "cell_temperature_c": 45,
+      "power_w": 3720,
+      "energy_kwh": 3.72,
+      "quality": "complete"
+    },
+    {
+      "start": 1793772000.0,
+      "end": 1793775600.0,
+      "poa_w_m2": 800,
+      "air_temperature_c": 20,
+      "cell_temperature_c": 45,
+      "power_w": 3720,
+      "energy_kwh": 3.72,
+      "quality": "complete"
+    },
+    {
+      "start": 1793775600.0,
+      "end": 1793779200.0,
+      "poa_w_m2": 800,
+      "air_temperature_c": 20,
+      "cell_temperature_c": 45,
+      "power_w": 3720,
+      "energy_kwh": 3.72,
+      "quality": "complete"
+    },
+    {
+      "start": 1793779200.0,
+      "end": 1793782800.0,
+      "poa_w_m2": 800,
+      "air_temperature_c": 20,
+      "cell_temperature_c": 45,
+      "power_w": 3720,
+      "energy_kwh": 3.72,
+      "quality": "complete"
+    },
+    {
+      "start": 1793782800.0,
+      "end": 1793786400.0,
+      "poa_w_m2": 800,
+      "air_temperature_c": 20,
+      "cell_temperature_c": 45,
+      "power_w": 3720,
+      "energy_kwh": 3.72,
+      "quality": "complete"
+    },
+    {
+      "start": 1793786400.0,
+      "end": 1793790000.0,
+      "poa_w_m2": 800,
+      "air_temperature_c": 20,
+      "cell_temperature_c": 45,
+      "power_w": 3720,
+      "energy_kwh": 3.72,
+      "quality": "complete"
+    },
+    {
+      "start": 1793790000.0,
+      "end": 1793793600.0,
+      "poa_w_m2": 800,
+      "air_temperature_c": 20,
+      "cell_temperature_c": 45,
+      "power_w": 3720,
+      "energy_kwh": 3.72,
+      "quality": "complete"
+    },
+    {
+      "start": 1793793600.0,
+      "end": 1793797200.0,
+      "poa_w_m2": 800,
+      "air_temperature_c": 20,
+      "cell_temperature_c": 45,
+      "power_w": 3720,
+      "energy_kwh": 3.72,
+      "quality": "complete"
+    },
+    {
+      "start": 1793797200.0,
+      "end": 1793800800.0,
+      "poa_w_m2": 800,
+      "air_temperature_c": 20,
+      "cell_temperature_c": 45,
+      "power_w": 3720,
+      "energy_kwh": 3.72,
+      "quality": "complete"
+    },
+    {
+      "start": 1793800800.0,
+      "end": 1793804400.0,
+      "poa_w_m2": 800,
+      "air_temperature_c": 20,
+      "cell_temperature_c": 45,
+      "power_w": 3720,
+      "energy_kwh": 3.72,
+      "quality": "complete"
+    },
+    {
+      "start": 1793804400.0,
+      "end": 1793808000.0,
+      "poa_w_m2": 800,
+      "air_temperature_c": 20,
+      "cell_temperature_c": 45,
+      "power_w": 3720,
+      "energy_kwh": 3.72,
+      "quality": "complete"
+    },
+    {
+      "start": 1793808000.0,
+      "end": 1793811600.0,
+      "poa_w_m2": 800,
+      "air_temperature_c": 20,
+      "cell_temperature_c": 45,
+      "power_w": 3720,
+      "energy_kwh": 3.72,
+      "quality": "complete"
+    },
+    {
+      "start": 1793811600.0,
+      "end": 1793815200.0,
+      "poa_w_m2": 800,
+      "air_temperature_c": 20,
+      "cell_temperature_c": 45,
+      "power_w": 3720,
+      "energy_kwh": 3.72,
+      "quality": "complete"
+    },
+    {
+      "start": 1793815200.0,
+      "end": 1793818800.0,
+      "poa_w_m2": 800,
+      "air_temperature_c": 20,
+      "cell_temperature_c": 45,
+      "power_w": 3720,
+      "energy_kwh": 3.72,
+      "quality": "complete"
+    },
+    {
+      "start": 1793818800.0,
+      "end": 1793822400.0,
+      "poa_w_m2": 800,
+      "air_temperature_c": 20,
+      "cell_temperature_c": 45,
+      "power_w": 3720,
+      "energy_kwh": 3.72,
+      "quality": "complete"
+    },
+    {
+      "start": 1793822400.0,
+      "end": 1793826000.0,
+      "poa_w_m2": 800,
+      "air_temperature_c": 20,
+      "cell_temperature_c": 45,
+      "power_w": 3720,
+      "energy_kwh": 3.72,
+      "quality": "complete"
+    },
+    {
+      "start": 1793826000.0,
+      "end": 1793829600.0,
+      "poa_w_m2": 800,
+      "air_temperature_c": 20,
+      "cell_temperature_c": 45,
+      "power_w": 3720,
+      "energy_kwh": 3.72,
+      "quality": "complete"
+    },
+    {
+      "start": 1793829600.0,
+      "end": 1793833200.0,
+      "poa_w_m2": 800,
+      "air_temperature_c": 20,
+      "cell_temperature_c": 45,
+      "power_w": 3720,
+      "energy_kwh": 3.72,
+      "quality": "complete"
+    },
+    {
+      "start": 1793833200.0,
+      "end": 1793836800.0,
+      "poa_w_m2": 800,
+      "air_temperature_c": 20,
+      "cell_temperature_c": 45,
+      "power_w": 3720,
+      "energy_kwh": 3.72,
+      "quality": "complete"
+    },
+    {
+      "start": 1793836800.0,
+      "end": 1793840400.0,
+      "poa_w_m2": 800,
+      "air_temperature_c": 20,
+      "cell_temperature_c": 45,
+      "power_w": 3720,
+      "energy_kwh": 3.72,
+      "quality": "complete"
+    },
+    {
+      "start": 1793840400.0,
+      "end": 1793844000.0,
+      "poa_w_m2": 800,
+      "air_temperature_c": 20,
+      "cell_temperature_c": 45,
+      "power_w": 3720,
+      "energy_kwh": 3.72,
+      "quality": "complete"
+    },
+    {
+      "start": 1793844000.0,
+      "end": 1793847600.0,
+      "poa_w_m2": 800,
+      "air_temperature_c": 20,
+      "cell_temperature_c": 45,
+      "power_w": 3720,
+      "energy_kwh": 3.72,
+      "quality": "complete"
+    },
+    {
+      "start": 1793847600.0,
+      "end": 1793851200.0,
+      "poa_w_m2": 800,
+      "air_temperature_c": 20,
+      "cell_temperature_c": 45,
+      "power_w": 3720,
+      "energy_kwh": 3.72,
+      "quality": "complete"
+    },
+    {
+      "start": 1793851200.0,
+      "end": 1793854800.0,
+      "poa_w_m2": 800,
+      "air_temperature_c": 20,
+      "cell_temperature_c": 45,
+      "power_w": 3720,
+      "energy_kwh": 3.72,
+      "quality": "complete"
+    },
+    {
+      "start": 1793854800.0,
+      "end": 1793858400.0,
+      "poa_w_m2": 800,
+      "air_temperature_c": 20,
+      "cell_temperature_c": 45,
+      "power_w": 3720,
+      "energy_kwh": 3.72,
+      "quality": "complete"
+    },
+    {
+      "start": 1793858400.0,
+      "end": 1793862000.0,
+      "poa_w_m2": 800,
+      "air_temperature_c": 20,
+      "cell_temperature_c": 45,
+      "power_w": 3720,
+      "energy_kwh": 3.72,
+      "quality": "complete"
+    },
+    {
+      "start": 1793862000.0,
+      "end": 1793865600.0,
+      "poa_w_m2": 800,
+      "air_temperature_c": 20,
+      "cell_temperature_c": 45,
+      "power_w": 3720,
+      "energy_kwh": 3.72,
+      "quality": "complete"
+    },
+    {
+      "start": 1793865600.0,
+      "end": 1793869200.0,
+      "poa_w_m2": 800,
+      "air_temperature_c": 20,
+      "cell_temperature_c": 45,
+      "power_w": 3720,
+      "energy_kwh": 3.72,
+      "quality": "complete"
+    },
+    {
+      "start": 1793869200.0,
+      "end": 1793872800.0,
+      "poa_w_m2": 800,
+      "air_temperature_c": 20,
+      "cell_temperature_c": 45,
+      "power_w": 3720,
+      "energy_kwh": 3.72,
+      "quality": "complete"
+    },
+    {
+      "start": 1793872800.0,
+      "end": 1793876400.0,
+      "poa_w_m2": 800,
+      "air_temperature_c": 20,
+      "cell_temperature_c": 45,
+      "power_w": 3720,
+      "energy_kwh": 3.72,
+      "quality": "complete"
+    },
+    {
+      "start": 1793876400.0,
+      "end": 1793880000.0,
+      "poa_w_m2": 800,
+      "air_temperature_c": 20,
+      "cell_temperature_c": 45,
+      "power_w": 3720,
+      "energy_kwh": 3.72,
+      "quality": "complete"
+    },
+    {
+      "start": 1793880000.0,
+      "end": 1793883600.0,
+      "poa_w_m2": 800,
+      "air_temperature_c": 20,
+      "cell_temperature_c": 45,
+      "power_w": 3720,
+      "energy_kwh": 3.72,
+      "quality": "complete"
+    },
+    {
+      "start": 1793883600.0,
+      "end": 1793887200.0,
+      "poa_w_m2": 800,
+      "air_temperature_c": 20,
+      "cell_temperature_c": 45,
+      "power_w": 3720,
+      "energy_kwh": 3.72,
+      "quality": "complete"
+    },
+    {
+      "start": 1793887200.0,
+      "end": 1793890800.0,
+      "poa_w_m2": 800,
+      "air_temperature_c": 20,
+      "cell_temperature_c": 45,
+      "power_w": 3720,
+      "energy_kwh": 3.72,
+      "quality": "complete"
+    },
+    {
+      "start": 1793890800.0,
+      "end": 1793894400.0,
+      "poa_w_m2": 800,
+      "air_temperature_c": 20,
+      "cell_temperature_c": 45,
+      "power_w": 3720,
+      "energy_kwh": 3.72,
+      "quality": "complete"
+    },
+    {
+      "start": 1793894400.0,
+      "end": 1793898000.0,
+      "poa_w_m2": 800,
+      "air_temperature_c": 20,
+      "cell_temperature_c": 45,
+      "power_w": 3720,
+      "energy_kwh": 3.72,
+      "quality": "complete"
+    },
+    {
+      "start": 1793898000.0,
+      "end": 1793901600.0,
+      "poa_w_m2": 800,
+      "air_temperature_c": 20,
+      "cell_temperature_c": 45,
+      "power_w": 3720,
+      "energy_kwh": 3.72,
+      "quality": "complete"
+    },
+    {
+      "start": 1793901600.0,
+      "end": 1793905200.0,
+      "poa_w_m2": 800,
+      "air_temperature_c": 20,
+      "cell_temperature_c": 45,
+      "power_w": 3720,
+      "energy_kwh": 3.72,
+      "quality": "complete"
+    },
+    {
+      "start": 1793905200.0,
+      "end": 1793908800.0,
+      "poa_w_m2": 800,
+      "air_temperature_c": 20,
+      "cell_temperature_c": 45,
+      "power_w": 3720,
+      "energy_kwh": 3.72,
+      "quality": "complete"
+    },
+    {
+      "start": 1793908800.0,
+      "end": 1793912400.0,
+      "poa_w_m2": 800,
+      "air_temperature_c": 20,
+      "cell_temperature_c": 45,
+      "power_w": 3720,
+      "energy_kwh": 3.72,
+      "quality": "complete"
+    },
+    {
+      "start": 1793912400.0,
+      "end": 1793916000.0,
+      "poa_w_m2": 800,
+      "air_temperature_c": 20,
+      "cell_temperature_c": 45,
+      "power_w": 3720,
+      "energy_kwh": 3.72,
+      "quality": "complete"
+    },
+    {
+      "start": 1793916000.0,
+      "end": 1793919600.0,
+      "poa_w_m2": 800,
+      "air_temperature_c": 20,
+      "cell_temperature_c": 45,
+      "power_w": 3720,
+      "energy_kwh": 3.72,
+      "quality": "complete"
+    },
+    {
+      "start": 1793919600.0,
+      "end": 1793923200.0,
+      "poa_w_m2": 800,
+      "air_temperature_c": 20,
+      "cell_temperature_c": 45,
+      "power_w": 3720,
+      "energy_kwh": 3.72,
+      "quality": "complete"
+    },
+    {
+      "start": 1793923200.0,
+      "end": 1793926800.0,
+      "poa_w_m2": 800,
+      "air_temperature_c": 20,
+      "cell_temperature_c": 45,
+      "power_w": 3720,
+      "energy_kwh": 3.72,
+      "quality": "complete"
+    },
+    {
+      "start": 1793926800.0,
+      "end": 1793930400.0,
+      "poa_w_m2": 800,
+      "air_temperature_c": 20,
+      "cell_temperature_c": 45,
+      "power_w": 3720,
+      "energy_kwh": 3.72,
+      "quality": "complete"
+    },
+    {
+      "start": 1793930400.0,
+      "end": 1793934000.0,
+      "poa_w_m2": 800,
+      "air_temperature_c": 20,
+      "cell_temperature_c": 45,
+      "power_w": 3720,
+      "energy_kwh": 3.72,
+      "quality": "complete"
+    },
+    {
+      "start": 1793934000.0,
+      "end": 1793937600.0,
+      "poa_w_m2": 800,
+      "air_temperature_c": 20,
+      "cell_temperature_c": 45,
+      "power_w": 3720,
+      "energy_kwh": 3.72,
+      "quality": "complete"
+    },
+    {
+      "start": 1793937600.0,
+      "end": 1793941200.0,
+      "poa_w_m2": 800,
+      "air_temperature_c": 20,
+      "cell_temperature_c": 45,
+      "power_w": 3720,
+      "energy_kwh": 3.72,
+      "quality": "complete"
+    },
+    {
+      "start": 1793941200.0,
+      "end": 1793944800.0,
+      "poa_w_m2": 800,
+      "air_temperature_c": 20,
+      "cell_temperature_c": 45,
+      "power_w": 3720,
+      "energy_kwh": 3.72,
+      "quality": "complete"
+    },
+    {
+      "start": 1793944800.0,
+      "end": 1793948400.0,
+      "poa_w_m2": 800,
+      "air_temperature_c": 20,
+      "cell_temperature_c": 45,
+      "power_w": 3720,
+      "energy_kwh": 3.72,
+      "quality": "complete"
+    },
+    {
+      "start": 1793948400.0,
+      "end": 1793952000.0,
+      "poa_w_m2": 800,
+      "air_temperature_c": 20,
+      "cell_temperature_c": 45,
+      "power_w": 3720,
+      "energy_kwh": 3.72,
+      "quality": "complete"
+    },
+    {
+      "start": 1793952000.0,
+      "end": 1793955600.0,
+      "poa_w_m2": 800,
+      "air_temperature_c": 20,
+      "cell_temperature_c": 45,
+      "power_w": 3720,
+      "energy_kwh": 3.72,
+      "quality": "complete"
+    },
+    {
+      "start": 1793955600.0,
+      "end": 1793959200.0,
+      "poa_w_m2": 800,
+      "air_temperature_c": 20,
+      "cell_temperature_c": 45,
+      "power_w": 3720,
+      "energy_kwh": 3.72,
+      "quality": "complete"
+    },
+    {
+      "start": 1793959200.0,
+      "end": 1793962800.0,
+      "poa_w_m2": 800,
+      "air_temperature_c": 20,
+      "cell_temperature_c": 45,
+      "power_w": 3720,
+      "energy_kwh": 3.72,
+      "quality": "complete"
+    },
+    {
+      "start": 1793962800.0,
+      "end": 1793966400.0,
+      "poa_w_m2": 800,
+      "air_temperature_c": 20,
+      "cell_temperature_c": 45,
+      "power_w": 3720,
+      "energy_kwh": 3.72,
+      "quality": "complete"
+    },
+    {
+      "start": 1793966400.0,
+      "end": 1793970000.0,
+      "poa_w_m2": 800,
+      "air_temperature_c": 20,
+      "cell_temperature_c": 45,
+      "power_w": 3720,
+      "energy_kwh": 3.72,
+      "quality": "complete"
+    },
+    {
+      "start": 1793970000.0,
+      "end": 1793973600.0,
+      "poa_w_m2": 800,
+      "air_temperature_c": 20,
+      "cell_temperature_c": 45,
+      "power_w": 3720,
+      "energy_kwh": 3.72,
+      "quality": "complete"
+    },
+    {
+      "start": 1793973600.0,
+      "end": 1793977200.0,
+      "poa_w_m2": 800,
+      "air_temperature_c": 20,
+      "cell_temperature_c": 45,
+      "power_w": 3720,
+      "energy_kwh": 3.72,
+      "quality": "complete"
+    },
+    {
+      "start": 1793977200.0,
+      "end": 1793980800.0,
+      "poa_w_m2": 800,
+      "air_temperature_c": 20,
+      "cell_temperature_c": 45,
+      "power_w": 3720,
+      "energy_kwh": 3.72,
+      "quality": "complete"
+    },
+    {
+      "start": 1793980800.0,
+      "end": 1793984400.0,
+      "poa_w_m2": 800,
+      "air_temperature_c": 20,
+      "cell_temperature_c": 45,
+      "power_w": 3720,
+      "energy_kwh": 3.72,
+      "quality": "complete"
+    },
+    {
+      "start": 1793984400.0,
+      "end": 1793988000.0,
+      "poa_w_m2": 800,
+      "air_temperature_c": 20,
+      "cell_temperature_c": 45,
+      "power_w": 3720,
+      "energy_kwh": 3.72,
+      "quality": "complete"
+    },
+    {
+      "start": 1793988000.0,
+      "end": 1793991600.0,
+      "poa_w_m2": 800,
+      "air_temperature_c": 20,
+      "cell_temperature_c": 45,
+      "power_w": 3720,
+      "energy_kwh": 3.72,
+      "quality": "complete"
+    },
+    {
+      "start": 1793991600.0,
+      "end": 1793995200.0,
+      "poa_w_m2": 800,
+      "air_temperature_c": 20,
+      "cell_temperature_c": 45,
+      "power_w": 3720,
+      "energy_kwh": 3.72,
+      "quality": "complete"
+    },
+    {
+      "start": 1793995200.0,
+      "end": 1793998800.0,
+      "poa_w_m2": 800,
+      "air_temperature_c": 20,
+      "cell_temperature_c": 45,
+      "power_w": 3720,
+      "energy_kwh": 3.72,
+      "quality": "complete"
+    },
+    {
+      "start": 1793998800.0,
+      "end": 1794002400.0,
+      "poa_w_m2": 800,
+      "air_temperature_c": 20,
+      "cell_temperature_c": 45,
+      "power_w": 3720,
+      "energy_kwh": 3.72,
+      "quality": "complete"
+    },
+    {
+      "start": 1794002400.0,
+      "end": 1794006000.0,
+      "poa_w_m2": 800,
+      "air_temperature_c": 20,
+      "cell_temperature_c": 45,
+      "power_w": 3720,
+      "energy_kwh": 3.72,
+      "quality": "complete"
+    },
+    {
+      "start": 1794006000.0,
+      "end": 1794009600.0,
+      "poa_w_m2": 800,
+      "air_temperature_c": 20,
+      "cell_temperature_c": 45,
+      "power_w": 3720,
+      "energy_kwh": 3.72,
+      "quality": "complete"
+    },
+    {
+      "start": 1794009600.0,
+      "end": 1794013200.0,
+      "poa_w_m2": 800,
+      "air_temperature_c": 20,
+      "cell_temperature_c": 45,
+      "power_w": 3720,
+      "energy_kwh": 3.72,
+      "quality": "complete"
+    },
+    {
+      "start": 1794013200.0,
+      "end": 1794016800.0,
+      "poa_w_m2": 800,
+      "air_temperature_c": 20,
+      "cell_temperature_c": 45,
+      "power_w": 3720,
+      "energy_kwh": 3.72,
+      "quality": "complete"
+    },
+    {
+      "start": 1794016800.0,
+      "end": 1794020400.0,
+      "poa_w_m2": 800,
+      "air_temperature_c": 20,
+      "cell_temperature_c": 45,
+      "power_w": 3720,
+      "energy_kwh": 3.72,
+      "quality": "complete"
+    },
+    {
+      "start": 1794020400.0,
+      "end": 1794024000.0,
+      "poa_w_m2": 800,
+      "air_temperature_c": 20,
+      "cell_temperature_c": 45,
+      "power_w": 3720,
+      "energy_kwh": 3.72,
+      "quality": "complete"
+    },
+    {
+      "start": 1794024000.0,
+      "end": 1794027600.0,
+      "poa_w_m2": 800,
+      "air_temperature_c": 20,
+      "cell_temperature_c": 45,
+      "power_w": 3720,
+      "energy_kwh": 3.72,
+      "quality": "complete"
+    },
+    {
+      "start": 1794027600.0,
+      "end": 1794031200.0,
+      "poa_w_m2": 800,
+      "air_temperature_c": 20,
+      "cell_temperature_c": 45,
+      "power_w": 3720,
+      "energy_kwh": 3.72,
+      "quality": "complete"
+    },
+    {
+      "start": 1794031200.0,
+      "end": 1794034800.0,
+      "poa_w_m2": 800,
+      "air_temperature_c": 20,
+      "cell_temperature_c": 45,
+      "power_w": 3720,
+      "energy_kwh": 3.72,
+      "quality": "complete"
+    },
+    {
+      "start": 1794034800.0,
+      "end": 1794038400.0,
+      "poa_w_m2": 800,
+      "air_temperature_c": 20,
+      "cell_temperature_c": 45,
+      "power_w": 3720,
+      "energy_kwh": 3.72,
+      "quality": "complete"
+    },
+    {
+      "start": 1794038400.0,
+      "end": 1794042000.0,
+      "poa_w_m2": 800,
+      "air_temperature_c": 20,
+      "cell_temperature_c": 45,
+      "power_w": 3720,
+      "energy_kwh": 3.72,
+      "quality": "complete"
+    },
+    {
+      "start": 1794042000.0,
+      "end": 1794045600.0,
+      "poa_w_m2": 800,
+      "air_temperature_c": 20,
+      "cell_temperature_c": 45,
+      "power_w": 3720,
+      "energy_kwh": 3.72,
+      "quality": "complete"
+    },
+    {
+      "start": 1794045600.0,
+      "end": 1794049200.0,
+      "poa_w_m2": 800,
+      "air_temperature_c": 20,
+      "cell_temperature_c": 45,
+      "power_w": 3720,
+      "energy_kwh": 3.72,
+      "quality": "complete"
+    },
+    {
+      "start": 1794049200.0,
+      "end": 1794052800.0,
+      "poa_w_m2": 800,
+      "air_temperature_c": 20,
+      "cell_temperature_c": 45,
+      "power_w": 3720,
+      "energy_kwh": 3.72,
+      "quality": "complete"
+    },
+    {
+      "start": 1794052800.0,
+      "end": 1794056400.0,
+      "poa_w_m2": 800,
+      "air_temperature_c": 20,
+      "cell_temperature_c": 45,
+      "power_w": 3720,
+      "energy_kwh": 3.72,
+      "quality": "complete"
+    },
+    {
+      "start": 1794056400.0,
+      "end": 1794060000.0,
+      "poa_w_m2": 800,
+      "air_temperature_c": 20,
+      "cell_temperature_c": 45,
+      "power_w": 3720,
+      "energy_kwh": 3.72,
+      "quality": "complete"
+    },
+    {
+      "start": 1794060000.0,
+      "end": 1794063600.0,
+      "poa_w_m2": 800,
+      "air_temperature_c": 20,
+      "cell_temperature_c": 45,
+      "power_w": 3720,
+      "energy_kwh": 3.72,
+      "quality": "complete"
+    },
+    {
+      "start": 1794063600.0,
+      "end": 1794067200.0,
+      "poa_w_m2": 800,
+      "air_temperature_c": 20,
+      "cell_temperature_c": 45,
+      "power_w": 3720,
+      "energy_kwh": 3.72,
+      "quality": "complete"
+    },
+    {
+      "start": 1794067200.0,
+      "end": 1794070800.0,
+      "poa_w_m2": 800,
+      "air_temperature_c": 20,
+      "cell_temperature_c": 45,
+      "power_w": 3720,
+      "energy_kwh": 3.72,
+      "quality": "complete"
+    },
+    {
+      "start": 1794070800.0,
+      "end": 1794074400.0,
+      "poa_w_m2": 800,
+      "air_temperature_c": 20,
+      "cell_temperature_c": 45,
+      "power_w": 3720,
+      "energy_kwh": 3.72,
+      "quality": "complete"
+    },
+    {
+      "start": 1794074400.0,
+      "end": 1794078000.0,
+      "poa_w_m2": 800,
+      "air_temperature_c": 20,
+      "cell_temperature_c": 45,
+      "power_w": 3720,
+      "energy_kwh": 3.72,
+      "quality": "complete"
+    },
+    {
+      "start": 1794078000.0,
+      "end": 1794081600.0,
+      "poa_w_m2": 800,
+      "air_temperature_c": 20,
+      "cell_temperature_c": 45,
+      "power_w": 3720,
+      "energy_kwh": 3.72,
+      "quality": "complete"
+    },
+    {
+      "start": 1794081600.0,
+      "end": 1794085200.0,
+      "poa_w_m2": 800,
+      "air_temperature_c": 20,
+      "cell_temperature_c": 45,
+      "power_w": 3720,
+      "energy_kwh": 3.72,
+      "quality": "complete"
+    },
+    {
+      "start": 1794085200.0,
+      "end": 1794088800.0,
+      "poa_w_m2": 800,
+      "air_temperature_c": 20,
+      "cell_temperature_c": 45,
+      "power_w": 3720,
+      "energy_kwh": 3.72,
+      "quality": "complete"
+    },
+    {
+      "start": 1794088800.0,
+      "end": 1794092400.0,
+      "poa_w_m2": 800,
+      "air_temperature_c": 20,
+      "cell_temperature_c": 45,
+      "power_w": 3720,
+      "energy_kwh": 3.72,
+      "quality": "complete"
+    },
+    {
+      "start": 1794092400.0,
+      "end": 1794096000.0,
+      "poa_w_m2": 800,
+      "air_temperature_c": 20,
+      "cell_temperature_c": 45,
+      "power_w": 3720,
+      "energy_kwh": 3.72,
+      "quality": "complete"
+    }
+  ]
+}

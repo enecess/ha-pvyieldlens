@@ -1,4 +1,4 @@
-import type { Configuration, ConfigurationSaveResult, ConfigurationUpdate, ConnectionInput, ConnectionResult, HistoryResponse, Snapshot } from './models';
+import type { Configuration, ConfigurationSaveResult, ConfigurationUpdate, ConnectionInput, ConnectionResult, ForecastRefreshResult, ForecastView, HistoryResponse, Snapshot } from './models';
 
 export class ApiError extends Error {
   constructor(public code: string, public fields: string[] = []) {
@@ -41,6 +41,10 @@ export const api = {
     return await request('connection', { method: 'POST', body: JSON.stringify(connection) }) as ConnectionResult;
   },
   async getSnapshot(): Promise<Snapshot> { return await request('snapshot') as Snapshot; },
+  async getForecast(): Promise<ForecastView> { return await request('forecast') as ForecastView; },
+  async refreshForecast(): Promise<ForecastRefreshResult> {
+    return await request('forecast/refresh', { method: 'POST' }) as ForecastRefreshResult;
+  },
   async getHistory(start: number, end: number): Promise<HistoryResponse> {
     return await request(`history?${new URLSearchParams({ start: String(start), end: String(end) })}`) as HistoryResponse;
   },

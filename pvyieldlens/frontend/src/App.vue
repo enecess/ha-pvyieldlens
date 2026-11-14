@@ -6,9 +6,11 @@ import { useDashboard } from './dashboard';
 import { useI18n, type LanguageChoice } from './i18n';
 import LivePage from './LivePage.vue';
 import HistoryPage from './HistoryPage.vue';
+import ForecastPage from './pages/ForecastPage.vue';
 
 type Page = 'live' | 'history' | 'forecast' | 'settings';
 const page = ref<Page>('live');
+const settingsSection = ref('connection');
 const theme = createThemeController(window);
 const { preference, mode, source } = theme;
 const { configuration, snapshot, livePoints, error } = useDashboard();
@@ -27,6 +29,10 @@ function showPage(value: Page) {
   if (page.value === value) return;
   page.value = value;
   window.scrollTo(0, 0);
+}
+function openForecastSettings(section: 'forecast') {
+  settingsSection.value = section;
+  showPage('settings');
 }
 </script>
 
@@ -73,11 +79,8 @@ function showPage(value: Page) {
     <div v-show="warnings.length" id="banner" class="banner" role="status">{{ warnings.map(key => t(key)).join(' ') }}</div>
     <LivePage v-show="page === 'live'" :active="page === 'live'" :configuration="configuration" :snapshot="snapshot" :points="livePoints" :language="language" :theme="mode" @open-settings="showPage('settings')" />
     <HistoryPage v-show="page === 'history'" :active="page === 'history'" :configuration="configuration" :snapshot="snapshot" :language="language" :theme="mode" />
-    <section v-show="page === 'forecast'" id="forecast-page" aria-labelledby="forecast-heading">
-      <h1 id="forecast-heading">{{ t('forecast') }}</h1>
-      <div class="empty-panel"><p>{{ t('plot_empty') }}</p></div>
-    </section>
-    <section v-show="page === 'settings'" id="settings-page" aria-labelledby="settings-heading">
+    <ForecastPage v-show="page === 'forecast'" :active="page === 'forecast'" :summary="snapshot?.forecast ?? null" :language="language" :theme="mode" @open-settings="openForecastSettings" />
+    <section v-show="page === 'settings'" id="settings-page" :data-settings-section="settingsSection" aria-labelledby="settings-heading">
       <h1 id="settings-heading">{{ t('settings') }}</h1>
       <div class="empty-panel"><p>{{ t('waiting') }}</p></div>
     </section>
