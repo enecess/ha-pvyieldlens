@@ -91,8 +91,6 @@
   "data_pages": "Datenseiten",
   "settings_categories": "Einstellungskategorien",
   "monitoring": "Überwachung",
-  "back_to": "Zurück zu {page}",
-  "unsaved": "Ungespeicherte Änderungen",
   "diagnostics": "Datenquellen und Diagnose",
   "range_energy": "Theoretische Energie im Zeitraum",
   "range_pr": "PR im Zeitraum",
@@ -157,5 +155,9 @@
   "dark": "Dunkel",
   "theme_source_ha": "Home Assistant",
   "theme_source_system": "System",
-  "theme_source_manual": "Manuell"
+  "theme_source_manual": "Manuell",
+  "discard_title": "Änderungen verwerfen und verlassen?",
+  "discard_description": "Beim Wechsel zu {page} werden Ihre Änderungen verworfen.",
+  "keep_editing": "Abbrechen und weiter bearbeiten",
+  "discard_switch": "Verwerfen und wechseln"
 }

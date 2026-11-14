@@ -56,8 +56,8 @@ async def test_data_and_settings_keep_header_and_content_width(layout_page, layo
     await page.set_viewport_size({'width': width, 'height': 600})
     measurements = []
     for control, destination in [('live-tab', 'live-page'), ('history-tab', 'history-page'),
-                                  ('forecast-tab', 'forecast-page'), ('settings-button', 'configuration'),
-                                  ('settings-back', 'forecast-page')]:
+                                  ('forecast-tab', 'forecast-page'), ('settings-button', 'settings-page'),
+                                  ('forecast-tab', 'forecast-page')]:
         await page.locator(f'#{control}').click()
         await expect(page.locator(f'#{destination}')).to_be_visible()
         measurements.append(await page.evaluate('''destination => ({destination,
@@ -72,11 +72,15 @@ async def test_data_and_settings_keep_header_and_content_width(layout_page, layo
     assert measurements[0]['occupied'] > 0
     for measurement in measurements:
         assert measurement['scrollWidth'] <= width
-        assert measurement['boxes']['content']['width'] <= 1200
+        assert measurement['boxes']['content']['width'] <= 1388
         assert measurement['boxes']['brand']['x'] == pytest.approx(measurement['boxes']['content']['x'], abs=1)
-        for name, box in measurement['boxes'].items():
-            for edge, value in box.items():
-                assert value == pytest.approx(measurements[0]['boxes'][name][edge], abs=1)
+        scrollbar_change = measurements[0]['occupied'] - measurement['occupied']
+        for edge, value in measurement['boxes']['brand'].items():
+            assert value == pytest.approx(measurements[0]['boxes']['brand'][edge], abs=1)
+        assert measurement['boxes']['content']['x'] == pytest.approx(measurements[0]['boxes']['content']['x'], abs=1)
+        assert measurement['boxes']['content']['width'] == pytest.approx(measurements[0]['boxes']['content']['width'] + scrollbar_change, abs=1)
+        assert measurement['boxes']['language']['right'] == pytest.approx(measurements[0]['boxes']['language']['right'] + scrollbar_change, abs=1)
+        assert measurement['boxes']['language']['width'] == pytest.approx(measurements[0]['boxes']['language']['width'], abs=1)
 
 
 @pytest.mark.parametrize('width', [601, 700, 768, 800, 801])
@@ -87,12 +91,12 @@ async def test_tablet_data_header_keeps_controls_inside_viewport(layout_page, la
     await page.set_viewport_size({'width': width, 'height': 844})
     await page.locator('#language-select').select_option('fr')
     for control, destination in [('live-tab', 'live-page'), ('history-tab', 'history-page'),
-                                  ('forecast-tab', 'forecast-page'), ('settings-button', 'configuration'),
-                                  ('settings-back', 'forecast-page')]:
+                                  ('forecast-tab', 'forecast-page'), ('settings-button', 'settings-page'),
+                                  ('forecast-tab', 'forecast-page')]:
         geometry = await page.evaluate('''() => ({
             viewport: document.documentElement.clientWidth,
             scrollWidth: document.documentElement.scrollWidth,
-            controls: [...document.querySelectorAll('.topbar button, .topbar select')]
+            controls: [...document.querySelectorAll('.app-header button, .app-header select')]
                 .filter(node => node.checkVisibility()).map(node => {
                     const {left, right} = node.getBoundingClientRect();
                     return {id: node.id, left, right};
@@ -102,7 +106,7 @@ async def test_tablet_data_header_keeps_controls_inside_viewport(layout_page, la
         assert all(box['left'] >= 0 and box['right'] <= geometry['viewport'] for box in geometry['controls']), geometry
         await page.locator(f'#{control}').click()
         await expect(page.locator(f'#{destination}')).to_be_visible()
-    await page.screenshot(path=str(layout_artifacts / f'header-tablet-{width}-fr.png'), full_page=True)
+    await page.screenshot(path=str(layout_artifacts / f'header-tablet-{width}-fr.png'))
 
 
 @pytest.mark.parametrize(('width', 'language'), [(1440, 'en'), (768, 'fr'), (700, 'fr'), (390, 'de'), (320, 'fr')])
@@ -111,36 +115,177 @@ async def test_scrolled_navigation_reveals_destination_and_preserves_same_page_s
 
     page, _ = layout_page
     await page.set_viewport_size({'width': width, 'height': 430})
+    await page.emulate_media(reduced_motion='reduce')
     await page.locator('#language-select').select_option(language)
     await page.locator('#source-diagnostics').evaluate('node => node.open = true')
-    for source, destination, opening in [('live-tab', 'settings-button', 'configuration'),
-                                         ('settings-button', 'settings-back', 'live-page')]:
-        if source == 'settings-button':
-            await page.locator('button[data-settings-category=monitoring]').click()
-            await page.locator('#monitoring-advanced').evaluate('node => node.open = true')
-        await page.evaluate('window.scrollTo(0, 500)')
-        await page.wait_for_function('scrollY > 50')
-        geometry = await page.evaluate('''() => {
-            const header = document.querySelector('.topbar').getBoundingClientRect();
-            return {scrollY, top: header.top, bottom: header.bottom, viewport: innerWidth,
-                scrollWidth: document.documentElement.scrollWidth,
-                controls: [...document.querySelectorAll('.topbar button, .topbar select')].filter(node => node.checkVisibility()).map(node => {
-                    const box = node.getBoundingClientRect();
-                    return {top: box.top, bottom: box.bottom, left: box.left, right: box.right};
-                })};
-        }''')
-        assert geometry['top'] == pytest.approx(0, abs=1)
-        assert geometry['scrollWidth'] <= width
-        assert all(control['top'] >= 0 and control['bottom'] <= geometry['bottom'] and
-                   control['left'] >= 0 and control['right'] <= width for control in geometry['controls'])
-        await page.locator(f'#{source}').click()
-        assert await page.evaluate('scrollY') == pytest.approx(geometry['scrollY'], abs=1)
-        await page.locator(f'#{destination}').click()
-        await expect(page.locator(f'#{opening}')).to_be_visible()
+    await page.evaluate('window.scrollTo(0, 500)')
+    await page.wait_for_function('scrollY > 50')
+    before = await page.evaluate('scrollY')
+    await page.locator('#live-tab').evaluate('node => node.click()')
+    assert await page.evaluate('scrollY') == pytest.approx(before, abs=1)
+    await page.locator('#settings-button').evaluate('node => node.click()')
+    await expect(page.locator('#settings-page')).to_be_visible()
+    await expect(page.locator('#load-entities')).to_be_enabled()
+    if width > 600:
         assert await page.evaluate('scrollY') == 0
-        header_bottom = (await page.locator('.topbar').bounding_box())['height']
-        assert (await page.locator(f'#{opening} h1:visible').bounding_box())['y'] >= header_bottom
-    await page.screenshot(path=str(layout_artifacts / f'navigation-{width}-{language}.png'), full_page=True)
+    await page.locator('button[data-settings-category=monitoring]').click()
+    await page.locator('#monitoring-advanced').evaluate('node => node.open = true')
+    await page.locator('[name=update_seconds]').fill('2')
+    before = await page.locator('#settings-scroll').evaluate('node => node.scrollTop')
+    await page.locator('#settings-button').click()
+    assert await page.locator('#settings-scroll').evaluate('node => node.scrollTop') == pytest.approx(before, abs=1)
+    await page.locator('#live-tab').click()
+    await expect(page.locator('dialog')).to_be_visible()
+    await page.locator('#keep-editing').click()
+    assert await page.locator('#settings-scroll').evaluate('node => node.scrollTop') == pytest.approx(before, abs=1)
+    await page.locator('#live-tab').click()
+    await page.locator('#discard-changes').click()
+    await expect(page.locator('#live-page')).to_be_visible()
+    assert await page.evaluate('scrollY') == 0
+    assert (await page.locator('#live-page h1').bounding_box())['y'] >= (await page.locator('.app-header').bounding_box())['height']
+    await page.screenshot(path=str(layout_artifacts / f'navigation-{width}-{language}.png'))
+
+
+@pytest.mark.parametrize('width', [320, 390, 700, 768, 1024, 1440])
+@pytest.mark.parametrize('language', ['en', 'zh', 'fr', 'de', 'pl', 'it'])
+async def test_shell_language_width_theme_matrix(layout_page, layout_artifacts, width, language):
+    from playwright.async_api import expect
+
+    page, _ = layout_page
+    await page.set_viewport_size({'width': width, 'height': 844})
+    await page.emulate_media(reduced_motion='reduce')
+    await page.locator('#language-select').select_option(language)
+    evidence = []
+    for theme in ['light', 'dark']:
+        await page.locator('#theme-select').select_option(theme)
+        for destination in ['live', 'history', 'forecast', 'settings']:
+            await page.locator('#settings-button' if destination == 'settings' else f'#{destination}-tab').click()
+            await expect(page.locator(f'#{destination}-page')).to_be_visible()
+            await expect(page.locator('#data-navigation button')).to_have_count(3)
+            assert await page.locator('#data-navigation #settings-button').count() == 0
+            await expect(page.locator('#settings-button svg')).to_be_visible()
+            for selector in ['#theme-select', '#language-select']:
+                assert await page.locator(selector).get_attribute('aria-label')
+            await page.evaluate('() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))')
+            geometry = await page.evaluate('''() => ({
+                viewport: document.documentElement.clientWidth,
+                scrollWidth: document.documentElement.scrollWidth,
+                controls: [...document.querySelectorAll('.app-header a, .app-header button, .app-header select')].map(node => {
+                    const {left, right, top, bottom} = node.getBoundingClientRect();
+                    return {id: node.id || node.className, left, right, top, bottom};
+                }),
+                settingsText: (() => {
+                    const button = document.querySelector('#settings-button');
+                    const range = document.createRange();
+                    range.selectNodeContents([...button.childNodes].find(node => node.nodeType === Node.TEXT_NODE && node.textContent.trim()));
+                    const {left, right, width} = range.getBoundingClientRect();
+                    return {left, right, width};
+                })()
+            })''')
+            assert geometry['scrollWidth'] <= geometry['viewport'], geometry
+            assert all(box['left'] >= 0 and box['right'] <= geometry['viewport'] for box in geometry['controls']), geometry
+            assert geometry['settingsText']['width'] > 0 and geometry['settingsText']['right'] <= geometry['viewport'], geometry
+            evidence.append({'page': destination, 'theme': theme, **geometry})
+            if language == 'en' and width in [390, 1440]:
+                capture = await page.screenshot(path=str(layout_artifacts / f'matrix-{width}-{theme}-{destination}.png'))
+                dimensions = {'width': int.from_bytes(capture[16:20], 'big'), 'height': int.from_bytes(capture[20:24], 'big')}
+                assert dimensions == {'width': width, 'height': 844}
+                evidence[-1]['png'] = dimensions
+        await expect(page.locator('#load-entities')).to_be_enabled()
+        await page.locator('button[data-settings-category=forecast]').click()
+        await page.locator('[name=forecast_noct_c]').fill('48')
+        await expect(page.locator('[data-settings-category=forecast]')).to_have_attribute('aria-current', 'location')
+        before = await page.locator('#settings-scroll').evaluate('node => node.scrollTop')
+        section = await page.locator('#settings-categories [aria-current=location]').get_attribute('data-settings-category')
+        await page.locator('#theme-select').select_option('dark' if theme == 'light' else 'light')
+        assert await page.locator('#settings-scroll').evaluate('node => node.scrollTop') == pytest.approx(before, abs=1)
+        await page.locator('#language-select').select_option('zh' if language != 'zh' else 'en')
+        await expect(page.locator('[name=forecast_noct_c]')).to_have_value('48')
+        await expect(page.locator(f'[data-settings-category={section}]')).to_have_attribute('aria-current', 'location')
+        await page.locator('#language-select').select_option(language)
+        await page.locator('#theme-select').select_option(theme)
+        await page.locator('#settings-scroll').evaluate('node => node.scrollTo(0, node.scrollHeight)')
+        await page.evaluate('() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))')
+        field = await page.locator('[name=forecast_noct_c]').bounding_box()
+        dock = await page.locator('#settings-actions').bounding_box()
+        assert field['y'] + field['height'] <= dock['y'], {'field': field, 'dock': dock}
+        await page.locator('#history-tab').click()
+        await expect(page.locator('#keep-editing')).to_be_focused()
+        for selector in ['#keep-editing', '#discard-changes']:
+            box = await page.locator(selector).bounding_box()
+            assert 0 <= box['x'] and box['x'] + box['width'] <= width
+            assert 0 <= box['y'] and box['y'] + box['height'] <= 844
+        if language == 'en' and width in [390, 1440]:
+            await page.screenshot(path=str(layout_artifacts / f'matrix-{width}-{theme}-dialog.png'))
+        await page.keyboard.press('Tab')
+        await expect(page.locator('#discard-changes')).to_be_focused()
+        await page.keyboard.press('Enter')
+        await expect(page.locator('#history-page')).to_be_visible()
+    (layout_artifacts / f'matrix-{width}-{language}.json').write_text(json.dumps(evidence, indent=2), encoding='utf-8')
+
+
+async def test_short_mobile_settings_keeps_directory_and_actions_usable(layout_page, layout_artifacts):
+    from playwright.async_api import expect
+
+    page, _ = layout_page
+    await page.set_viewport_size({'width': 390, 'height': 430})
+    await page.emulate_media(reduced_motion='reduce')
+    await page.locator('#language-select').select_option('de')
+    await page.locator('#settings-button').click()
+    await expect(page.locator('#load-entities')).to_be_enabled()
+    evidence = []
+    for category in ['connection', 'panels', 'sources', 'monitoring', 'forecast']:
+        await page.locator(f'[data-settings-category={category}]').click()
+        await page.locator('#settings-heading').evaluate('node => node.scrollIntoView({block: "start"})')
+        geometry = await page.evaluate('''() => {
+            const box = selector => {
+                const {top, bottom, left, right} = document.querySelector(selector).getBoundingClientRect();
+                return {top, bottom, left, right};
+            };
+            return {dock: box('#settings-actions'), directory: box('#settings-categories'),
+                viewport: innerHeight, width: document.documentElement.clientWidth,
+                scrollWidth: document.documentElement.scrollWidth};
+        }''')
+        assert 0 <= geometry['dock']['top'] < geometry['dock']['bottom'] <= 430, geometry
+        assert geometry['directory']['bottom'] < geometry['dock']['top'], geometry
+        assert geometry['scrollWidth'] <= geometry['width'], geometry
+        evidence.append({'category': category, **geometry})
+    await page.locator('#settings-scroll').evaluate('node => node.scrollTo(0, node.scrollHeight)')
+    await page.evaluate('() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))')
+    field = await page.locator('[name=forecast_noct_c]').bounding_box()
+    dock = await page.locator('#settings-actions').bounding_box()
+    scroll = await page.locator('#settings-scroll').bounding_box()
+    assert scroll['y'] <= field['y'] and field['y'] + field['height'] < dock['y']
+    evidence.append({'last_field': field, 'dock': dock, 'scroll': scroll})
+    await page.screenshot(path=str(layout_artifacts / 'settings-short-390-430-de.png'))
+    (layout_artifacts / 'settings-short-390-430-de.json').write_text(json.dumps(evidence, indent=2), encoding='utf-8')
+    await page.locator('[name=forecast_noct_c]').fill('48')
+    await page.locator('#history-tab').click()
+    await expect(page.locator('dialog')).to_be_visible()
+    await page.locator('#keep-editing').click()
+    await expect(page.locator('[name=forecast_noct_c]')).to_have_value('48')
+    await page.locator('#history-tab').click()
+    await page.locator('#discard-changes').click()
+    await expect(page.locator('#history-page')).to_be_visible()
+
+
+@pytest.mark.parametrize('width', [390, 1440])
+async def test_connection_error_light_dark_captures(layout_page, layout_artifacts, width):
+    from playwright.async_api import expect
+
+    page, service = layout_page
+    await page.set_viewport_size({'width': width, 'height': 844})
+    service.error = 'ha_connection_failed'
+    await expect(page.locator('#banner')).to_contain_text('Cannot reach Home Assistant')
+    for theme in ['light', 'dark']:
+        await page.locator('#theme-select').select_option(theme)
+        for destination in ['live', 'history', 'forecast', 'settings']:
+            await page.locator('#settings-button' if destination == 'settings' else f'#{destination}-tab').click()
+            await expect(page.locator(f'#{destination}-page')).to_be_visible()
+            assert await page.evaluate('document.documentElement.scrollWidth <= document.documentElement.clientWidth')
+            capture = await page.screenshot(path=str(layout_artifacts / f'error-{width}-{theme}-{destination}.png'))
+            assert int.from_bytes(capture[16:20], 'big') == width
+            assert int.from_bytes(capture[20:24], 'big') == 844
 
 
 @pytest.mark.parametrize(('width', 'language'), [(320, 'fr'), (390, 'de'), (1100, 'zh'), (1440, 'fr')])
@@ -174,11 +319,11 @@ async def test_settings_mobile_categories_and_long_locale_fit(layout_page, layou
             assert await page.locator(f'[data-settings-section={category}] label').evaluate_all('nodes => nodes.filter(node => node.checkVisibility()).every(node => getComputedStyle(node).gridTemplateColumns.split(" ").length === 1)')
         else:
             assert section['x'] > nav['x'] + nav['width']
-        await page.screenshot(path=str(layout_artifacts / f'settings-{width}-{language}-{category}.png'), full_page=True)
+        await page.screenshot(path=str(layout_artifacts / f'settings-{width}-{language}-{category}.png'))
     await page.locator('#live-tab').click()
-    await page.screenshot(path=str(layout_artifacts / f'live-{width}-{language}.png'), full_page=True)
+    await page.screenshot(path=str(layout_artifacts / f'live-{width}-{language}.png'))
     await page.locator('#history-tab').click()
-    await page.screenshot(path=str(layout_artifacts / f'history-{width}-{language}.png'), full_page=True)
+    await page.screenshot(path=str(layout_artifacts / f'history-{width}-{language}.png'))
 
 
 async def test_history_summary_and_charts_share_range(layout_page, layout_artifacts):

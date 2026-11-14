@@ -7,6 +7,92 @@ import pytest
 pytestmark = pytest.mark.skipif(os.getenv('PVYL_BROWSER_TESTS') != '1', reason='Set PVYL_BROWSER_TESTS=1 after installing Playwright Chromium')
 
 
+async def test_settings_leave_cancel_and_discard(browser_workspace):
+    from playwright.async_api import expect
+
+    page, service, _ = browser_workspace
+    await page.locator('#history-tab').click()
+    await page.locator('#history-range').select_option('7')
+    await page.locator('#settings-button').click()
+    await page.locator('button[data-settings-category=panels]').click()
+    await page.locator('[name=rated_power_w]').fill('6100')
+    before = await page.locator('#settings-scroll').evaluate('node => node.scrollTop')
+    await page.locator('#history-tab').click()
+    await expect(page.locator('#settings-page')).to_be_visible()
+    await expect(page.locator('#settings-button')).to_have_attribute('aria-current', 'page')
+    await expect(page.locator('#keep-editing')).to_be_focused()
+    await page.keyboard.press('Tab')
+    await expect(page.locator('#discard-changes')).to_be_focused()
+    await page.keyboard.press('Shift+Tab')
+    await page.keyboard.press('Enter')
+    await expect(page.locator('dialog')).not_to_be_visible()
+    await expect(page.locator('#history-tab')).to_be_focused()
+    await expect(page.locator('[name=rated_power_w]')).to_have_value('6100')
+    assert await page.locator('#settings-scroll').evaluate('node => node.scrollTop') == pytest.approx(before, abs=1)
+    await page.locator('#history-tab').click()
+    await page.keyboard.press('Escape')
+    await expect(page.locator('dialog')).not_to_be_visible()
+    await expect(page.locator('#history-tab')).to_be_focused()
+    await page.locator('#history-tab').click()
+    await page.locator('#discard-changes').click()
+    await expect(page.locator('#history-page')).to_be_visible()
+    await expect(page.locator('#history-range')).to_have_value('7')
+    assert service.config.rated_power_w == 5000
+    await page.locator('#settings-button').click()
+    await expect(page.locator('[name=rated_power_w]')).to_have_value('5000')
+
+
+async def test_same_page_settings_keeps_scroll_and_draft(browser_workspace):
+    from playwright.async_api import expect
+
+    page, _, _ = browser_workspace
+    reads = []
+    page.on('request', lambda request: reads.append(request.url) if request.url.endswith('/api/config') else None)
+    await page.locator('#settings-button').click()
+    await page.locator('button[data-settings-category=panels]').click()
+    await page.locator('[name=rated_power_w]').fill('6100')
+    before = await page.locator('#settings-scroll').evaluate('node => node.scrollTop')
+    count = len(reads)
+    await page.locator('#settings-button').click()
+    await expect(page.locator('[name=rated_power_w]')).to_have_value('6100')
+    assert len(reads) == count
+    assert await page.locator('#settings-scroll').evaluate('node => node.scrollTop') == pytest.approx(before, abs=1)
+    await expect(page.locator('dialog')).not_to_be_visible()
+
+
+async def test_brand_uses_leave_guard(browser_workspace):
+    from playwright.async_api import expect
+
+    page, _, _ = browser_workspace
+    await page.locator('#settings-button').click()
+    await page.locator('button[data-settings-category=panels]').click()
+    await page.locator('[name=rated_power_w]').fill('6100')
+    await page.locator('.brand').click()
+    await expect(page.locator('dialog')).to_be_visible()
+    await page.locator('#keep-editing').click()
+    await expect(page.locator('[name=rated_power_w]')).to_have_value('6100')
+    await expect(page.locator('.brand')).to_be_focused()
+    await page.locator('.brand').click()
+    await page.locator('#discard-changes').click()
+    await expect(page.locator('#live-page')).to_be_visible()
+
+
+@pytest.mark.parametrize('reverted', [False, True])
+async def test_clean_settings_leaves_without_confirmation(browser_workspace, reverted):
+    from playwright.async_api import expect
+
+    page, _, _ = browser_workspace
+    await page.locator('#settings-button').click()
+    await expect(page.locator('#save-button')).to_be_disabled()
+    if reverted:
+        await page.locator('button[data-settings-category=panels]').click()
+        await page.locator('[name=rated_power_w]').fill('6100')
+        await page.locator('[name=rated_power_w]').fill('5000.0')
+    await page.locator('#history-tab').click()
+    await expect(page.locator('#history-page')).to_be_visible()
+    await expect(page.locator('dialog')).not_to_be_visible()
+
+
 async def test_data_pages_and_gear_settings_preserve_context(browser_workspace):
     from playwright.async_api import expect
 
@@ -27,7 +113,7 @@ async def test_data_pages_and_gear_settings_preserve_context(browser_workspace):
     await page.locator('button[data-settings-category=forecast]').click()
     await expect(page.locator('[data-settings-section=panels]')).to_be_visible()
     await expect(page.locator('[data-settings-section=forecast]')).to_be_visible()
-    await expect(page.locator('#draft-status')).to_have_text('Unsaved changes')
+    await expect(page.locator('#save-button')).to_be_enabled()
     await page.locator('#settings-button').click()
     await page.locator('button[data-settings-category=panels]').click()
     await expect(page.locator('[name=temperature_coefficient_pct_per_c]')).to_have_value('-0.4')
@@ -35,7 +121,7 @@ async def test_data_pages_and_gear_settings_preserve_context(browser_workspace):
     await expect(page.locator('#save-result')).to_have_text('Configuration saved')
     assert service.config.temperature_coefficient_pct_per_c == -0.4
     await expect(page.locator('#ha-token')).to_have_value('')
-    await expect(page.locator('#draft-status')).to_be_hidden()
+    await expect(page.locator('#save-button')).to_be_disabled()
     await page.locator('#history-tab').click()
     await expect(page.locator('#history-range')).to_have_value('7')
     await page.locator('#forecast-tab').click()
@@ -58,9 +144,9 @@ async def test_french_tablet_settings_returns_to_selected_history_range(browser_
     await expect(page.locator('#data-navigation')).to_be_visible()
     await page.locator('button[data-settings-category=panels]').click()
     await page.locator('[name=rated_power_w]').fill('6000')
-    await expect(page.locator('#draft-status')).to_have_text('Modifications non enregistrées')
+    await expect(page.locator('#save-button')).to_be_enabled()
     await page.locator('#cancel-settings').click()
-    await expect(page.locator('#draft-status')).to_be_hidden()
+    await expect(page.locator('#save-button')).to_be_disabled()
     await page.locator('#history-tab').click()
     await expect(page.locator('#history-page')).to_be_visible()
     await expect(page.locator('#history-range')).to_have_value('7')
@@ -266,7 +352,11 @@ async def test_settings_loading_disables_edit_until_config_ready(browser_workspa
     await page.locator('#settings-button').click()
     for selector in ['[name=rated_power_w]', '#ha-url', '#ha-token', '#load-entities', '#save-button', '#cancel-settings']:
         await expect(page.locator(selector)).to_be_disabled()
-    await expect(page.locator('#live-tab')).to_be_disabled()
+    for selector in ['#live-tab', '#history-tab', '#forecast-tab', '#settings-button']:
+        await expect(page.locator(selector)).to_be_disabled()
+    await expect(page.locator('.brand')).to_have_attribute('aria-disabled', 'true')
+    await page.locator('.brand').evaluate('node => node.click()')
+    await expect(page.locator('#settings-page')).to_be_visible()
     await expect(page.locator('#theme-select')).to_be_enabled()
     await expect(page.locator('#language-select')).to_be_enabled()
     assert requests == ['GET']
@@ -275,6 +365,40 @@ async def test_settings_loading_disables_edit_until_config_ready(browser_workspa
     await expect(page.locator('[name=rated_power_w]')).to_have_value('5000')
     await expect(page.locator('#save-button')).to_be_disabled()
     await expect(page.locator('#live-tab')).to_be_enabled()
+
+
+async def test_saving_settings_blocks_dependent_navigation(browser_workspace):
+    from playwright.async_api import expect
+
+    page, service, _ = browser_workspace
+    requested = asyncio.Event()
+    ready = asyncio.Event()
+
+    async def configuration(route):
+        if route.request.method == 'PUT':
+            requested.set()
+            await ready.wait()
+        await route.continue_()
+
+    await page.locator('#settings-button').click()
+    await page.locator('button[data-settings-category=panels]').click()
+    await page.locator('[name=rated_power_w]').fill('6100')
+    await page.route('**/api/config', configuration)
+    await page.locator('#save-button').click()
+    await asyncio.wait_for(requested.wait(), 5)
+    for selector in ['#live-tab', '#history-tab', '#forecast-tab', '#settings-button']:
+        await expect(page.locator(selector)).to_be_disabled()
+    await page.locator('.brand').evaluate('node => node.click()')
+    await expect(page.locator('#settings-page')).to_be_visible()
+    await expect(page.locator('dialog')).not_to_be_visible()
+    await expect(page.locator('#theme-select')).to_be_enabled()
+    await expect(page.locator('#language-select')).to_be_enabled()
+    ready.set()
+    await expect(page.locator('#save-result')).to_have_text('Configuration saved')
+    assert service.config.rated_power_w == 6100
+    await page.locator('#history-tab').click()
+    await expect(page.locator('#history-page')).to_be_visible()
+    await expect(page.locator('dialog')).not_to_be_visible()
 
 
 async def test_settings_forecast_geometry_bounds_and_numeric_equivalence(browser_workspace):
@@ -673,7 +797,7 @@ async def test_settings_refreshes_active_location_without_changing_drafts(browse
             assert await page.locator('#settings-form').evaluate('form => [...new FormData(form)]') == drafts
             await expect(page.locator('#ha-url')).to_have_value(preview_url)
             await expect(page.locator('#ha-token')).to_have_value('simulation-token')
-            await expect(page.locator('#draft-status')).to_have_text('Unsaved changes')
+            await expect(page.locator('#save-button')).to_be_enabled()
             await page.locator('#settings-button').click()
             await expect(page.locator('#forecast-location')).to_have_text(expected)
         assert service.forecast.settings.enabled is False

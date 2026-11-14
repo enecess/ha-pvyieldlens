@@ -91,8 +91,6 @@
   "data_pages": "Pages de données",
   "settings_categories": "Catégories des paramètres",
   "monitoring": "Surveillance",
-  "back_to": "Retour à {page}",
-  "unsaved": "Modifications non enregistrées",
   "diagnostics": "Sources de données et diagnostic",
   "range_energy": "Énergie théorique sur la période",
   "range_pr": "PR sur la période",
@@ -157,5 +155,9 @@
   "dark": "Sombre",
   "theme_source_ha": "Home Assistant",
   "theme_source_system": "Système",
-  "theme_source_manual": "Manuel"
+  "theme_source_manual": "Manuel",
+  "discard_title": "Abandonner les modifications et quitter ?",
+  "discard_description": "Vos modifications seront abandonnées en passant à {page}.",
+  "keep_editing": "Annuler et continuer à modifier",
+  "discard_switch": "Abandonner et changer de page"
 }

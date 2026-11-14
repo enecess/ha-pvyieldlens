@@ -8,6 +8,7 @@ import LivePage from './LivePage.vue';
 import HistoryPage from './HistoryPage.vue';
 import ForecastPage from './pages/ForecastPage.vue';
 import SettingsPage from './pages/SettingsPage.vue';
+import DiscardChangesDialog from './components/DiscardChangesDialog.vue';
 import type { SettingsSection } from './settings';
 
 type Page = 'live' | 'history' | 'forecast' | 'settings';
@@ -15,6 +16,7 @@ const page = ref<Page>('live');
 const settingsSection = ref<SettingsSection>('connection');
 const settingsState = ref({ dirty: false, busy: false });
 const settingsPage = ref<InstanceType<typeof SettingsPage>>();
+const pendingDestination = ref<{ page: Page; section?: SettingsSection } | null>(null);
 const theme = createThemeController(window);
 const { preference, mode, source } = theme;
 const { configuration, snapshot, livePoints, error, acceptConfiguration, acceptSavedConfiguration } = useDashboard();
@@ -29,31 +31,40 @@ function changeTheme(event: Event) {
   theme.setPreference((event.target as HTMLSelectElement).value as ThemePreference);
 }
 function changeLanguage(event: Event) { setLanguage((event.target as HTMLSelectElement).value as LanguageChoice); }
-function showPage(value: Page) {
+function requestPage(value: Page, section?: SettingsSection) {
   if (page.value === value || settingsState.value.busy) return;
+  if (page.value === 'settings' && settingsState.value.dirty) {
+    pendingDestination.value = { page: value, section };
+    return;
+  }
+  settingsSection.value = section ?? 'connection';
   page.value = value;
   window.scrollTo(0, 0);
 }
-function openForecastSettings(section: 'forecast') {
-  settingsSection.value = section;
-  showPage('settings');
+function discardAndNavigate() {
+  const destination = pendingDestination.value!;
+  settingsPage.value!.discardDraft();
+  pendingDestination.value = null;
+  settingsSection.value = destination.section ?? 'connection';
+  page.value = destination.page;
+  window.scrollTo(0, 0);
 }
 </script>
 
 <template>
   <header class="app-header">
-    <a class="brand" href="./" aria-label="PVYieldLens home">
+    <a class="brand" href="./" aria-label="PVYieldLens home" :aria-disabled="settingsState.busy || undefined" @click.prevent="requestPage('live')">
       <span class="brand-icon"><Sun :size="22" aria-hidden="true" /></span>
       PVYieldLens
     </a>
     <nav id="data-navigation" :aria-label="t('data_pages')">
-      <button id="live-tab" :disabled="settingsState.busy" :aria-current="page === 'live' ? 'page' : undefined" @click="showPage('live')">
+      <button id="live-tab" :disabled="settingsState.busy" :aria-current="page === 'live' ? 'page' : undefined" @click="requestPage('live')">
         <Activity :size="17" aria-hidden="true" />{{ t('live_page') }}
       </button>
-      <button id="history-tab" :disabled="settingsState.busy" :aria-current="page === 'history' ? 'page' : undefined" @click="showPage('history')">
+      <button id="history-tab" :disabled="settingsState.busy" :aria-current="page === 'history' ? 'page' : undefined" @click="requestPage('history')">
         <ChartNoAxesCombined :size="17" aria-hidden="true" />{{ t('history') }}
       </button>
-      <button id="forecast-tab" :disabled="settingsState.busy" :aria-current="page === 'forecast' ? 'page' : undefined" @click="showPage('forecast')">
+      <button id="forecast-tab" :disabled="settingsState.busy" :aria-current="page === 'forecast' ? 'page' : undefined" @click="requestPage('forecast')">
         <Sun :size="17" aria-hidden="true" />{{ t('forecast') }}
       </button>
     </nav>
@@ -70,7 +81,7 @@ function openForecastSettings(section: 'forecast') {
       <label class="language-picker"><Languages :size="16" aria-hidden="true" /><select id="language-select" :value="languageChoice" :aria-label="t('language')" @change="changeLanguage">
         <option value="auto">{{ t('auto') }}</option><option value="en">English</option><option value="zh">中文</option><option value="fr">Français</option><option value="de">Deutsch</option><option value="pl">Polski</option><option value="it">Italiano</option>
       </select></label>
-      <button id="settings-button" :disabled="settingsState.busy" :aria-current="page === 'settings' ? 'page' : undefined" @click="showPage('settings')">
+      <button id="settings-button" :disabled="settingsState.busy" :aria-current="page === 'settings' ? 'page' : undefined" @click="requestPage('settings')">
         <Settings :size="17" aria-hidden="true" />{{ t('settings') }}
       </button>
     </div>
@@ -81,9 +92,10 @@ function openForecastSettings(section: 'forecast') {
   </div>
   <main :class="{ 'settings-active': page === 'settings' }" :data-configuration-ready="configuration !== null" :data-snapshot-ready="snapshot !== null">
     <div v-show="warnings.length" id="banner" class="banner" role="status">{{ warnings.map(key => t(key)).join(' ') }}</div>
-    <LivePage v-show="page === 'live'" :active="page === 'live'" :configuration="configuration" :snapshot="snapshot" :points="livePoints" :language="language" :theme="mode" @open-settings="showPage('settings')" />
+    <LivePage v-show="page === 'live'" :active="page === 'live'" :configuration="configuration" :snapshot="snapshot" :points="livePoints" :language="language" :theme="mode" @open-settings="requestPage('settings')" />
     <HistoryPage v-show="page === 'history'" :active="page === 'history'" :configuration="configuration" :snapshot="snapshot" :language="language" :theme="mode" />
-    <ForecastPage v-show="page === 'forecast'" :active="page === 'forecast'" :summary="snapshot?.forecast ?? null" :language="language" :theme="mode" @open-settings="openForecastSettings" />
+    <ForecastPage v-show="page === 'forecast'" :active="page === 'forecast'" :summary="snapshot?.forecast ?? null" :language="language" :theme="mode" @open-settings="requestPage('settings', $event)" />
     <SettingsPage v-show="page === 'settings'" ref="settingsPage" :active="page === 'settings'" :initial-section="settingsSection" :location="configuration?.location ?? null" @loaded="acceptConfiguration" @saved="acceptSavedConfiguration" @state-change="settingsState = $event" />
   </main>
+  <DiscardChangesDialog :open="pendingDestination !== null" :target-label="pendingDestination ? t(pendingDestination.page === 'live' ? 'live_page' : pendingDestination.page) : ''" @cancel="pendingDestination = null" @discard="discardAndNavigate" />
 </template>

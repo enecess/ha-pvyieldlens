@@ -91,8 +91,6 @@
   "data_pages": "Data pages",
   "settings_categories": "Settings categories",
   "monitoring": "Monitoring",
-  "back_to": "Back to {page}",
-  "unsaved": "Unsaved changes",
   "diagnostics": "Data sources and diagnostics",
   "range_energy": "Theoretical energy in range",
   "range_pr": "PR in range",
@@ -157,5 +155,9 @@
   "dark": "Dark",
   "theme_source_ha": "Home Assistant",
   "theme_source_system": "System",
-  "theme_source_manual": "Manual"
+  "theme_source_manual": "Manual",
+  "discard_title": "Discard changes and leave?",
+  "discard_description": "Your changes will be discarded when you switch to {page}.",
+  "keep_editing": "Cancel, keep editing",
+  "discard_switch": "Discard and switch"
 }

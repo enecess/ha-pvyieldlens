@@ -91,8 +91,6 @@
   "data_pages": "数据页面",
   "settings_categories": "设置分类",
   "monitoring": "监测设置",
-  "back_to": "返回{page}",
-  "unsaved": "有未保存的修改",
   "diagnostics": "数据来源与诊断",
   "range_energy": "区间理论电量",
   "range_pr": "区间 PR",
@@ -157,5 +155,9 @@
   "dark": "深色",
   "theme_source_ha": "Home Assistant",
   "theme_source_system": "系统",
-  "theme_source_manual": "手动"
+  "theme_source_manual": "手动",
+  "discard_title": "丢弃修改并离开？",
+  "discard_description": "切换到{page}时，将丢弃尚未保存的修改。",
+  "keep_editing": "取消，继续编辑",
+  "discard_switch": "丢弃并切换"
 }

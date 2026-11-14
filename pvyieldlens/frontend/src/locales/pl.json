@@ -91,8 +91,6 @@
   "data_pages": "Strony danych",
   "settings_categories": "Kategorie ustawień",
   "monitoring": "Monitorowanie",
-  "back_to": "Powrót do {page}",
-  "unsaved": "Niezapisane zmiany",
   "diagnostics": "Źródła danych i diagnostyka",
   "range_energy": "Energia teoretyczna w okresie",
   "range_pr": "PR w okresie",
@@ -157,5 +155,9 @@
   "dark": "Ciemny",
   "theme_source_ha": "Home Assistant",
   "theme_source_system": "System",
-  "theme_source_manual": "Ręczny"
+  "theme_source_manual": "Ręczny",
+  "discard_title": "Odrzucić zmiany i wyjść?",
+  "discard_description": "Po przejściu do strony {page} zmiany zostaną odrzucone.",
+  "keep_editing": "Anuluj i kontynuuj edycję",
+  "discard_switch": "Odrzuć i przejdź"
 }

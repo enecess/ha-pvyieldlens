@@ -101,6 +101,9 @@ async function loadConfiguration(entering = false) {
   if (entering && props.active) {
     await nextTick();
     scrollToSection(props.initialSection, false);
+    if (matchMedia('(max-width: 600px) and (max-height: 600px)').matches) {
+      document.querySelector('#settings-heading')!.scrollIntoView({ block: 'start' });
+    }
     const saved = configuration.value;
     if (saved && (saved.mode === 'app' || saved.connection.url && saved.connection.token_set)) void discoverEntities();
   }
@@ -194,7 +197,7 @@ async function save() {
 
 <template>
   <section id="settings-page" aria-labelledby="settings-heading">
-    <div class="section-heading"><div><p class="eyebrow">PVYieldLens</p><h1 id="settings-heading">{{ t('settings') }}</h1><p class="muted">{{ t('source_semantics') }}</p></div><span id="draft-status" v-show="dirty" class="muted">{{ t('unsaved') }}</span></div>
+    <div class="section-heading"><div><p class="eyebrow">PVYieldLens</p><h1 id="settings-heading">{{ t('settings') }}</h1><p class="muted">{{ t('source_semantics') }}</p></div></div>
     <div class="settings-body">
       <nav id="settings-categories" :aria-label="t('settings_categories')">
         <button v-for="(section, index) in sections" :key="section.key" type="button" :data-settings-category="section.key" :aria-pressed="activeSection === section.key" :aria-current="activeSection === section.key ? 'location' : undefined" :disabled="busy" @click="scrollToSection(section.key)">
