@@ -202,7 +202,8 @@ async def browser_workspace(tmp_path, request):
             errors = []
             page.on('pageerror', lambda error: errors.append(str(error)))
             await page.goto(url)
-            await expect(page.locator('#live-hint')).not_to_be_empty()
+            await expect(page.locator('main')).to_have_attribute('data-configuration-ready', 'true')
+            await expect(page.locator('main')).to_have_attribute('data-snapshot-ready', 'true')
             yield page, service, web
             assert errors == []
             await browser.close()
@@ -245,7 +246,8 @@ async def test_rolling_history_refreshes_only_when_complete_window_membership_ch
                 pass
 
         await page.goto(url)
-        await expect(page.locator('[name=rated_power_w]')).to_have_value('5000')
+        await expect(page.locator('main')).to_have_attribute('data-configuration-ready', 'true')
+        await expect(page.locator('main')).to_have_attribute('data-snapshot-ready', 'true')
         # Wait for the initial snapshot to seed the history statistics key.
         await expect(page.locator('#last-settled')).not_to_contain_text('—')
         await page.locator('#history-tab').click()
@@ -291,7 +293,7 @@ async def test_rolling_history_refreshes_only_when_complete_window_membership_ch
         assert len(history_requests) == initial_requests+3
         assert await charts.evaluate_all('charts => charts.map(chart => chart.dataset.original)') == ['hidden', 'hidden']
         async with page.expect_response(lambda response: '/api/history?' in response.url):
-            await page.locator('#settings-back').click()
+            await page.locator('#history-tab').click()
         await expect(charts).to_have_count(0)
         assert len(history_requests) == initial_requests+4
         assert errors == []

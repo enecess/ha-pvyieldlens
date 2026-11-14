@@ -31,7 +31,8 @@ async def layout_page(tmp_path):
             page.on('pageerror', lambda error: errors.append(str(error)))
             page.on('console', lambda message: errors.append(message.text) if message.type == 'error' else None)
             await page.goto(url)
-            await expect(page.locator('[name=rated_power_w]')).to_have_value('5000')
+            await expect(page.locator('main')).to_have_attribute('data-configuration-ready', 'true')
+            await expect(page.locator('main')).to_have_attribute('data-snapshot-ready', 'true')
             await expect(page.locator('#setup-empty')).to_be_hidden()
             await expect(page.locator('#live-chart .chart-empty')).to_be_visible()
             yield page, service
@@ -225,7 +226,7 @@ async def test_history_summary_and_charts_share_range(layout_page, layout_artifa
         pass
     await expect(page.locator('#history-chart svg')).to_have_attribute('data-original', 'hidden')
     assert requests == []
-    await page.locator('#settings-back').click()
+    await page.locator('#history-tab').click()
     await expect(page.locator('#history-chart svg')).not_to_have_attribute('data-original', 'hidden')
     await page.locator('#language-select').select_option('en')
     await page.locator('#history-totals').evaluate('node => node.open = true')
@@ -296,15 +297,37 @@ async def test_live_readings_keep_polling_while_configuring(layout_page, layout_
     await expect(page.locator('#live-opportunity')).to_have_text('372')
     await page.screenshot(path=str(layout_artifacts / 'live-populated-desktop.png'), full_page=True)
     await page.set_viewport_size({'width': 390, 'height': 844})
+    assert await page.evaluate('document.documentElement.scrollWidth <= document.documentElement.clientWidth')
     await page.screenshot(path=str(layout_artifacts / 'live-populated-mobile.png'), full_page=True)
     await page.locator('#live-chart svg').evaluate("node => node.dataset.original = 'hidden'")
     await page.locator('#settings-button').click()
-    await page.locator('button[data-settings-category=panels]').click()
-    await page.locator('[name=rated_power_w]').fill('6000')
+    await expect(page.locator('#settings-page')).to_be_visible()
     service.store.add_observations(samples(power=3000, at=now))
     await service.tick(now+60)
     await expect(page.locator('#live-actual')).to_have_text('3,000')
-    await expect(page.locator('[name=rated_power_w]')).to_have_value('6000')
     await expect(page.locator('#live-chart svg')).to_have_attribute('data-original', 'hidden')
-    await page.locator('#settings-back').click()
+    await page.locator('#live-tab').click()
     await expect(page.locator('#live-chart svg')).not_to_have_attribute('data-original', 'hidden')
+    curve = await page.locator('#live-chart path.series').nth(1).get_attribute('d')
+    light_colors = await page.locator('#live-chart svg').evaluate('''svg => ({
+        label: getComputedStyle(svg.querySelector('text')).fill,
+        grid: getComputedStyle(svg.querySelector('.grid')).stroke
+    })''')
+    await page.locator('#theme-select').select_option('dark')
+    await expect(page.locator('html')).to_have_attribute('data-theme', 'dark')
+    dark_colors = await page.locator('#live-chart svg').evaluate('''svg => ({
+        label: getComputedStyle(svg.querySelector('text')).fill,
+        grid: getComputedStyle(svg.querySelector('.grid')).stroke
+    })''')
+    assert light_colors['label'] != dark_colors['label']
+    assert light_colors['grid'] != dark_colors['grid']
+    await expect(page.locator('#live-chart path.series').nth(1)).to_have_attribute('d', curve)
+    await page.locator('#history-tab').click()
+    await page.locator('#history-range').select_option('7')
+    await page.locator('#theme-select').select_option('light')
+    await expect(page.locator('#history-range')).to_have_value('7')
+    await page.locator('#settings-button').click()
+    await page.locator('#history-tab').click()
+    await expect(page.locator('#history-range')).to_have_value('7')
+    await page.locator('#live-tab').click()
+    await expect(page.locator('#live-chart path.series').nth(1)).to_have_attribute('d', curve)

@@ -1,16 +1,32 @@
 <script setup lang="ts">
-import { onUnmounted, ref } from 'vue';
-import { Activity, ChartNoAxesCombined, Settings, Sun, SunMoon } from 'lucide-vue-next';
+import { computed, onUnmounted, ref } from 'vue';
+import { Activity, ChartNoAxesCombined, Languages, Settings, Sun, SunMoon } from 'lucide-vue-next';
 import { createThemeController, type ThemePreference } from './theme';
+import { useDashboard } from './dashboard';
+import { useI18n, type LanguageChoice } from './i18n';
+import LivePage from './LivePage.vue';
+import HistoryPage from './HistoryPage.vue';
 
 type Page = 'live' | 'history' | 'forecast' | 'settings';
 const page = ref<Page>('live');
 const theme = createThemeController(window);
 const { preference, mode, source } = theme;
+const { configuration, snapshot, livePoints, error } = useDashboard();
+const { languageChoice, language, t, setLanguage } = useI18n();
+const warnings = computed(() => [error.value, snapshot.value?.error,
+  snapshot.value?.history_available === false ? 'history_unavailable' : null,
+  snapshot.value?.energy.daily_complete === false ? 'daily_energy_incomplete' : null,
+].filter((value): value is string => Boolean(value)));
 onUnmounted(theme.dispose);
 
 function changeTheme(event: Event) {
   theme.setPreference((event.target as HTMLSelectElement).value as ThemePreference);
+}
+function changeLanguage(event: Event) { setLanguage((event.target as HTMLSelectElement).value as LanguageChoice); }
+function showPage(value: Page) {
+  if (page.value === value) return;
+  page.value = value;
+  window.scrollTo(0, 0);
 }
 </script>
 
@@ -20,52 +36,50 @@ function changeTheme(event: Event) {
       <span class="brand-icon"><Sun :size="22" aria-hidden="true" /></span>
       PVYieldLens
     </a>
-    <nav id="data-navigation" aria-label="Data pages">
-      <button id="live-tab" :aria-current="page === 'live' ? 'page' : undefined" @click="page = 'live'">
-        <Activity :size="17" aria-hidden="true" />Live
+    <nav id="data-navigation" :aria-label="t('data_pages')">
+      <button id="live-tab" :aria-current="page === 'live' ? 'page' : undefined" @click="showPage('live')">
+        <Activity :size="17" aria-hidden="true" />{{ t('live_page') }}
       </button>
-      <button id="history-tab" :aria-current="page === 'history' ? 'page' : undefined" @click="page = 'history'">
-        <ChartNoAxesCombined :size="17" aria-hidden="true" />History
+      <button id="history-tab" :aria-current="page === 'history' ? 'page' : undefined" @click="showPage('history')">
+        <ChartNoAxesCombined :size="17" aria-hidden="true" />{{ t('history') }}
       </button>
-      <button id="forecast-tab" :aria-current="page === 'forecast' ? 'page' : undefined" @click="page = 'forecast'">
-        <Sun :size="17" aria-hidden="true" />Forecast
+      <button id="forecast-tab" :aria-current="page === 'forecast' ? 'page' : undefined" @click="showPage('forecast')">
+        <Sun :size="17" aria-hidden="true" />{{ t('forecast') }}
       </button>
     </nav>
     <div class="utilities">
       <label class="theme-control" for="theme-select">
         <SunMoon :size="16" aria-hidden="true" />
-        <span class="sr-only">Theme mode</span>
-        <select id="theme-select" :value="preference" @change="changeTheme">
-          <option value="auto">Auto</option>
-          <option value="light">Light</option>
-          <option value="dark">Dark</option>
+        <span class="sr-only">{{ t('theme_mode') }}</span>
+        <select id="theme-select" :value="preference" :aria-label="t('theme_mode')" @change="changeTheme">
+          <option value="auto">{{ t('auto') }}</option>
+          <option value="light">{{ t('light') }}</option>
+          <option value="dark">{{ t('dark') }}</option>
         </select>
       </label>
-      <button id="settings-button" :aria-current="page === 'settings' ? 'page' : undefined" @click="page = 'settings'">
-        <Settings :size="17" aria-hidden="true" />Settings
+      <label class="language-picker"><Languages :size="16" aria-hidden="true" /><select id="language-select" :value="languageChoice" :aria-label="t('language')" @change="changeLanguage">
+        <option value="auto">{{ t('auto') }}</option><option value="en">English</option><option value="zh">中文</option><option value="fr">Français</option><option value="de">Deutsch</option><option value="pl">Polski</option><option value="it">Italiano</option>
+      </select></label>
+      <button id="settings-button" :aria-current="page === 'settings' ? 'page' : undefined" @click="showPage('settings')">
+        <Settings :size="17" aria-hidden="true" />{{ t('settings') }}
       </button>
     </div>
   </header>
   <div class="context-bar">
-    <span>Photovoltaic performance</span>
-    <span id="theme-mode" :data-source="source">{{ source === 'ha' ? 'Home Assistant' : source === 'system' ? 'System' : 'Manual' }} · {{ mode === 'dark' ? 'Dark' : 'Light' }}</span>
+    <span id="connection-state" role="status"><span class="status-dot" :class="{ good: snapshot?.connected && !error }"></span>{{ t(!configuration?.settings ? 'unconfigured' : snapshot?.connected && !error ? 'live' : 'offline') }}</span>
+    <span id="theme-mode" :data-source="source">{{ t(`theme_source_${source}`) }} · {{ t(mode) }}</span>
   </div>
-  <main>
-    <section v-if="page === 'live'" id="live-page" aria-labelledby="live-heading">
-      <h1 id="live-heading">Live</h1>
-      <div class="empty-panel"><p>No live readings to display.</p></div>
+  <main :data-configuration-ready="configuration !== null" :data-snapshot-ready="snapshot !== null">
+    <div v-show="warnings.length" id="banner" class="banner" role="status">{{ warnings.map(key => t(key)).join(' ') }}</div>
+    <LivePage v-show="page === 'live'" :active="page === 'live'" :configuration="configuration" :snapshot="snapshot" :points="livePoints" :language="language" :theme="mode" @open-settings="showPage('settings')" />
+    <HistoryPage v-show="page === 'history'" :active="page === 'history'" :configuration="configuration" :snapshot="snapshot" :language="language" :theme="mode" />
+    <section v-show="page === 'forecast'" id="forecast-page" aria-labelledby="forecast-heading">
+      <h1 id="forecast-heading">{{ t('forecast') }}</h1>
+      <div class="empty-panel"><p>{{ t('plot_empty') }}</p></div>
     </section>
-    <section v-else-if="page === 'history'" id="history-page" aria-labelledby="history-heading">
-      <h1 id="history-heading">History</h1>
-      <div class="empty-panel"><p>No history to display.</p></div>
-    </section>
-    <section v-else-if="page === 'forecast'" id="forecast-page" aria-labelledby="forecast-heading">
-      <h1 id="forecast-heading">Forecast</h1>
-      <div class="empty-panel"><p>No forecast to display.</p></div>
-    </section>
-    <section v-else id="settings-page" aria-labelledby="settings-heading">
-      <h1 id="settings-heading">Settings</h1>
-      <div class="empty-panel"><p>Configuration is not loaded.</p></div>
+    <section v-show="page === 'settings'" id="settings-page" aria-labelledby="settings-heading">
+      <h1 id="settings-heading">{{ t('settings') }}</h1>
+      <div class="empty-panel"><p>{{ t('waiting') }}</p></div>
     </section>
   </main>
 </template>
