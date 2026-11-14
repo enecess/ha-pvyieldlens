@@ -23,6 +23,7 @@ const powerSeries: ChartSeries[] = [
 ];
 const prSeries: ChartSeries[] = [{ key: 'pr', label: 'pr', color: 'var(--pv-actual)' }];
 let lastKey: string | null = null;
+let pendingRequest: { key: string } | null = null;
 const number = (value: number | null | undefined, digits = 1) => value == null ? '—' :
   new Intl.NumberFormat(props.language, { maximumFractionDigits: digits }).format(value);
 const stamp = (at: number | null | undefined) => at == null ? '—' : new Intl.DateTimeFormat(props.language, {
@@ -37,20 +38,27 @@ const boundaries = computed(() => {
 });
 
 watch(() => [props.active, range.value, props.snapshot, props.configuration?.settings], async () => {
-  if (!props.active || !props.snapshot || !props.configuration) return;
+  if (!props.active || !props.snapshot || !props.configuration) { pendingRequest = null; return; }
   const key = `${props.snapshot.revision}|${props.snapshot.statistics?.revision}|${props.snapshot.statistics?.end}|${range.value}|${JSON.stringify(props.configuration.settings)}`;
   const end = Date.now() / 1000;
   const start = Math.max(0, end - Number(range.value) * 86400);
-  if (key === lastKey && !points.value.some(point => point.start < start)) return;
+  if (key === lastKey && !points.value.some(point => point.start < start)) { pendingRequest = null; return; }
+  if (pendingRequest?.key === key) return;
+  const request = { key };
+  pendingRequest = request;
   try {
     const result = await api.getHistory(start, end);
+    if (pendingRequest !== request) return;
     points.value = result.windows.filter(point => point.start >= result.requested_range.start && point.end <= result.requested_range.end)
       .map(point => ({ ...point, at: point.end }));
     summary.value = result.summary;
     error.value = null;
     lastKey = key;
   } catch (failure) {
+    if (pendingRequest !== request) return;
     error.value = failure instanceof ApiError ? failure.code : 'error';
+  } finally {
+    if (pendingRequest === request) pendingRequest = null;
   }
 }, { immediate: true });
 </script>

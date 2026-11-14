@@ -210,6 +210,59 @@ async def browser_workspace(tmp_path, request):
     service.store.close()
 
 
+@pytest.mark.parametrize('superseded_result', ['success', 'error'])
+async def test_history_rejects_superseded_range_responses(browser_workspace, superseded_result):
+    from urllib.parse import parse_qs, urlsplit
+    from playwright.async_api import expect
+    from test_engine import samples
+    from pvyieldlens.engine import calculate
+
+    page, service, _ = browser_workspace
+    first = service.store.cursor
+    recent = first + 2*86400
+    for start, end, power in [(first, first+60, 2000), (first+60, recent, None), (recent, recent+60, 1000)]:
+        service.store.settle(calculate(service.config, samples(power=power, at=start) if power is not None else [],
+                                      start, end), 1, 'UTC')
+    await page.evaluate('now => Date.now = () => now', (recent+120)*1000)
+    await expect(page.locator('#last-settled')).not_to_contain_text('—')
+    await page.locator('#history-tab').click()
+    await expect(page.locator('#history-energy')).to_have_text('0.062')
+    await page.locator('#history-range').select_option('7')
+    await expect(page.locator('#history-energy')).to_have_text('0.124')
+
+    older_requested = asyncio.Event()
+    release_older = asyncio.Event()
+    older_completed = asyncio.Event()
+
+    async def history(route):
+        query = parse_qs(urlsplit(route.request.url).query)
+        days = round((float(query['end'][0]) - float(query['start'][0])) / 86400)
+        response = await route.fetch()
+        if days == 30:
+            older_requested.set()
+            await release_older.wait()
+            if superseded_result == 'error':
+                await route.fulfill(status=502, json={'error': 'invalid_time_range'})
+            else:
+                await route.fulfill(response=response)
+            older_completed.set()
+        else:
+            await route.fulfill(response=response)
+
+    await page.route('**/api/history?*', history)
+    await page.locator('#history-range').select_option('30')
+    await asyncio.wait_for(older_requested.wait(), timeout=5)
+    await page.locator('#history-range').select_option('1')
+    await expect(page.locator('#history-energy')).to_have_text('0.062')
+    release_older.set()
+    await asyncio.wait_for(older_completed.wait(), timeout=5)
+    await page.evaluate('() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))')
+    assert await page.locator('#history-range').input_value() == '1'
+    assert await page.locator('#history-energy').inner_text() == '0.062'
+    assert await page.locator('#history-page .banner').count() == 0
+    assert await page.locator('#history-chart path.series').first.evaluate("path => path.getAttribute('d').match(/[ML]/g).length") == 1
+
+
 async def test_rolling_history_refreshes_only_when_complete_window_membership_changes(tmp_path):
     from playwright.async_api import async_playwright, expect
     from test_engine import samples, settings

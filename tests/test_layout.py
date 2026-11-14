@@ -297,8 +297,50 @@ async def test_live_readings_keep_polling_while_configuring(layout_page, layout_
     await expect(page.locator('#live-opportunity')).to_have_text('372')
     await page.screenshot(path=str(layout_artifacts / 'live-populated-desktop.png'), full_page=True)
     await page.set_viewport_size({'width': 390, 'height': 844})
-    assert await page.evaluate('document.documentElement.scrollWidth <= document.documentElement.clientWidth')
-    await page.screenshot(path=str(layout_artifacts / 'live-populated-mobile.png'), full_page=True)
+    geometry = await page.evaluate('''() => {
+        const bounds = node => {
+            const {left, top, right, bottom, width, height} = node.getBoundingClientRect();
+            return {left, top, right, bottom, width, height, clientWidth: node.clientWidth,
+                scrollWidth: node.scrollWidth};
+        };
+        return {viewport: {width: innerWidth, height: innerHeight, devicePixelRatio},
+            document: bounds(document.documentElement), body: bounds(document.body),
+            main: bounds(document.querySelector('main')), header: bounds(document.querySelector('.app-header')),
+            controls: [...document.querySelectorAll('.app-header button, .app-header select, .metric, #updated, #theme-mode')]
+                .filter(node => node.checkVisibility()).map(node => ({id: node.id, ...bounds(node)}))};
+    }''')
+    assert geometry['viewport']['width'] == 390
+    assert geometry['document']['scrollWidth'] <= geometry['document']['clientWidth']
+    for box in [geometry['body'], geometry['main'], geometry['header'], *geometry['controls']]:
+        assert box['left'] >= 0 and box['right'] <= geometry['document']['clientWidth'], geometry
+    original = await page.screenshot(path=str(layout_artifacts / 'live-mobile-original-full-page.png'), full_page=True)
+    geometry['original_full_page_png'] = {'width': int.from_bytes(original[16:20], 'big'),
+                                          'height': int.from_bytes(original[20:24], 'big')}
+    geometry['after_full_page_capture'] = await page.evaluate('''() => ({viewportWidth: innerWidth,
+        documentWidth: document.documentElement.clientWidth, documentScrollWidth: document.documentElement.scrollWidth,
+        bodyRight: document.body.getBoundingClientRect().right,
+        mainRight: document.querySelector('main').getBoundingClientRect().right,
+        headerRight: document.querySelector('.app-header').getBoundingClientRect().right,
+        settingsRight: document.querySelector('#settings-button').getBoundingClientRect().right})''')
+    await page.evaluate('() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))')
+    geometry['after_capture_render'] = await page.evaluate('''() => ({viewportWidth: innerWidth,
+        documentWidth: document.documentElement.clientWidth, documentScrollWidth: document.documentElement.scrollWidth,
+        bodyRight: document.body.getBoundingClientRect().right, mainRight: document.querySelector('main').getBoundingClientRect().right,
+        headerRight: document.querySelector('.app-header').getBoundingClientRect().right})''')
+    assert geometry['after_capture_render']['documentScrollWidth'] <= geometry['after_capture_render']['documentWidth'], geometry
+    viewport = await page.screenshot(path=str(layout_artifacts / 'live-populated-mobile.png'))
+    geometry['viewport_png'] = {'width': int.from_bytes(viewport[16:20], 'big'),
+                               'height': int.from_bytes(viewport[20:24], 'big')}
+    assert geometry['viewport_png'] == {'width': 390, 'height': 844}
+    await page.set_viewport_size({'width': 390, 'height': 1040})
+    await page.evaluate('() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))')
+    expanded = await page.screenshot(path=str(layout_artifacts / 'live-mobile-390-full-height.png'))
+    geometry['expanded_viewport_png'] = {'width': int.from_bytes(expanded[16:20], 'big'),
+                                        'height': int.from_bytes(expanded[20:24], 'big')}
+    assert geometry['expanded_viewport_png'] == {'width': 390, 'height': 1040}
+    await page.set_viewport_size({'width': 390, 'height': 844})
+    await page.evaluate('() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))')
+    (layout_artifacts / 'live-mobile-390-geometry.json').write_text(json.dumps(geometry, indent=2), encoding='utf-8')
     await page.locator('#live-chart svg').evaluate("node => node.dataset.original = 'hidden'")
     await page.locator('#settings-button').click()
     await expect(page.locator('#settings-page')).to_be_visible()
