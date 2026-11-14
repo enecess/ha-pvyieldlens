@@ -129,7 +129,7 @@ async def test_scrolled_navigation_reveals_destination_and_preserves_same_page_s
     if width > 600:
         assert await page.evaluate('scrollY') == 0
     await page.locator('button[data-settings-category=monitoring]').click()
-    await page.locator('#monitoring-advanced').evaluate('node => node.open = true')
+    await expect(page.locator('[name=power_max_age_seconds]')).to_be_visible()
     await page.locator('[name=update_seconds]').fill('2')
     before = await page.locator('#settings-scroll').evaluate('node => node.scrollTop')
     await page.locator('#settings-button').click()

@@ -42,6 +42,22 @@ describe('settings drafts', () => {
     expect(hasSettingsChanges(draft, baseline)).toBe(false);
   });
 
+  it.each([['http://ha/', false], ['http://ha///', false], ['http://ha/path/', true], ['http://HA', true]])(
+    'compares connection URL %s with only server trailing-slash normalization', (url, dirty) => {
+      const baseline = draftFromConfiguration(configuration);
+      const draft = draftFromConfiguration(configuration);
+      draft.connection.url = url;
+      expect(hasSettingsChanges(draft, baseline)).toBe(dirty);
+    },
+  );
+
+  it.each(['/', '///'])('keeps incomplete URL %s dirty against an empty saved connection', url => {
+    const baseline = draftFromConfiguration({ ...configuration, connection: { url: '', token_set: false } });
+    const draft = structuredClone(baseline);
+    draft.connection.url = url;
+    expect(hasSettingsChanges(draft, baseline)).toBe(true);
+  });
+
   it('compares the effective angle independently of preset presentation', () => {
     const baseline = draftFromConfiguration(configuration);
     const draft = draftFromConfiguration(configuration);

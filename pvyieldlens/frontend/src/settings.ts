@@ -32,10 +32,12 @@ export function draftFromConfiguration(value: Configuration): SettingsDraft {
 
 export function hasSettingsChanges(draft: SettingsDraft, baseline: SettingsDraft): boolean {
   const numericValue = (value: string) => value.trim() !== '' && Number.isFinite(Number(value)) ? Number(value) : value;
+  const urlValue = (value: string) => value.replace(/\/+$/, '') || value;
   return Object.entries(draft.monitoring).some(([key, value]) => key.endsWith('_entity')
     ? value.trim() !== baseline.monitoring[key as keyof SettingsDraft['monitoring']].trim()
     : numericValue(value) !== numericValue(baseline.monitoring[key as keyof SettingsDraft['monitoring']]))
-    || draft.connection.url !== baseline.connection.url || draft.connection.token !== baseline.connection.token
+    || urlValue(draft.connection.url) !== urlValue(baseline.connection.url)
+    || draft.connection.token !== baseline.connection.token
     || draft.forecast.enabled !== baseline.forecast.enabled
     || (['tilt_deg', 'azimuth_deg', 'noct_c'] as const).some(key => numericValue(draft.forecast[key]) !== numericValue(baseline.forecast[key]));
 }

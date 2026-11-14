@@ -230,7 +230,106 @@ async def test_forecast_settings_round_trip_and_server_error_category(browser_wo
     await page.locator('#save-button').click()
     await expect(page.locator('button[data-settings-category=monitoring]')).to_have_attribute('aria-pressed', 'true')
     await expect(page.locator('[name=power_max_age_seconds]')).to_be_focused()
-    await expect(page.locator('#monitoring-advanced')).to_have_attribute('open', '')
+    await expect(page.locator('[name=power_max_age_seconds]')).to_be_in_viewport()
+    await expect(page.locator('[name=forecast_noct_c]')).to_have_value('47')
+    await expect(page.locator('#save-button')).to_be_enabled()
+
+
+async def test_monitoring_timeouts_are_directly_visible(browser_workspace):
+    from playwright.async_api import expect
+
+    page, _, _ = browser_workspace
+    await page.locator('#settings-button').click()
+    await page.locator('[data-settings-category=monitoring]').click()
+    for name, value in [('power_max_age_seconds', '900'), ('temperature_max_age_seconds', '900'), ('irradiance_max_age_seconds', '900')]:
+        field = page.locator(f'[name={name}]')
+        await expect(field).to_be_visible()
+        await expect(field).to_have_value(value)
+        await field.focus()
+        await expect(field).to_be_focused()
+        await expect(field).to_be_in_viewport()
+
+
+async def test_settings_trims_pasted_entity_ids_before_native_validation(browser_workspace):
+    from playwright.async_api import expect
+
+    page, service, _ = browser_workspace
+    await page.locator('#settings-button').click()
+    await page.locator('[data-settings-category=sources]').click()
+    for name, value in [('power_entity', ' sensor.power '), ('temperature_entity', ' sensor.temp '), ('irradiance_entity', ' sensor.sun ')]:
+        await page.locator(f'[name={name}]').fill(value)
+        await expect(page.locator(f'[name={name}]')).to_have_value(value)
+    await expect(page.locator('#save-button')).to_be_disabled()
+    await page.locator('[name=rated_power_w]').fill('6100')
+    await page.locator('#save-button').click()
+    await expect(page.locator('#save-result')).to_have_text('Configuration saved')
+    assert service.config.rated_power_w == 6100
+    assert service.config.power_entity == 'sensor.power'
+    assert service.config.temperature_entity == 'sensor.temp'
+    assert service.config.irradiance_entity == 'sensor.sun'
+    await expect(page.locator('[name=power_entity]')).to_have_value('sensor.power')
+    await expect(page.locator('#save-button')).to_be_disabled()
+
+
+@pytest.mark.parametrize('source', [' sensor.temp ', ' sensor.pvyieldlens_output '])
+async def test_settings_rejects_normalized_duplicate_and_output_sources(browser_workspace, source):
+    from playwright.async_api import expect
+
+    page, service, _ = browser_workspace
+    await page.locator('#settings-button').click()
+    await page.locator('[name=power_entity]').fill(source)
+    await page.locator('#save-button').click()
+    await expect(page.locator('[name=power_entity]')).to_be_focused()
+    await expect(page.locator('[name=power_entity]')).to_have_attribute('aria-invalid', 'true')
+    assert await page.locator('[name=power_entity]').evaluate('node => node.validity.customError')
+    assert service.config.power_entity == 'sensor.power'
+
+
+async def test_settings_success_expires_after_three_seconds_without_reset(browser_workspace):
+    from playwright.async_api import expect
+
+    page, service, _ = browser_workspace
+    await page.emulate_media(reduced_motion='reduce')
+    await page.clock.install(time=0)
+    await page.clock.pause_at(1000)
+    await page.locator('#settings-button').click()
+    await page.locator('[data-settings-category=forecast]').click()
+    await page.locator('[name=forecast_noct_c]').fill('46')
+    await page.clock.run_for(32)
+    await page.locator('#save-button').click()
+    await expect(page.locator('#save-result')).to_have_text('Configuration saved')
+    await page.locator('[name=forecast_noct_c]').focus()
+    before = await page.evaluate('''() => ({scroll: document.querySelector('#settings-scroll').scrollTop,
+        section: document.querySelector('[data-settings-category][aria-pressed=true]').dataset.settingsCategory})''')
+    await page.clock.run_for(2999)
+    await expect(page.locator('#save-result')).to_have_text('Configuration saved')
+    await page.clock.run_for(1)
+    await expect(page.locator('#save-result')).to_be_empty()
+    await expect(page.locator('[name=forecast_noct_c]')).to_have_value('46')
+    await expect(page.locator('[name=forecast_noct_c]')).to_be_focused()
+    await expect(page.locator('#save-button')).to_be_disabled()
+    assert service.forecast.settings.noct_c == 46
+    after = await page.evaluate('''() => ({scroll: document.querySelector('#settings-scroll').scrollTop,
+        section: document.querySelector('[data-settings-category][aria-pressed=true]').dataset.settingsCategory})''')
+    assert after == before
+
+
+async def test_settings_success_timeout_does_not_erase_a_newer_failure(browser_workspace):
+    from playwright.async_api import expect
+
+    page, _, _ = browser_workspace
+    await page.clock.install(time=0)
+    await page.clock.pause_at(1000)
+    await page.locator('#settings-button').click()
+    await page.locator('[name=forecast_noct_c]').fill('46')
+    await page.locator('#save-button').click()
+    await expect(page.locator('#save-result')).to_have_text('Configuration saved')
+    await page.route('**/api/config', lambda route: route.fulfill(status=502, json={'error': 'ha_connection_failed'}))
+    await page.locator('[name=forecast_noct_c]').fill('47')
+    await page.locator('#save-button').click()
+    await expect(page.locator('#save-result')).to_contain_text('Cannot reach Home Assistant')
+    await page.clock.run_for(3000)
+    await expect(page.locator('#save-result')).to_contain_text('Cannot reach Home Assistant')
     await expect(page.locator('[name=forecast_noct_c]')).to_have_value('47')
     await expect(page.locator('#save-button')).to_be_enabled()
 

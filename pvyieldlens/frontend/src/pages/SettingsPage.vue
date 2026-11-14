@@ -60,6 +60,11 @@ let scrollFrame = 0;
 
 watch([dirty, busy], ([dirty, busy]) => emit('state-change', { dirty, busy }), { immediate: true });
 watch(() => props.active, active => { if (active) void loadConfiguration(true); }, { immediate: true });
+watch(saveResult, (result, _, onCleanup) => {
+  if (result !== 'saved') return;
+  const timeout = setTimeout(() => { saveResult.value = ''; }, 3000);
+  onCleanup(() => clearTimeout(timeout));
+}, { flush: 'sync' });
 onUnmounted(() => cancelAnimationFrame(scrollFrame));
 
 function inputValue(event: Event) { return (event.target as HTMLInputElement).value; }
@@ -144,8 +149,6 @@ function scrollToSection(section: SettingsSection, smooth = true) {
 }
 async function revealInvalid(input: HTMLInputElement) {
   if (input.name === 'forecast_azimuth_deg') direction.value = 'custom';
-  const details = input.closest('details');
-  if (details) details.open = true;
   await nextTick();
   const container = scroll.value!;
   container.scrollTo({ top: container.scrollTop + input.getBoundingClientRect().top - container.getBoundingClientRect().top - 60, behavior: 'instant' });
@@ -156,14 +159,16 @@ async function revealInvalid(input: HTMLInputElement) {
 async function save() {
   if (!editable.value || !dirty.value) return;
   clearValidation();
+  sensorFields.forEach(field => { draft.value.monitoring[field.key] = draft.value.monitoring[field.key].trim(); });
+  await nextTick();
   const inputs = [...form.value!.querySelectorAll<HTMLInputElement>('input')];
   const azimuth = inputs.find(input => input.name === 'forecast_azimuth_deg')!;
   const noct = inputs.find(input => input.name === 'forecast_noct_c')!;
   azimuth.setCustomValidity(azimuth.value !== '' && azimuth.valueAsNumber >= 360 ? t('azimuth_help') : '');
   noct.setCustomValidity(noct.value !== '' && noct.valueAsNumber <= 20 ? t('noct_help') : '');
   const sources = inputs.filter(input => input.name.endsWith('_entity'));
-  sources.forEach(input => input.setCustomValidity(input.value.trim().startsWith('sensor.pvyieldlens_')
-    || sources.some(other => other !== input && other.value.trim() === input.value.trim() && input.value.trim() !== '') ? t('invalid_configuration') : ''));
+  sources.forEach(input => input.setCustomValidity(input.value.startsWith('sensor.pvyieldlens_')
+    || sources.some(other => other !== input && other.value === input.value && input.value !== '') ? t('invalid_configuration') : ''));
   const update = inputs.find(input => input.name === 'update_seconds')!;
   update.setCustomValidity(Number(draft.value.monitoring.update_seconds) > Number(draft.value.monitoring.realtime_window_seconds) ? t('invalid_configuration') : '');
   const invalid = inputs.find(input => input.willValidate && !input.validity.valid);
@@ -237,7 +242,7 @@ async function save() {
                   <label><span>{{ t('realtime_window') }}</span><div class="input-unit"><input name="realtime_window_seconds" type="number" min="10" max="3600" required :value="draft.monitoring.realtime_window_seconds" @input="draft.monitoring.realtime_window_seconds = inputValue($event)"><span>s</span></div></label>
                   <label><span>{{ t('update_interval') }}</span><div class="input-unit"><input name="update_seconds" type="number" min="1" max="60" required :value="draft.monitoring.update_seconds" @input="draft.monitoring.update_seconds = inputValue($event)"><span>s</span></div></label>
                 </div>
-                <details id="monitoring-advanced" class="advanced-settings"><summary>{{ t('advanced') }}</summary><p class="muted">{{ t('hold_help') }}</p><div class="form-grid three"><label v-for="field in timeoutFields" :key="field.key"><span>{{ t(field.label) }}</span><input :name="field.key" type="number" min="1" max="86400" required :value="draft.monitoring[field.key]" @input="draft.monitoring[field.key] = inputValue($event)"></label></div></details>
+                <div class="advanced-settings"><h3>{{ t('advanced') }}</h3><p class="muted">{{ t('hold_help') }}</p><div class="form-grid three"><label v-for="field in timeoutFields" :key="field.key"><span>{{ t(field.label) }}</span><div class="input-unit"><input :name="field.key" type="number" min="1" max="86400" required :value="draft.monitoring[field.key]" @input="draft.monitoring[field.key] = inputValue($event)"><span>s</span></div></label></div></div>
               </section>
               <section class="form-section panel" data-settings-section="forecast">
                 <h2><Compass :size="18" aria-hidden="true" />{{ t('forecast') }}</h2><p class="muted">{{ t('forecast_help') }}</p>
