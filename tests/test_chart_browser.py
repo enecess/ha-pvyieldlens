@@ -1,4 +1,5 @@
 import os
+import re
 from pathlib import Path
 
 import pytest
@@ -16,10 +17,11 @@ async def chart_page(browser_workspace):
 
     async def history(route):
         ends = state['ends']
-        windows = [{'start': [0, *ends][index], 'end': end, 'estimated_power': value,
+        starts = state.get('starts', [0, *ends])
+        windows = [{'start': starts[index], 'end': end, 'estimated_power': value,
                     'actual_power': value, 'pr': 125 if value is not None else None,
                     'optimizable_power': 0 if value is not None else None,
-                    'estimated_energy_wh': 1, 'actual_energy_wh': 1, 'valid_seconds': end - [0, *ends][index],
+                    'estimated_energy_wh': 1, 'actual_energy_wh': 1, 'valid_seconds': end - starts[index],
                     'coverage_percent': 100 if value is not None else 0,
                     'quality': 'complete' if value is not None else 'unavailable', 'reason': None, 'revision': 1}
                    for index, (end, value) in enumerate(zip(ends, state['values']))]
@@ -94,6 +96,27 @@ async def test_tooltip_works_away_from_the_line(chart_page):
     await expect(tooltip).to_contain_text('0 W')
     await page.mouse.move(0, 0)
     await expect(tooltip).to_be_hidden()
+
+
+async def test_missing_settlement_gap_is_unavailable_but_valid_edges_remain_inspectable(chart_page):
+    from playwright.async_api import expect
+
+    page, state = chart_page
+    state['starts'] = [0, 60, 300, 600, 660]
+    await page.locator('#history-range').select_option('7')
+    chart = page.locator('#history-chart')
+    await expect(chart.locator('path.series').first).to_have_attribute('d', re.compile(r'^M[^M]+M[^M]+M[^M]+$'))
+    box = await chart.locator('.chart-hit-area').bounding_box()
+    tooltip = chart.locator('.chart-tooltip')
+    await page.mouse.move(box['x'] + (240 - 60) / 840 * box['width'], box['y'] + 3)
+    await expect(tooltip).to_contain_text('Unavailable')
+    await expect(tooltip).to_contain_text('— W')
+    assert await chart.locator('.active-series-marker[visibility=visible]').count() == 0
+    # Mouse coordinates round to subpixels; exact interval boundaries are unit-tested.
+    for at, value in [(179.9, '80 W'), (300.1, '100 W'), (359.9, '100 W'), (600.1, '20 W')]:
+        await page.mouse.move(box['x'] + (at - 60) / 840 * box['width'], box['y'] + 3)
+        await expect(tooltip).to_contain_text(value)
+        await expect(tooltip).to_contain_text('Data complete')
 
 
 async def test_inspection_reads_original_thinned_record(chart_page):

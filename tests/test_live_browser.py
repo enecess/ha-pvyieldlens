@@ -89,6 +89,27 @@ async def test_unavailable_interval_remains_a_break_and_inspects_raw_values(live
     await page.screenshot(path='artifacts/task-4-live/tooltip-gap.png')
 
 
+async def test_uncovered_live_range_inspects_unavailable_instead_of_distant_samples(live_page):
+    from playwright.async_api import expect
+
+    page, service, state = live_page
+    payload = service.live_history(now=state['now'])
+    payload['points'] = [point for point in payload['points'] if state['now'] - 420 <= point['at'] <= state['now'] - 360]
+    snapshot = service.snapshot(now=state['now'])
+    snapshot['calculated_at'] = state['now'] - 300
+    await page.route('**/api/live-history', lambda route: route.fulfill(json=payload))
+    await page.route('**/api/snapshot', lambda route: route.fulfill(json=snapshot))
+    await page.reload()
+    chart = page.locator('#live-chart')
+    await expect(chart.locator('.chart-hit-area')).to_be_visible()
+    box = await chart.locator('.chart-hit-area').bounding_box()
+    for fraction in [0.1, 0.9]:
+        await page.mouse.move(box['x'] + fraction * box['width'], box['y'] + 3)
+        await expect(chart.locator('.chart-tooltip')).to_contain_text('Unavailable')
+        await expect(chart.locator('.chart-tooltip')).to_contain_text('— W')
+        assert await chart.locator('.active-series-marker[visibility=visible]').count() == 0
+
+
 async def test_source_ages_tick_without_replacing_svg_and_settings_keeps_polling(live_page):
     from playwright.async_api import expect
 
@@ -140,6 +161,11 @@ async def test_resume_gap_survives_duplicate_snapshots_until_seed_fills_it(live_
     async with page.expect_response(lambda response: response.url.endswith('/api/snapshot')):
         await page.clock.fast_forward(60000)
     await expect(page.locator('#live-chart path.series').first).to_have_attribute('d', re.compile(r'^M[^M]+M[^M]+$'))
+    chart = page.locator('#live-chart')
+    box = await chart.locator('.chart-hit-area').bounding_box()
+    await page.mouse.move(box['x'] + 0.7 * box['width'], box['y'] + 3)
+    await expect(chart.locator('.chart-tooltip')).to_contain_text('Unavailable')
+    await expect(chart.locator('.chart-tooltip')).to_contain_text('— W')
     async with page.expect_response(lambda response: response.url.endswith('/api/snapshot')):
         await page.clock.fast_forward(60000)
     await expect(page.locator('#live-chart path.series').first).to_have_attribute('d', re.compile(r'^M[^M]+M[^M]+$'))

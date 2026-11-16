@@ -16,6 +16,7 @@ export function useDashboard() {
   let timer: ReturnType<typeof setTimeout>;
   let context = {};
   let latestRevision = -1;
+  let pendingContextSettings = false;
   let lastPollAt = Date.now() / 1000;
   let pendingSeed: { context: object; readyAtStart: boolean } | null = null;
   let refreshSeed = false;
@@ -52,7 +53,7 @@ export function useDashboard() {
       if (result.context && result.context.revision < latestRevision) return;
       if (result.context && configuration.value) {
         if (latestRevision >= 0 && result.context.revision > latestRevision ||
-          JSON.stringify(result.context.settings) !== JSON.stringify(configuration.value.settings)) {
+          !pendingContextSettings && JSON.stringify(result.context.settings) !== JSON.stringify(configuration.value.settings)) {
           // A seed can discover a monitoring change made by another client.
           context = {};
           request.context = context;
@@ -62,6 +63,7 @@ export function useDashboard() {
         }
         configuration.value = { ...configuration.value, settings: result.context.settings };
         latestRevision = result.context.revision;
+        pendingContextSettings = false;
         updateDisplayTimezone();
       }
       const points = new Map(result.points.map(point => [point.at, { at: point.at,
@@ -97,6 +99,7 @@ export function useDashboard() {
     if (value.monitoring_changed) {
       context = {};
       latestRevision = -1;
+      pendingContextSettings = false;
       livePoints.value = [];
       snapshot.value = null;
       snapshotTimes.clear();
@@ -118,6 +121,17 @@ export function useDashboard() {
       const value = await api.getSnapshot();
       if (disposed || requestContext !== context || value.revision < latestRevision) return;
       const reconnected = (snapshot.value?.connected === false || error.value !== null) && value.connected;
+      const revisionChanged = latestRevision >= 0 && value.revision > latestRevision;
+      if (revisionChanged) {
+        context = {};
+        livePoints.value = [];
+        snapshotTimes.clear();
+        liveHistoryError.value = null;
+        refreshSeed = false;
+        recoveringSeed = false;
+        // The new seed supplies settings for these newly accepted raw snapshots.
+        pendingContextSettings = true;
+      }
       latestRevision = value.revision;
       snapshot.value = value;
       error.value = null;
@@ -131,7 +145,7 @@ export function useDashboard() {
             Date.now() / 1000 - lastPollAt > 2 * (configuration.value?.settings?.update_seconds ?? 5) ? { breakBefore: true } : {}) }]
           .sort((left, right) => left.at - right.at);
       }
-      if (reconnected || recoveringSeed && value.connected && value.realtime) {
+      if (revisionChanged || reconnected || recoveringSeed && value.connected && value.realtime) {
         recoveringSeed = false;
         void seed(true);
       }

@@ -21,6 +21,46 @@ function inspect(host: HTMLElement, at: number, start: number, end: number) {
   }));
 }
 
+it('reports unavailable between broken runs and outside point coverage', () => {
+  const tooltip = vi.fn((point: ChartPoint) => ({ title: String(point.at), rows: [{ label: 'Power', value: String(point.actual_power) }] }));
+  const { host, handle } = chart([
+    { at: 20, actual_power: 10 }, { at: 40, actual_power: 20 },
+    { at: 80, actual_power: 30, breakBefore: true }, { at: 100, actual_power: 40 },
+  ], { range: { start: 0, end: 120 }, tooltip });
+  [0, 10, 60, 110, 120].forEach(at => {
+    inspect(host, at, 0, 120);
+    expect(host.querySelector('.chart-tooltip')?.textContent).toContain('unavailable');
+    expect(host.querySelector('.chart-tooltip')?.textContent).toContain('— W');
+    expect(host.querySelectorAll('.active-series-marker[visibility="visible"]')).toHaveLength(0);
+    expect(handle.selectedAt()).toBeNull();
+  });
+  expect(tooltip).not.toHaveBeenCalled();
+  inspect(host, 35, 0, 120);
+  expect(handle.selectedAt()).toBe(40);
+  expect(host.querySelector('.chart-tooltip')?.textContent).toContain('Power20');
+  inspect(host, 80, 0, 120);
+  expect(handle.selectedAt()).toBe(80);
+});
+
+it('uses settlement coverage without rejecting valid interval edges or crossing a missing settlement', () => {
+  const window = { start: 20, end: 40, actual_power: 10, estimated_power: 20, pr: 50, optimizable_power: 10,
+    actual_energy_wh: 1, estimated_energy_wh: 2, valid_seconds: 20, coverage_percent: 100,
+    quality: 'complete' as const, reason: null };
+  const { host, handle } = chart([
+    { at: 40, actual_power: 10, window },
+    { at: 60, actual_power: 20, window: { ...window, start: 40, end: 60 } },
+    { at: 140, actual_power: 30, window: { ...window, start: 80, end: 140 }, breakBefore: true },
+  ], { range: { start: 0, end: 160 }, coverage: 'windows' });
+  [0, 10, 70, 150, 160].forEach(at => {
+    inspect(host, at, 0, 160);
+    expect(host.querySelector('.chart-tooltip')?.textContent).toContain('unavailable');
+  });
+  [[20, 40], [40, 40], [41, 40], [60, 60], [80, 140], [100, 140], [140, 140]].forEach(([at, expected]) => {
+    inspect(host, at, 0, 160);
+    expect(handle.selectedAt()).toBe(expected);
+  });
+});
+
 it('smooths_without_overshoot', () => {
   const points = [0, 80, 100, 20, 0].map((actual_power, index) => ({ at: [0, 20, 90, 150, 300][index], actual_power }));
   const beforeTotals = structuredClone(points);

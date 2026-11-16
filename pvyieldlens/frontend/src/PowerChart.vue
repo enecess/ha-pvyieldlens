@@ -8,7 +8,7 @@ const props = defineProps<{
   id: string; points: ChartPoint[]; series: ChartSeries[]; unit: string; active: boolean;
   language: Language; timezone: string; theme: ColorMode; currentTime?: number;
   tooltip?: (point: ChartPoint) => ChartTooltip;
-  range?: { start: number; end: number }; selection?: 'nearest' | 'interval';
+  range?: { start: number; end: number }; selection?: 'nearest' | 'interval'; coverage?: 'points' | 'windows';
 }>();
 const host = ref<HTMLElement>();
 let resize: ResizeObserver;
@@ -24,11 +24,11 @@ function draw() {
   if (!host.value.clientWidth || !host.value.clientHeight) return;
   handle = plot(host.value, props.points, props.series, props.unit, {
     language: props.language, timezone: props.timezone, translate: key => translate(catalogs, props.language, key),
-    tooltip: props.tooltip, currentTime: props.currentTime, range: props.range, selection: props.selection, selectedAt,
+    tooltip: props.tooltip, currentTime: props.currentTime, range: props.range, selection: props.selection, coverage: props.coverage, selectedAt,
   });
   if (focused) host.value.querySelector<SVGElement>('.chart-hit-area')?.focus({ preventScroll: true });
 }
-watch(() => [props.points, props.series, props.unit, props.active, props.language, props.timezone, props.theme, props.tooltip, props.range, props.selection],
+watch(() => [props.points, props.series, props.unit, props.active, props.language, props.timezone, props.theme, props.tooltip, props.range, props.selection, props.coverage],
   () => nextTick(draw), { flush: 'post' });
 watch(() => props.currentTime, value => { if (props.active && value !== undefined) handle?.updateTime(value); });
 onMounted(() => {

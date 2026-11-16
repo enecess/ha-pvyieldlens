@@ -180,6 +180,55 @@ it('rejects_obsolete_monitoring_context', async () => {
   expect(dashboard.livePoints.value).toHaveLength(1);
 });
 
+it('reseeds a higher polling revision while connected and keeps only raw updates from that context', async () => {
+  const currentSeed = deferred();
+  let revision = 1;
+  vi.stubGlobal('fetch', async (path: string) => path.endsWith('config') ? response(configuration) :
+    path.endsWith('live-history') ? (revision === 1 ? response(history()) : currentSeed.promise) :
+    response({ ...snapshot, revision, calculated_at: Date.now() / 1000,
+      realtime: { ...snapshot.realtime!, actual_power: revision === 1 ? 4500 : 5400 } }));
+  const { dashboard } = start();
+  await flushPromises();
+  expect(dashboard.livePoints.value).toHaveLength(121);
+  revision = 2;
+  await vi.advanceTimersByTimeAsync(1000);
+  expect(dashboard.snapshot.value).toMatchObject({ connected: true, revision: 2 });
+  expect(dashboard.livePoints.value.map(point => [point.at, point.actual_power])).toEqual([[10001, 5400]]);
+  await vi.advanceTimersByTimeAsync(1000);
+  currentSeed.resolve(response({ ...history(10001), context: { revision: 2,
+    settings: { ...configuration.settings!, rated_power_w: 6000 } },
+    points: [9999, 10001].map(at => ({ at, ...snapshot.realtime!, actual_power: 5200 })) }));
+  await flushPromises();
+  expect(dashboard.configuration.value?.settings?.rated_power_w).toBe(6000);
+  expect(dashboard.livePoints.value.map(point => [point.at, point.actual_power])).toEqual([[9999, 5200], [10001, 5400], [10002, 5400]]);
+  expect(dashboard.snapshot.value).toMatchObject({ revision: 2, calculated_at: 10002 });
+});
+
+it('rejects an old in-flight seed after a higher polling revision initiates a new context', async () => {
+  const seeds = [deferred(), deferred()];
+  let revision = 1, seedCalls = 0;
+  vi.stubGlobal('fetch', async (path: string) => path.endsWith('config') ? response(configuration) :
+    path.endsWith('live-history') ? seeds[seedCalls++].promise : response({ ...snapshot, revision,
+      calculated_at: Date.now() / 1000, realtime: { ...snapshot.realtime!, actual_power: revision === 1 ? 4500 : 5400 } }));
+  const { dashboard } = start();
+  await flushPromises();
+  revision = 2;
+  await vi.advanceTimersByTimeAsync(1000);
+  expect(dashboard.livePoints.value.map(point => [point.at, point.actual_power])).toEqual([[10001, 5400]]);
+  expect(seedCalls).toBe(2);
+  seeds[0].resolve(response(history()));
+  await flushPromises();
+  expect(dashboard.livePoints.value.map(point => [point.at, point.actual_power])).toEqual([[10001, 5400]]);
+  expect(dashboard.snapshot.value?.revision).toBe(2);
+  seeds[1].resolve(response({ ...history(10001), context: { revision: 2,
+    settings: { ...configuration.settings!, realtime_window_seconds: 120 } }, points: [] }));
+  await flushPromises();
+  expect(dashboard.configuration.value?.settings?.realtime_window_seconds).toBe(120);
+  expect(dashboard.livePoints.value.map(point => [point.at, point.actual_power])).toEqual([[10001, 5400]]);
+  await vi.advanceTimersByTimeAsync(1000);
+  expect(dashboard.snapshot.value).toMatchObject({ connected: true, revision: 2, calculated_at: 10002 });
+});
+
 it('rejects a seed revision older than the accepted snapshot and adopts current seed settings', async () => {
   const seed = deferred();
   vi.stubGlobal('fetch', async (path: string) => path.endsWith('config') ? response(configuration) : path.endsWith('live-history') ? seed.promise : response({ ...snapshot, revision: 3 }));

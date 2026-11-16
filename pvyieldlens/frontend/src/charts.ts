@@ -25,6 +25,7 @@ export interface ChartOptions {
   currentTime?: number;
   range?: { start: number; end: number };
   selection?: 'nearest' | 'interval';
+  coverage?: 'points' | 'windows';
   selectedAt?: number | null;
 }
 export interface ChartTooltip {
@@ -40,7 +41,7 @@ export interface ChartHandle {
 let chartId = 0;
 
 export function plot(host: HTMLElement, data: ChartPoint[], series: ChartSeries[], unit: string,
-  { language, timezone, translate: t, tooltip, currentTime, range, selection = 'nearest', selectedAt }: ChartOptions): ChartHandle {
+  { language, timezone, translate: t, tooltip, currentTime, range, selection = 'nearest', coverage = 'points', selectedAt }: ChartOptions): ChartHandle {
   const number = (value: number, digits = 1) => new Intl.NumberFormat(language, { maximumFractionDigits: digits }).format(value);
   const stamps = formatTimes(data.map(point => point.at), language, timezone, {
     hour: '2-digit', minute: '2-digit', second: '2-digit',
@@ -170,24 +171,28 @@ export function plot(host: HTMLElement, data: ChartPoint[], series: ChartSeries[
     guide.setAttribute('visibility', 'hidden');
     markers.forEach(marker => marker.setAttribute('visibility', 'hidden'));
   };
-  const show = (point: ChartPoint | undefined) => {
-    if (!point || point.at < start || point.at > end) { hide(); return; }
+  const show = (point: ChartPoint | undefined, inspectedAt = point?.at) => {
+    const at = point?.at ?? inspectedAt;
+    if (at === undefined || at < start || at > end) { hide(); return; }
     active = point;
-    guide.setAttribute('x1', String(x(point.at)));
-    guide.setAttribute('x2', String(x(point.at)));
+    guide.setAttribute('x1', String(x(at)));
+    guide.setAttribute('x2', String(x(at)));
     guide.setAttribute('visibility', 'visible');
     markers.forEach((marker, index) => {
-      const value = point[series[index].key];
+      const value = point?.[series[index].key];
       marker.setAttribute('visibility', value == null || !Number.isFinite(value) ? 'hidden' : 'visible');
       if (value != null && Number.isFinite(value)) {
-        marker.setAttribute('cx', String(x(point.at)));
+        marker.setAttribute('cx', String(x(at)));
         marker.setAttribute('cy', String(y(value)));
       }
     });
-    const content = tooltip?.(point) ?? { title: labels.get(point.at)!, rows: series.map(item => {
+    const content = point ? tooltip?.(point) ?? { title: labels.get(point.at)!, rows: series.map(item => {
       const value = point[item.key];
       return { label: t(item.label), value: `${value == null ? '—' : number(value)} ${unit}`, color: item.color };
-    }) };
+    }) } : { title: formatTimes([at], language, timezone, {
+      year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit',
+    })[0], rows: [...series.map(item => ({ label: t(item.label), value: `— ${unit}`, color: item.color })),
+      { label: t('chart_quality'), value: t('unavailable') }] };
     const title = document.createElement('strong');
     title.textContent = content.title;
     tip.replaceChildren(title);
@@ -202,25 +207,35 @@ export function plot(host: HTMLElement, data: ChartPoint[], series: ChartSeries[
       tip.append(line);
     });
     tip.hidden = false;
-    hit.setAttribute('aria-valuenow', String(point.at));
+    hit.setAttribute('aria-valuenow', String(at));
     hit.setAttribute('aria-valuetext', tip.textContent!);
     const bounds = host.getBoundingClientRect();
     const visibleLeft = Math.max(0, -bounds.left), visibleRight = Math.min(width, window.innerWidth - bounds.left);
     const visibleTop = Math.max(0, -bounds.top), visibleBottom = Math.min(height, window.innerHeight - bounds.top);
     tip.style.maxWidth = `${Math.max(0, visibleRight - visibleLeft)}px`;
     tip.style.maxHeight = `${Math.max(0, visibleBottom - visibleTop)}px`;
-    tip.style.left = `${Math.max(visibleLeft, Math.min(x(point.at) + 12, visibleRight - tip.offsetWidth))}px`;
+    tip.style.left = `${Math.max(visibleLeft, Math.min(x(at) + 12, visibleRight - tip.offsetWidth))}px`;
     tip.style.top = `${Math.max(visibleTop, Math.min(top + 8, visibleBottom - tip.offsetHeight))}px`;
     const scrollable = tip.scrollHeight > tip.clientHeight;
     tip.style.pointerEvents = scrollable ? 'auto' : 'none';
     tip.tabIndex = scrollable ? 0 : -1;
   };
+  const inspectionRuns = data.reduce<ChartPoint[][]>((runs, point) => {
+    const previous = runs.at(-1)?.at(-1);
+    if (!previous || point.breakBefore || coverage === 'windows' && point.window && previous.window && point.window.start > previous.window.end) runs.push([]);
+    runs.at(-1)!.push(point);
+    return runs;
+  }, []);
   const inspect = (event: PointerEvent) => {
     const bounds = svg.getBoundingClientRect();
     const at = start + Math.max(0, Math.min(1, ((event.clientX - bounds.left) * width / (bounds.width || width) - left) / (width - left - right))) * (end - start);
-    show(selection === 'interval'
-      ? data.find(point => point.interval && point.interval.start <= at && (at < point.interval.end || at === end && point.interval.end === end))
-      : data.reduce((nearest, point) => Math.abs(point.at - at) < Math.abs(nearest.at - at) ? point : nearest));
+    if (selection === 'interval') {
+      show(data.find(point => point.interval && point.interval.start <= at && (at < point.interval.end || at === end && point.interval.end === end)), at);
+      return;
+    }
+    const run = inspectionRuns.find(points => at >= (coverage === 'windows' ? points[0].window!.start : points[0].at) &&
+      at <= (coverage === 'windows' ? points.at(-1)!.window!.end : points.at(-1)!.at));
+    show(run?.reduce((nearest, point) => Math.abs(point.at - at) < Math.abs(nearest.at - at) ? point : nearest), at);
   };
   const listeners = new AbortController();
   const events = { signal: listeners.signal };

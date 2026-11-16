@@ -101,9 +101,9 @@ watch(() => [props.active, range.value, props.snapshot, props.configuration?.set
     <p id="history-boundaries" class="muted">{{ boundaries }}</p>
     <div class="history-grid">
       <article class="panel"><div class="panel-heading"><h2>{{ t('power_chart') }}</h2><div class="legend"><span class="actual-dot">{{ t('actual') }}</span><span class="theoretical-dot">{{ t('estimated') }}</span></div></div>
-        <PowerChart id="history-chart" :points="points" :series="powerSeries" unit="W" :active="active" :language="language" :timezone="displayTimezone" :theme="theme" :tooltip="tooltip" /></article>
+        <PowerChart id="history-chart" :points="points" :series="powerSeries" unit="W" :active="active" :language="language" :timezone="displayTimezone" :theme="theme" :tooltip="tooltip" coverage="windows" /></article>
       <article class="panel"><div class="panel-heading"><h2>{{ t('pr_chart') }}</h2></div>
-        <PowerChart id="pr-chart" :points="points" :series="prSeries" unit="%" :active="active" :language="language" :timezone="displayTimezone" :theme="theme" :tooltip="tooltip" /></article>
+        <PowerChart id="pr-chart" :points="points" :series="prSeries" unit="%" :active="active" :language="language" :timezone="displayTimezone" :theme="theme" :tooltip="tooltip" coverage="windows" /></article>
     </div>
     <div class="inline-notes muted"><span id="last-settled">{{ t('last_settled', { time: settled }) }}</span><span>{{ t('settled_hint') }}</span></div>
     <details id="history-totals" class="panel totals-fold"><summary>{{ t('totals') }}</summary>
