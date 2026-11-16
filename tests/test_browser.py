@@ -481,6 +481,53 @@ async def test_sensor_suggestions_filter_select_and_preserve_manual_drafts(brows
     await expect(menu).not_to_be_visible()
 
 
+@pytest.mark.parametrize('shortcut, selection, active_index', [
+    ('Shift+ArrowUp', [0, 7], 1),
+    ('Shift+ArrowDown', [7, 17], 0),
+])
+async def test_sensor_shifted_arrows_preserve_native_text_selection(browser_workspace, shortcut, selection, active_index):
+    from playwright.async_api import expect
+
+    page, _, _ = browser_workspace
+    await page.route('**/api/connection', lambda route: route.fulfill(json={
+        'timezone': 'UTC', 'location': None,
+        'entities': [
+            {'entity_id': 'sensor.roof_power', 'name': 'Roof inverter', 'unit': 'W', 'state': '1'},
+            {'entity_id': 'sensor.roof_power_backup', 'name': 'Backup inverter', 'unit': 'W', 'state': '2'},
+        ]}))
+    await page.locator('#settings-button').click()
+    await expect(page.locator('#connection-result')).to_have_text('Connection verified')
+    await page.locator('[data-settings-category=sources]').click()
+    power = page.get_by_role('combobox', name='Actual Power', exact=True)
+    await power.fill('sensor.roof_power')
+    options = page.get_by_role('listbox').get_by_role('option')
+    await expect(options).to_have_count(2)
+    await power.press('ArrowDown')
+    await expect(options.nth(0)).to_have_attribute('aria-selected', 'true')
+    await power.press('ArrowDown')
+    await expect(options.nth(1)).to_have_attribute('aria-selected', 'true')
+    await power.press('ArrowUp')
+    await expect(options.nth(0)).to_have_attribute('aria-selected', 'true')
+    if active_index == 1:
+        await power.press('ArrowDown')
+    active_id = await options.nth(active_index).get_attribute('id')
+    await expect(power).to_have_attribute('aria-activedescendant', active_id)
+    await power.evaluate('(input) => input.setSelectionRange(7, 7)')
+    await power.press(shortcut)
+    assert await power.evaluate('''input => ({
+        selection: [input.selectionStart, input.selectionEnd],
+        active: input.getAttribute('aria-activedescendant'),
+    })''') == {'selection': selection, 'active': active_id}
+    await expect(options.nth(active_index)).to_have_attribute('aria-selected', 'true')
+    await expect(page.get_by_role('listbox').get_by_role('option', selected=True)).to_have_count(1)
+    await expect(power).to_have_value('sensor.roof_power')
+    await expect(power).to_be_focused()
+    await power.press('Shift+Tab')
+    await expect(page.locator('[name=temperature_coefficient_pct_per_c]')).to_be_focused()
+    await expect(power).to_have_attribute('aria-expanded', 'false')
+    await expect(page.get_by_role('listbox')).not_to_be_visible()
+
+
 async def test_sensor_keyboard_selection_survives_unchanged_location_poll(browser_workspace):
     from playwright.async_api import expect
     from pvyieldlens.settings import HALocation

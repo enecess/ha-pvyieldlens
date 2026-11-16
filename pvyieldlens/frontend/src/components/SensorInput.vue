@@ -79,7 +79,7 @@ async function keydown(event: KeyboardEvent) {
   else if (event.key === 'Enter' && open.value) {
     event.preventDefault();
     if (activeIndex.value >= 0) select(filtered.value[activeIndex.value]!);
-  } else if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+  } else if (!event.shiftKey && (event.key === 'ArrowDown' || event.key === 'ArrowUp')) {
     event.preventDefault();
     show();
     activeIndex.value = event.key === 'ArrowDown' ? Math.min(activeIndex.value + 1, filtered.value.length - 1)
