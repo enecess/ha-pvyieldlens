@@ -50,19 +50,24 @@ def layout_artifacts():
 
 
 @pytest.mark.parametrize('width', [1440, 1100, 1920, 2560])
-async def test_data_and_settings_keep_header_and_content_width(layout_page, layout_artifacts, width):
+@pytest.mark.parametrize('height', [600, 1000])
+async def test_data_and_settings_keep_header_and_content_width(layout_page, layout_artifacts, width, height):
     from playwright.async_api import expect
 
     page, _ = layout_page
-    await page.set_viewport_size({'width': width, 'height': 600})
+    await page.set_viewport_size({'width': width, 'height': height})
     measurements = []
     for control, destination in [('live-tab', 'live-page'), ('history-tab', 'history-page'),
+                                  ('live-tab', 'live-page'),
                                   ('forecast-tab', 'forecast-page'), ('settings-button', 'settings-page'),
                                   ('forecast-tab', 'forecast-page')]:
         await page.locator(f'#{control}').click()
         await expect(page.locator(f'#{destination}')).to_be_visible()
         measurements.append(await page.evaluate('''destination => ({destination,
-            viewport: innerWidth, occupied: innerWidth - document.documentElement.clientWidth,
+            viewport: innerWidth,
+            root: {clientHeight: document.documentElement.clientHeight,
+                scrollHeight: document.documentElement.scrollHeight,
+                overflows: document.documentElement.scrollHeight > document.documentElement.clientHeight},
             scrollWidth: document.documentElement.scrollWidth,
             boxes: Object.fromEntries(Object.entries({brand: '.brand', language: '.language-picker',
                 settings: '#settings-button', status: '#connection-state', theme: '.theme-control',
@@ -72,8 +77,10 @@ async def test_data_and_settings_keep_header_and_content_width(layout_page, layo
             }))})''', destination))
         assert await page.locator('.app-header #connection-state').count() == 1
         assert await page.locator('#theme-mode, .context-bar').count() == 0
-    (layout_artifacts / f'widths-{width}.json').write_text(json.dumps(measurements, indent=2), encoding='utf-8')
-    assert measurements[0]['occupied'] > 0
+    (layout_artifacts / f'widths-{width}-{height}.json').write_text(json.dumps(measurements, indent=2), encoding='utf-8')
+    assert measurements[0]['root']['overflows'] is (height == 600)
+    assert measurements[1]['root']['overflows']
+    assert measurements[2]['root']['overflows'] is (height == 600)
     for measurement in measurements:
         assert measurement['scrollWidth'] <= width
         assert measurement['boxes']['content']['width'] <= 1388
@@ -82,13 +89,12 @@ async def test_data_and_settings_keep_header_and_content_width(layout_page, layo
         status, theme = measurement['boxes']['status'], measurement['boxes']['theme']
         assert status['right'] < theme['x']
         assert (status['top'] + status['bottom']) / 2 == pytest.approx((theme['top'] + theme['bottom']) / 2, abs=1)
-        scrollbar_change = measurements[0]['occupied'] - measurement['occupied']
-        left_change = scrollbar_change / 2 if width > 1440 else 0
-        assert measurement['boxes']['brand']['x'] == pytest.approx(measurements[0]['boxes']['brand']['x'] + left_change, abs=1)
+        assert measurement['boxes']['brand']['x'] == pytest.approx(measurements[0]['boxes']['brand']['x'], abs=1)
         assert measurement['boxes']['brand']['width'] == pytest.approx(measurements[0]['boxes']['brand']['width'], abs=1)
-        assert measurement['boxes']['content']['x'] == pytest.approx(measurements[0]['boxes']['content']['x'] + left_change, abs=1)
-        assert measurement['boxes']['content']['width'] == pytest.approx(measurements[0]['boxes']['content']['width'] + (scrollbar_change if width <= 1440 else 0), abs=1)
-        assert measurement['boxes']['language']['right'] == pytest.approx(measurements[0]['boxes']['language']['right'] + scrollbar_change - left_change, abs=1)
+        assert measurement['boxes']['content']['x'] == pytest.approx(measurements[0]['boxes']['content']['x'], abs=1)
+        assert measurement['boxes']['content']['width'] == pytest.approx(measurements[0]['boxes']['content']['width'], abs=1)
+        assert measurement['boxes']['settings']['right'] == pytest.approx(measurements[0]['boxes']['settings']['right'], abs=1)
+        assert measurement['boxes']['language']['right'] == pytest.approx(measurements[0]['boxes']['language']['right'], abs=1)
         assert measurement['boxes']['language']['width'] == pytest.approx(measurements[0]['boxes']['language']['width'], abs=1)
 
 

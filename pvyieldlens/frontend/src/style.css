@@ -1,6 +1,7 @@
 @import "tailwindcss";
 
 :root {
+  scrollbar-gutter: stable;
   --pv-bg: #f3f5f9;
   --pv-surface: #ffffff;
   --pv-raised: #ffffff;
