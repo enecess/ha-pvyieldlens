@@ -53,6 +53,10 @@ const sensorFields = [
   { key: 'temperature_entity', label: 'temp_source', units: ['°C', '°F', 'K'] },
   { key: 'irradiance_entity', label: 'irr_source', units: ['W/m²', 'W/m2', 'W/m^2', 'kW/m²', 'kW/m2'] },
 ] as const;
+const sensorOptions = computed(() => sensorFields.map(field => ({ ...field,
+  entities: (discovered.value?.entities ?? []).filter(entity => !entity.entity_id.startsWith('sensor.pvyieldlens_')
+    && (field.units as readonly string[]).includes(entity.unit ?? '')),
+})));
 const timeoutFields = [
   { key: 'power_max_age_seconds', label: 'power_age' }, { key: 'temperature_max_age_seconds', label: 'temp_age' },
   { key: 'irradiance_max_age_seconds', label: 'irr_age' },
@@ -233,8 +237,8 @@ async function save() {
               <section class="form-section panel" data-settings-section="sources">
                 <h2><Database :size="18" aria-hidden="true" />{{ t('inputs') }}</h2>
                 <div class="sensor-fields">
-                  <SensorInput v-for="field in sensorFields" :key="field.key" v-model="draft.monitoring[field.key]" :name="field.key" :label="t(field.label)"
-                    :entities="(discovered?.entities ?? []).filter(entity => !entity.entity_id.startsWith('sensor.pvyieldlens_') && (field.units as readonly string[]).includes(entity.unit ?? ''))"
+                  <SensorInput v-for="field in sensorOptions" :key="field.key" v-model="draft.monitoring[field.key]" :name="field.key" :label="t(field.label)"
+                    :entities="field.entities"
                     :active="active" :disabled="!editable" />
                 </div>
               </section>

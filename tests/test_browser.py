@@ -481,6 +481,42 @@ async def test_sensor_suggestions_filter_select_and_preserve_manual_drafts(brows
     await expect(menu).not_to_be_visible()
 
 
+async def test_sensor_keyboard_selection_survives_unchanged_location_poll(browser_workspace):
+    from playwright.async_api import expect
+    from pvyieldlens.settings import HALocation
+
+    page, service, _ = browser_workspace
+    response = await page.request.get(page.url + 'api/config')
+    await service.configure(service.config, origin=(await response.json())['connection']['url'])
+    service.forecast.configure(service.config, service.forecast.settings, service.origin,
+        HALocation(origin=service.origin, latitude=1.0, longitude=2.0, location_name='Active', timezone='UTC'))
+    await page.reload()
+    await expect(page.locator('main')).to_have_attribute('data-snapshot-ready', 'true')
+    await page.locator('#settings-button').click()
+    await expect(page.locator('#connection-result')).to_have_text('Connection verified')
+    await expect(page.locator('#forecast-location')).to_have_text('Active · 1, 2 · UTC')
+    await page.locator('[data-settings-category=sources]').click()
+    control = page.get_by_role('combobox', name='Actual Power', exact=True)
+    await control.fill('')
+    await control.press('ArrowDown')
+    option = page.get_by_role('listbox').get_by_role('option')
+    await expect(option).to_have_attribute('aria-selected', 'true')
+    active_id = await option.get_attribute('id')
+    await expect(control).to_have_attribute('aria-activedescendant', active_id)
+    async with page.expect_response(lambda response: response.url.endswith('/api/snapshot')) as update:
+        pass
+    assert (await (await update.value).json())['location'] == {
+        'origin': service.origin, 'latitude': 1.0, 'longitude': 2.0, 'location_name': 'Active', 'timezone': 'UTC'}
+    await page.evaluate('() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))')
+    await expect(control).to_be_focused()
+    await expect(control).to_have_value('')
+    await expect(control).to_have_attribute('aria-activedescendant', active_id)
+    await expect(option).to_have_attribute('aria-selected', 'true')
+    await control.press('Enter')
+    await expect(control).to_have_value('sensor.power')
+    await expect(control).to_have_attribute('aria-expanded', 'false')
+
+
 @pytest.mark.parametrize('selection', ['pointer', 'keyboard'])
 async def test_sensor_selection_clears_server_field_feedback(browser_workspace, selection):
     from playwright.async_api import expect
