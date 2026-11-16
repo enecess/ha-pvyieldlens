@@ -135,6 +135,9 @@ async def test_cross_origin_parent_and_blocked_storage_use_system(theme_page):
 async def test_shell_keeps_data_navigation_visible_in_settings(theme_page):
     from playwright.async_api import expect
 
+    await theme_page.locator('#pvyieldlens-frame').evaluate('''frame => {
+        frame.width = '1000'; frame.height = '600';
+    }''')
     app = theme_page.frame_locator('#pvyieldlens-frame')
     await expect(app.locator('#live-page')).to_be_visible()
     await app.locator('#history-tab').click()

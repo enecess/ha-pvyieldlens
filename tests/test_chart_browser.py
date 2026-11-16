@@ -175,16 +175,19 @@ async def test_keyboard_and_touch_inspection(chart_page):
     box = await touch_chart.locator('.chart-hit-area').bounding_box()
     await touch.touchscreen.tap(box['x'] + box['width'] / 2, box['y'] + 20)
     await expect(touch_chart.locator('.chart-tooltip')).to_be_visible()
-    await touch.touchscreen.tap(10, 10)
+    header = await touch.locator('.app-header').bounding_box()
+    await touch.touchscreen.tap(10, header['height'] + 5)
     await expect(touch_chart.locator('.chart-tooltip')).to_be_hidden()
     assert await touch_chart.locator('.chart-hit-area').evaluate("node => getComputedStyle(node).touchAction") == 'pan-y'
     session = await context.new_cdp_session(touch)
-    before = await touch.evaluate('scrollY')
+    before = await touch.locator('#content-scroll').evaluate('node => node.scrollTop')
     await session.send('Input.dispatchTouchEvent', {'type': 'touchStart', 'touchPoints': [{'x': box['x'] + 20, 'y': box['y'] + 100}]})
     for distance in [20, 40, 70, 100]:
         await session.send('Input.dispatchTouchEvent', {'type': 'touchMove', 'touchPoints': [{'x': box['x'] + 20, 'y': box['y'] + 100 - distance}]})
     await session.send('Input.dispatchTouchEvent', {'type': 'touchEnd', 'touchPoints': []})
-    await touch.wait_for_function('before => scrollY > before', arg=before)
+    await touch.wait_for_function("before => document.querySelector('#content-scroll').scrollTop > before", arg=before)
+    assert await touch.evaluate('scrollY') == 0
+    assert (await touch.locator('.app-header').bounding_box())['y'] == 0
     await context.close()
 
 
@@ -225,7 +228,10 @@ async def test_partially_visible_tooltip_keeps_all_rows_reachable(chart_page):
     await page.locator('#language-select').select_option('fr')
     chart = page.locator('#history-chart')
     await chart.scroll_into_view_if_needed()
-    await chart.evaluate('host => scrollTo(0, host.getBoundingClientRect().top + scrollY - innerHeight + 90)')
+    await chart.evaluate('''host => {
+        const scroll = document.querySelector('#content-scroll');
+        scroll.scrollTo(0, host.getBoundingClientRect().top + scroll.scrollTop - innerHeight + 90);
+    }''')
     await page.wait_for_function("() => Math.abs(document.querySelector('#history-chart').getBoundingClientRect().top - innerHeight + 90) < 1")
     hit = chart.locator('.chart-hit-area')
     box = await hit.bounding_box()
@@ -247,3 +253,28 @@ async def test_partially_visible_tooltip_keeps_all_rows_reachable(chart_page):
     await page.keyboard.press('Escape')
     await expect(tooltip).to_be_hidden()
     await expect(hit).to_be_focused()
+
+
+async def test_tooltip_on_top_clipped_chart_stays_below_header(chart_page):
+    from playwright.async_api import expect
+
+    page, _ = chart_page
+    await page.set_viewport_size({'width': 390, 'height': 600})
+    chart = page.locator('#history-chart')
+    await expect(page.locator('#content-scroll')).to_have_count(1)
+    await chart.evaluate('''host => {
+        const scroll = document.querySelector('#content-scroll');
+        scroll.scrollTo(0, scroll.scrollTop + host.getBoundingClientRect().top - scroll.getBoundingClientRect().top + 70);
+    }''')
+    await page.wait_for_function("document.querySelector('#history-chart').getBoundingClientRect().top < document.querySelector('.app-header').getBoundingClientRect().bottom")
+    hit = await chart.locator('.chart-hit-area').bounding_box()
+    header = await page.locator('.app-header').bounding_box()
+    await page.mouse.move(hit['x'] + hit['width'] / 2, header['height'] + 10)
+    tooltip = chart.locator('.chart-tooltip')
+    await expect(tooltip).to_be_visible()
+    box = await tooltip.bounding_box()
+    assert box['y'] >= header['height'], {'tooltip': box, 'header': header}
+    assert box['y'] + box['height'] <= 600
+    evidence = Path(os.getenv('PVYL_LAYOUT_ARTIFACTS', 'artifacts/task-6-layout'))
+    evidence.mkdir(parents=True, exist_ok=True)
+    await page.screenshot(path=str(evidence / 'tooltip-top-clipped-390.png'))

@@ -112,7 +112,7 @@ async function loadConfiguration(entering = false) {
     await nextTick();
     scrollToSection(props.initialSection, false);
     if (matchMedia('(max-width: 600px) and (max-height: 600px)').matches) {
-      document.querySelector('#settings-heading')!.scrollIntoView({ block: 'start' });
+      document.querySelector('#settings-categories')!.scrollIntoView({ block: 'start' });
     }
     const saved = configuration.value;
     if (saved && (saved.mode === 'app' || saved.connection.url && saved.connection.token_set)) void discoverEntities();

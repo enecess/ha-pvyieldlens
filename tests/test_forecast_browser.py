@@ -343,7 +343,11 @@ async def test_forecast_and_monitoring_layout_evidence(forecast_page, browser_wo
                 assert chart['width'] > 0 and chart['x'] >= 0 and chart['x'] + chart['width'] <= width
                 await page.screenshot(path=str(path/f'forecast-hourly-{size}.png'))
                 await page.locator('#forecast-details summary').click()
-                await page.evaluate("scrollTo(0, document.querySelector('#forecast-details').getBoundingClientRect().top + scrollY - 16)")
+                await page.locator('#forecast-details').evaluate('''details => {
+                    const scroll = document.querySelector('#content-scroll');
+                    scroll.scrollTo(0, scroll.scrollTop + details.getBoundingClientRect().top - scroll.getBoundingClientRect().top - 16);
+                }''')
+                assert (await page.locator('#forecast-details').bounding_box())['y'] >= (await page.locator('.app-header').bounding_box())['height']
                 await page.screenshot(path=str(path/f'forecast-details-{size}.png'))
                 await page.locator('#forecast-details summary').click()
         await page.locator('#forecast-tab').click()
@@ -406,7 +410,7 @@ async def test_weather_today_layout_in_six_languages_and_both_themes(forecast_pa
                 assert geometry['columns'] == (7 if width == 1440 else 4)
                 assert all(card['scroll'] <= card['width'] and card['weather'] for card in geometry['cards']), (width, language, theme, geometry)
                 if language == 'zh' and (width == 320 or theme == 'light'):
-                    await page.evaluate('scrollTo(0, 0)')
+                    await page.locator('#content-scroll').evaluate('node => node.scrollTo(0, 0)')
                     await page.screenshot(path=str(evidence / f'forecast-zh-{width}-{theme}.png'), full_page=True)
     assert state['hourly'] == 1
 

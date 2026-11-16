@@ -1,3 +1,4 @@
+import base64
 import json
 import os
 import time
@@ -56,6 +57,7 @@ async def test_data_and_settings_keep_header_and_content_width(layout_page, layo
 
     page, _ = layout_page
     await page.set_viewport_size({'width': width, 'height': height})
+    await expect(page.locator('#content-scroll')).to_have_count(1)
     measurements = []
     for control, destination in [('live-tab', 'live-page'), ('history-tab', 'history-page'),
                                   ('live-tab', 'live-page'),
@@ -69,7 +71,13 @@ async def test_data_and_settings_keep_header_and_content_width(layout_page, layo
                 scrollHeight: document.documentElement.scrollHeight,
                 overflows: document.documentElement.scrollHeight > document.documentElement.clientHeight},
             scrollWidth: document.documentElement.scrollWidth,
+            content: (() => {
+                const node = document.querySelector('#content-scroll'), style = getComputedStyle(node);
+                return {clientWidth: node.clientWidth, scrollWidth: node.scrollWidth,
+                    overflows: node.scrollHeight > node.clientHeight, gutter: style.scrollbarGutter};
+            })(),
             boxes: Object.fromEntries(Object.entries({brand: '.brand', language: '.language-picker',
+                header: '.app-header', main: 'main',
                 settings: '#settings-button', status: '#connection-state', theme: '.theme-control',
                 content: '#' + destination}).map(([name, selector]) => {
                 const {x, right, width, top, bottom} = document.querySelector(selector).getBoundingClientRect();
@@ -78,14 +86,24 @@ async def test_data_and_settings_keep_header_and_content_width(layout_page, layo
         assert await page.locator('.app-header #connection-state').count() == 1
         assert await page.locator('#theme-mode, .context-bar').count() == 0
     (layout_artifacts / f'widths-{width}-{height}.json').write_text(json.dumps(measurements, indent=2), encoding='utf-8')
-    assert measurements[0]['root']['overflows'] is (height == 600)
-    assert measurements[1]['root']['overflows']
-    assert measurements[2]['root']['overflows'] is (height == 600)
+    assert measurements[0]['content']['overflows'] is (height == 600)
+    assert measurements[1]['content']['overflows']
+    assert measurements[2]['content']['overflows'] is (height == 600)
     for measurement in measurements:
+        assert not measurement['root']['overflows']
         assert measurement['scrollWidth'] <= width
+        assert measurement['content']['scrollWidth'] <= measurement['content']['clientWidth']
+        assert measurement['content']['gutter'] == 'stable'
+        assert measurement['boxes']['header']['x'] == 0
+        assert measurement['boxes']['header']['top'] == 0
+        assert measurement['boxes']['header']['right'] == width
         assert measurement['boxes']['content']['width'] <= 1388
-        assert measurement['boxes']['brand']['x'] == pytest.approx(measurement['boxes']['content']['x'], abs=1)
-        assert measurement['boxes']['settings']['right'] == pytest.approx(measurement['boxes']['content']['right'], abs=1)
+        header_inset = max(26, (width - 1440) / 2 + 26)
+        assert measurement['boxes']['brand']['x'] == pytest.approx(header_inset, abs=1)
+        assert measurement['boxes']['settings']['right'] == pytest.approx(width - header_inset, abs=1)
+        assert measurement['boxes']['content']['x'] == pytest.approx(measurement['boxes']['main']['x'] + 26, abs=1)
+        assert measurement['boxes']['content']['right'] == pytest.approx(measurement['boxes']['main']['right'] - 26, abs=1)
+        assert measurement['boxes']['main']['right'] <= measurement['content']['clientWidth']
         status, theme = measurement['boxes']['status'], measurement['boxes']['theme']
         assert status['right'] < theme['x']
         assert (status['top'] + status['bottom']) / 2 == pytest.approx((theme['top'] + theme['bottom']) / 2, abs=1)
@@ -96,6 +114,60 @@ async def test_data_and_settings_keep_header_and_content_width(layout_page, layo
         assert measurement['boxes']['settings']['right'] == pytest.approx(measurements[0]['boxes']['settings']['right'], abs=1)
         assert measurement['boxes']['language']['right'] == pytest.approx(measurements[0]['boxes']['language']['right'], abs=1)
         assert measurement['boxes']['language']['width'] == pytest.approx(measurements[0]['boxes']['language']['width'], abs=1)
+
+
+@pytest.mark.parametrize(('width', 'height'), [(1440, 1000), (390, 1600)])
+@pytest.mark.parametrize(('theme', 'background'), [('light', [243, 245, 249, 255]), ('dark', [16, 23, 35, 255])])
+async def test_content_empty_gutter_matches_background_and_scrolled_header_stays_visible(layout_page, layout_artifacts, width, height, theme, background):
+    from playwright.async_api import expect
+
+    page, _ = layout_page
+    await page.set_viewport_size({'width': width, 'height': height})
+    await page.locator('#theme-select').select_option(theme)
+    await expect(page.locator('#content-scroll')).to_have_count(1)
+    empty = await page.locator('#content-scroll').evaluate('''node => {
+        const {top, right, bottom} = node.getBoundingClientRect(), style = getComputedStyle(node);
+        return {top, right, bottom, clientWidth: node.clientWidth, width: node.offsetWidth,
+            scrollHeight: node.scrollHeight, height: node.clientHeight, background: style.backgroundColor,
+            scrollbarWidth: style.scrollbarWidth, scrollbarColor: style.scrollbarColor};
+    }''')
+    assert empty['scrollHeight'] <= empty['height'], empty
+    assert empty['width'] > empty['clientWidth'], empty
+    capture = await page.screenshot(path=str(layout_artifacts / f'empty-gutter-{width}-{theme}.png'))
+    pixels = await page.evaluate('''async ({png, x, top, bottom}) => {
+        const image = new Image(); image.src = 'data:image/png;base64,' + png; await image.decode();
+        const canvas = document.createElement('canvas'); canvas.width = image.width; canvas.height = image.height;
+        const context = canvas.getContext('2d'); context.drawImage(image, 0, 0);
+        return [top + 2, Math.floor((top + bottom) / 2), bottom - 2].map(y =>
+            [...context.getImageData(x, y, 1, 1).data]);
+    }''', {'png': base64.b64encode(capture).decode(), 'x': width - 2, 'top': empty['top'], 'bottom': empty['bottom']})
+    assert pixels == [background] * 3, {'geometry': empty, 'pixels': pixels}
+    await page.locator('#settings-button').click()
+    settings_style = await page.locator('#settings-scroll').evaluate('''node => {
+        const style = getComputedStyle(node); return {width: style.scrollbarWidth, color: style.scrollbarColor};
+    }''')
+    assert empty['scrollbarWidth'] == settings_style['width'] == 'thin'
+    assert empty['scrollbarColor'] == settings_style['color']
+    assert settings_style['color'].endswith('rgba(0, 0, 0, 0)')
+    scrolled_height = min(height, 1000)
+    await page.set_viewport_size({'width': width, 'height': scrolled_height})
+    await page.locator('#history-tab').click()
+    await page.locator('#history-totals').evaluate('node => node.open = true')
+    await page.locator('#content-scroll').evaluate('node => node.scrollTo(0, node.scrollHeight)')
+    await page.wait_for_function("document.querySelector('#content-scroll').scrollTop > 0")
+    scrolled = await page.evaluate('''() => {
+        const header = document.querySelector('.app-header').getBoundingClientRect(), node = document.querySelector('#content-scroll');
+        return {headerTop: header.top, headerRight: header.right, headerBottom: header.bottom,
+            contentTop: node.getBoundingClientRect().top, scrollTop: node.scrollTop,
+            rootTop: scrollY, rootHeight: document.documentElement.scrollHeight};
+    }''')
+    assert scrolled['headerTop'] == scrolled['rootTop'] == 0, scrolled
+    assert scrolled['headerRight'] == width
+    assert scrolled['contentTop'] == scrolled['headerBottom']
+    assert scrolled['rootHeight'] == scrolled_height
+    await page.screenshot(path=str(layout_artifacts / f'scrolled-header-{width}-{theme}.png'))
+    (layout_artifacts / f'gutter-{width}-{theme}.json').write_text(json.dumps({'empty': empty, 'pixels': pixels,
+        'settings_scrollbar': settings_style, 'scrolled': scrolled}, indent=2), encoding='utf-8')
 
 
 @pytest.mark.parametrize('width', [601, 700, 768, 800, 801, 851, 900, 1024])
@@ -141,16 +213,18 @@ async def test_scrolled_navigation_reveals_destination_and_preserves_same_page_s
     await page.emulate_media(reduced_motion='reduce')
     await page.locator('#language-select').select_option(language)
     await page.locator('#source-diagnostics').evaluate('node => node.open = true')
-    await page.evaluate('window.scrollTo(0, 500)')
-    await page.wait_for_function('scrollY > 50')
-    before = await page.evaluate('scrollY')
+    await expect(page.locator('#content-scroll')).to_have_count(1)
+    await page.locator('#content-scroll').evaluate('node => node.scrollTo(0, 500)')
+    await page.wait_for_function("document.querySelector('#content-scroll').scrollTop > 50")
+    before = await page.locator('#content-scroll').evaluate('node => node.scrollTop')
     await page.locator('#live-tab').evaluate('node => node.click()')
-    assert await page.evaluate('scrollY') == pytest.approx(before, abs=1)
+    assert await page.locator('#content-scroll').evaluate('node => node.scrollTop') == pytest.approx(before, abs=1)
+    assert (await page.locator('.app-header').bounding_box())['y'] == 0
     await page.locator('#settings-button').evaluate('node => node.click()')
     await expect(page.locator('#settings-page')).to_be_visible()
     await expect(page.locator('#load-entities')).to_be_enabled()
     if width > 600:
-        assert await page.evaluate('scrollY') == 0
+        assert await page.locator('#content-scroll').evaluate('node => node.scrollTop') == 0
     await page.locator('button[data-settings-category=monitoring]').click()
     await expect(page.locator('[name=power_max_age_seconds]')).to_be_visible()
     await page.locator('[name=update_seconds]').fill('2')
@@ -165,6 +239,7 @@ async def test_scrolled_navigation_reveals_destination_and_preserves_same_page_s
     await page.locator('#discard-changes').click()
     await expect(page.locator('#live-page')).to_be_visible()
     assert await page.evaluate('scrollY') == 0
+    assert await page.locator('#content-scroll').evaluate('node => node.scrollTop') == 0
     assert (await page.locator('#live-page h1').bounding_box())['y'] >= (await page.locator('.app-header').bounding_box())['height']
     await page.screenshot(path=str(layout_artifacts / f'navigation-{width}-{language}.png'))
 
@@ -256,10 +331,13 @@ async def test_short_mobile_settings_keeps_directory_and_actions_usable(layout_p
     await page.locator('#language-select').select_option('de')
     await page.locator('#settings-button').click()
     await expect(page.locator('#load-entities')).to_be_enabled()
+    header = await page.locator('.app-header').bounding_box()
+    directory = await page.locator('#settings-categories').bounding_box()
+    assert directory['y'] == pytest.approx(header['height'], abs=1)
     evidence = []
     for category in ['connection', 'panels', 'sources', 'monitoring', 'forecast']:
         await page.locator(f'[data-settings-category={category}]').click()
-        await page.locator('#settings-heading').evaluate('node => node.scrollIntoView({block: "start"})')
+        await page.locator('#settings-categories').evaluate('node => node.scrollIntoView({block: "start"})')
         geometry = await page.evaluate('''() => {
             const box = selector => {
                 const {top, bottom, left, right} = document.querySelector(selector).getBoundingClientRect();
@@ -271,6 +349,9 @@ async def test_short_mobile_settings_keeps_directory_and_actions_usable(layout_p
         }''')
         assert 0 <= geometry['dock']['top'] < geometry['dock']['bottom'] <= 430, geometry
         assert geometry['directory']['bottom'] < geometry['dock']['top'], geometry
+        assert geometry['directory']['top'] >= header['height'] - 1, geometry
+        assert (await page.locator('.app-header').bounding_box())['y'] == 0
+        assert await page.evaluate('scrollY') == 0
         assert geometry['scrollWidth'] <= geometry['width'], geometry
         evidence.append({'category': category, **geometry})
     await page.locator('#settings-scroll').evaluate('node => node.scrollTo(0, node.scrollHeight)')

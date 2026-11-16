@@ -211,7 +211,8 @@ export function plot(host: HTMLElement, data: ChartPoint[], series: ChartSeries[
     hit.setAttribute('aria-valuetext', tip.textContent!);
     const bounds = host.getBoundingClientRect();
     const visibleLeft = Math.max(0, -bounds.left), visibleRight = Math.min(width, window.innerWidth - bounds.left);
-    const visibleTop = Math.max(0, -bounds.top), visibleBottom = Math.min(height, window.innerHeight - bounds.top);
+    const viewportTop = host.closest('#content-scroll')?.getBoundingClientRect().top ?? 0;
+    const visibleTop = Math.max(0, viewportTop - bounds.top), visibleBottom = Math.min(height, window.innerHeight - bounds.top);
     tip.style.maxWidth = `${Math.max(0, visibleRight - visibleLeft)}px`;
     tip.style.maxHeight = `${Math.max(0, visibleBottom - visibleTop)}px`;
     tip.style.left = `${Math.max(visibleLeft, Math.min(x(at) + 12, visibleRight - tip.offsetWidth))}px`;

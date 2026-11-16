@@ -39,9 +39,10 @@ watch(open, async (visible, _, onCleanup) => {
 function positionPopup() {
   const rect = input.value!.getBoundingClientRect();
   const bounds = input.value!.closest<HTMLElement>('#settings-scroll')!.getBoundingClientRect();
-  const bottom = Math.min(window.innerHeight - 8, bounds.bottom, document.querySelector('#settings-actions')!.getBoundingClientRect().top - 6);
-  if (rect.bottom <= Math.max(0, bounds.top) || rect.top >= bottom) { open.value = false; return; }
-  const above = Math.max(0, rect.top - 14);
+  const viewport = input.value!.closest<HTMLElement>('#content-scroll')!.getBoundingClientRect();
+  const bottom = Math.min(viewport.bottom - 8, bounds.bottom, document.querySelector('#settings-actions')!.getBoundingClientRect().top - 6);
+  if (rect.bottom <= Math.max(viewport.top, bounds.top) || rect.top >= bottom) { open.value = false; return; }
+  const above = Math.max(0, rect.top - viewport.top - 14);
   const below = Math.max(0, bottom - rect.bottom - 6);
   const upward = below < Math.min(240, above);
   const height = Math.min(240, upward ? above : below);
@@ -54,7 +55,7 @@ function positionPopup() {
 function show() {
   const container = input.value!.closest<HTMLElement>('#settings-scroll')!;
   const rect = input.value!.getBoundingClientRect();
-  const top = Math.max(8, container.getBoundingClientRect().top + 8);
+  const top = Math.max(container.getBoundingClientRect().top, input.value!.closest<HTMLElement>('#content-scroll')!.getBoundingClientRect().top) + 8;
   const bottom = Math.min(window.innerHeight - 8, document.querySelector('#settings-actions')!.getBoundingClientRect().top - 12);
   container.scrollTo({ top: container.scrollTop + (rect.bottom > bottom ? rect.bottom - bottom : rect.top < top ? rect.top - top : 0), behavior: 'instant' });
   open.value = true;

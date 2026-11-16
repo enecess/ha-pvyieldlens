@@ -30,7 +30,9 @@ beforeEach(async () => {
   vi.stubGlobal('matchMedia', () => ({ matches: false, addEventListener() {}, removeEventListener() {} }));
   vi.stubGlobal('ResizeObserver', class { observe() {} disconnect() {} });
   vi.spyOn(window, 'scrollTo').mockImplementation(() => {});
-  HTMLElement.prototype.scrollTo = function () {};
+  HTMLElement.prototype.scrollTo = function (options: ScrollToOptions | number, top?: number) {
+    this.scrollTop = typeof options === 'number' ? top ?? 0 : options.top ?? this.scrollTop;
+  };
   HTMLDialogElement.prototype.showModal = function () { this.open = true; };
   HTMLDialogElement.prototype.close = function () { this.open = false; };
   vi.stubGlobal('fetch', async (path: string) => {
@@ -70,6 +72,27 @@ it('treats a same-page Settings request as a no-op without a read or draft reset
   expect(reads).toBe(before);
   expect(host.querySelector<HTMLInputElement>('[name=rated_power_w]')!.value).toBe('6100');
   expect(host.querySelector<HTMLDialogElement>('dialog')?.open ?? false).toBe(false);
+});
+
+it('resets content scrolling only after a destination is accepted', async () => {
+  const content = host.querySelector<HTMLElement>('#content-scroll');
+  expect(content).not.toBeNull();
+  content!.scrollTop = 120;
+  await input('6100');
+  await click('#settings-button');
+  expect(content!.scrollTop).toBe(120);
+  await click('#history-tab');
+  expect(content!.scrollTop).toBe(120);
+  await click('#keep-editing');
+  expect(content!.scrollTop).toBe(120);
+  await click('#history-tab');
+  await click('#discard-changes');
+  expect(content!.scrollTop).toBe(0);
+  content!.scrollTop = 240;
+  await click('#history-tab');
+  expect(content!.scrollTop).toBe(240);
+  await click('#live-tab');
+  expect(content!.scrollTop).toBe(0);
 });
 
 it.each(['fresh', 'reverted'])('leaves a %s clean form immediately', async state => {

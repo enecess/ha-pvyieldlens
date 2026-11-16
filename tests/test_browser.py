@@ -608,6 +608,39 @@ async def test_sensor_menu_closes_when_input_scrolls_out_of_settings(browser_wor
     await expect(page.get_by_role('listbox')).not_to_be_visible()
 
 
+async def test_sensor_menu_closes_when_outer_content_clips_input_behind_header(browser_workspace):
+    from playwright.async_api import expect
+
+    page, _, _ = browser_workspace
+    await page.set_viewport_size({'width': 390, 'height': 430})
+    await page.emulate_media(reduced_motion='reduce')
+    await page.locator('#language-select').select_option('de')
+    await page.locator('#settings-button').click()
+    await expect(page.locator('#load-entities')).to_be_enabled()
+    await page.locator('[data-settings-category=sources]').click()
+    control = page.locator('[name=power_entity]')
+    await control.fill('missing')
+    await expect(control).to_have_attribute('aria-expanded', 'true')
+    await expect(page.locator('.sensor-suggestions')).to_be_visible()
+    initial = await page.locator('.sensor-suggestions').bounding_box()
+    content = await page.locator('#content-scroll').bounding_box()
+    dock = await page.locator('#settings-actions').bounding_box()
+    assert initial['y'] >= content['y']
+    assert initial['y'] + initial['height'] <= dock['y'] - 3
+    await page.locator('#content-scroll').evaluate('node => node.scrollTo(0, node.scrollHeight)')
+    await page.wait_for_function("document.querySelector('[name=power_entity]').getBoundingClientRect().bottom <= document.querySelector('.app-header').getBoundingClientRect().bottom")
+    clipped = await control.bounding_box()
+    await expect(control).to_have_attribute('aria-expanded', 'false')
+    await expect(page.locator('.sensor-suggestions')).not_to_be_visible()
+    assert await page.evaluate('scrollY') == 0
+    assert (await page.locator('.app-header').bounding_box())['y'] == 0
+    artifacts = Path(os.getenv('PVYL_SENSOR_ARTIFACTS', 'artifacts/task-2-sensors'))
+    artifacts.mkdir(parents=True, exist_ok=True)
+    (artifacts / 'sensor-outer-clipped-390-430.json').write_text(json.dumps({
+        'initial_menu': initial, 'content': content, 'dock': dock, 'clipped_input': clipped}, indent=2), encoding='utf-8')
+    await page.screenshot(path=str(artifacts / 'sensor-outer-clipped-390-430.png'))
+
+
 @pytest.mark.parametrize(('width', 'height', 'theme'), [
     (1440, 900, 'light'), (1440, 900, 'dark'), (390, 844, 'light'),
     (390, 844, 'dark'), (390, 480, 'dark'), (320, 480, 'light'),
@@ -639,6 +672,7 @@ async def test_sensor_menu_viewport_geometry_and_active_scroll(browser_workspace
         const rect = node => { const {left, right, top, bottom, height} = node.getBoundingClientRect(); return {left, right, top, bottom, height}; };
         const style = getComputedStyle(menu);
         return {menu: rect(menu), option: rect(menu.querySelector('[aria-selected=true]')),
+            content: rect(document.querySelector('#content-scroll')),
             input: rect(document.querySelector('[name=power_entity]')), dock: rect(document.querySelector('#settings-actions')),
             viewport: {width: innerWidth, height: innerHeight}, scrollWidth: document.documentElement.scrollWidth,
             background: style.backgroundColor, expectedBackground: getComputedStyle(document.documentElement).getPropertyValue('--pv-raised').trim(),
@@ -649,7 +683,8 @@ async def test_sensor_menu_viewport_geometry_and_active_scroll(browser_workspace
     assert geometry['containerType'] == 'size'
     assert geometry['menu']['left'] >= 0
     assert geometry['menu']['right'] <= width
-    assert geometry['menu']['top'] >= 0
+    assert geometry['menu']['top'] >= geometry['content']['top']
+    assert geometry['menu']['bottom'] <= geometry['content']['bottom']
     assert geometry['menu']['bottom'] <= min(height, geometry['dock']['top']) - 3
     assert geometry['menu']['height'] <= 242
     assert geometry['option']['top'] >= geometry['menu']['top']
