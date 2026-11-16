@@ -99,6 +99,30 @@ def main():
                     assert b'simulation-token' not in response.read()
             return len(assets.urls)
 
+        def live_history():
+            before = request('/api/snapshot')['energy']
+            result = request('/api/live-history')
+            after = request('/api/snapshot')['energy']
+            assert result['configured'] is True
+            assert result['context']['revision'] >= 1
+            assert result['context']['settings']['update_seconds'] == result['step_seconds'] == 1
+            points = result['points']
+            assert 1 <= len(points) <= 601
+            assert 0 <= result['range']['end'] - result['range']['start'] <= 600
+            assert all(result['range']['start'] <= point['at'] <= result['range']['end'] for point in points)
+            assert all(left['at'] < right['at'] for left, right in zip(points, points[1:]))
+            assert 'segments' not in json.dumps(result)
+            assert 'simulation-token' not in json.dumps(result)
+            if before['settled_until'] == after['settled_until']:
+                assert before['total_kwh'] == after['total_kwh']
+                assert before['total_valid_seconds'] == after['total_valid_seconds']
+            else:
+                # Background settlement may advance between the surrounding reads.
+                assert after['settled_until'] > before['settled_until']
+                assert after['total_kwh'] >= before['total_kwh']
+                assert after['total_valid_seconds'] >= before['total_valid_seconds']
+            return len(points)
+
         until(lambda: request('/health')['status'] == 'ok')
         request('/api/config', {'settings':{
             'rated_power_w':5000, 'temperature_coefficient_pct_per_c':-0.35,
@@ -112,6 +136,7 @@ def main():
         base = start(args.image)
         until(lambda: request('/api/snapshot')['connected'])
         upgraded = request('/api/snapshot')
+        upgrade_live_points = live_history()
         upgrade_assets = frontend_assets()
         assert upgraded['energy']['total_kwh'] >= legacy_total > 0
         assert upgraded['forecast']['status'] == 'disabled'
@@ -133,6 +158,7 @@ def main():
         base = f'http://127.0.0.1:{port}'
         until(lambda: request('/api/snapshot')['connected'])
         after = request('/api/snapshot')['energy']['total_kwh']
+        restart_live_points = live_history()
         restart_assets = frontend_assets()
         assert after >= before > 0
         retained = request('/api/config')
@@ -148,6 +174,7 @@ def main():
         print(json.dumps({'container':'passed', 'image':args.image, 'platform':args.platform,
                           'legacy_image':args.legacy_image, 'upgrade_persistence':'passed',
                           'upgrade_bundle_assets':upgrade_assets, 'restart_bundle_assets':restart_assets,
+                          'upgrade_live_points':upgrade_live_points, 'restart_live_points':restart_live_points,
                           'forecast_disabled_defaults':'passed', 'restart_persistence':'passed', 'compose':'passed',
                           'legacy_energy_kwh':legacy_total, 'energy_before_kwh':before, 'energy_after_kwh':after}))
     finally:

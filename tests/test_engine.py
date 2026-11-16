@@ -93,3 +93,83 @@ def test_negative_temperature_factor_does_not_become_a_valid_monitoring_segment(
     assert result.valid_seconds == 0
     assert result.estimated_power is None
     assert result.quality == 'unavailable'
+
+
+@pytest.mark.parametrize('started_at,at,quality', [(590, 600, 'warming_up'), (1200, 600, 'partial'),
+                                                 (540, 600, 'partial'), (None, 600, 'partial')])
+def test_realtime_warming_up_only_applies_inside_current_startup_window(started_at, at, quality):
+    from pvyieldlens import engine
+
+    result = engine.calculate_realtime(settings(power_max_age_seconds=30),
+                                       samples(at=550) + samples(at=590), at, started_at=started_at)
+    assert result.quality == quality
+    assert result.valid_seconds == 40
+    assert result.pr == pytest.approx(90)
+
+
+@pytest.mark.parametrize('observations', [samples(), samples(at=590) + [Observation('sensor.sun', 600, None)]])
+def test_realtime_invalidates_current_sources_without_erasing_valid_average(observations):
+    from pvyieldlens import engine
+
+    result = engine.calculate_realtime(settings(power_max_age_seconds=30), observations, 600)
+    assert result.estimated_power is None
+    assert result.actual_power is None
+    assert result.pr is None
+    assert result.optimizable_power is None
+    assert result.quality == 'unavailable'
+    assert result.reason == 'current_source_unavailable'
+
+
+def test_realtime_valid_zero_irradiance_is_available():
+    from pvyieldlens import engine
+
+    result = engine.calculate_realtime(settings(), samples(power=0, sun=0), 60)
+    assert result.estimated_power == result.actual_power == 0
+    assert result.pr is None
+    assert result.reason == 'zero_expected_power'
+    assert result.quality == 'complete'
+
+
+def test_realtime_does_not_use_an_observation_after_the_requested_endpoint():
+    from pvyieldlens import engine
+
+    result = engine.calculate_realtime(settings(), samples(power=None) + samples(at=600.00005), 600)
+    assert result.estimated_power is None
+    assert result.quality == 'unavailable'
+    assert result.reason == 'current_source_unavailable'
+
+
+@pytest.mark.parametrize('changes,observations,endpoints,started_at', [
+    ({}, samples() + samples(at=7.25, power=1100, sun=500)
+     + [Observation('sensor.sun', 25, None)] + samples(at=47.75), [10, 30, 60, 90], None),
+    ({'power_max_age_seconds': 30}, samples() + samples(at=40), [20, 30, 35, 60, 70, 75], None),
+    ({}, [], [0, 30, 60], None),
+    ({}, samples(power=0, sun=0), [0, 5, 60, 90], 0),
+    ({}, samples() + samples(at=10, temp=400) + samples(at=50), [5, 20, 50, 60, 90], None),
+    ({'power_max_age_seconds': 30}, samples(at=550) + samples(at=590),
+     [550, 590, 600, 649, 650, 660], 590),
+    ({}, samples(power=None) + samples(at=600.00005), [600, 600.00005, 600.0001, 600.0002], None),
+    ({'power_max_age_seconds': 1}, samples(at=600.00003),
+     [600.00001, 600.00003, 601.00001, 601.00003, 601.00005], None),
+    ({}, samples() + samples(at=60, power=0, sun=0), [60, 90, 120, 150], None),
+])
+def test_realtime_series_preserves_scalar_windows(changes, observations, endpoints, started_at):
+    from pvyieldlens import engine
+
+    config = settings(**changes)
+    results = engine.calculate_realtime_series(config, observations, endpoints, started_at=started_at)
+    assert len(results) == len(endpoints)
+    for at, result in zip(endpoints, results):
+        expected = engine.calculate_realtime(config, observations, at, started_at=started_at)
+        assert result.quality == expected.quality
+        assert result.reason == expected.reason
+        for field in ('start', 'end', 'valid_seconds', 'estimated_energy_wh', 'actual_energy_wh',
+                      'estimated_power', 'actual_power', 'pr', 'optimizable_power', 'coverage_percent'):
+            assert getattr(result, field) == pytest.approx(getattr(expected, field), abs=1e-8)
+        assert result.segments == expected.segments
+
+
+def test_realtime_series_empty_endpoints_produce_no_windows():
+    from pvyieldlens import engine
+
+    assert engine.calculate_realtime_series(settings(), samples(), []) == []

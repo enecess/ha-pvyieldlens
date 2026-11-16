@@ -189,6 +189,11 @@ def create_app(service: Service, runtime: Runtime, run_background=True) -> FastA
         async with service.lock:
             return service.snapshot()
 
+    @app.get('/api/live-history')
+    async def live_history():
+        async with service.lock:
+            return service.live_history()
+
     @app.get('/api/forecast')
     async def get_forecast():
         forecast = service.forecast

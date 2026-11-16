@@ -2,12 +2,11 @@ import asyncio
 import logging
 import time
 from contextlib import suppress
-from dataclasses import replace
 
 import httpx
 from websockets.exceptions import WebSocketException
 
-from .engine import calculate
+from .engine import calculate, calculate_realtime, calculate_realtime_series
 from .forecast_service import ForecastController
 from .home_assistant import HomeAssistantClient, entity_payloads, parse_state
 from .settings import Settings
@@ -80,16 +79,39 @@ class Service:
                 return
             await self._settle(now)
             observations = self.store.observations(now - self.config.realtime_window_seconds, now, self.config.entities, self.origin)
-            result = calculate(self.config, observations, now - self.config.realtime_window_seconds, now)
-            current = calculate(self.config, observations, now, now + 0.0001)
-            if not current.valid_seconds:
-                result = replace(result, estimated_power=None, actual_power=None, pr=None, optimizable_power=None,
-                                 quality='unavailable', reason='current_source_unavailable')
-            elif result.quality == 'partial' and self.store.get_meta('started_at'):
-                if now - float(self.store.get_meta('started_at')) < self.config.realtime_window_seconds:
-                    result = replace(result, quality='warming_up')
+            started_at = self.store.get_meta('started_at')
+            result = calculate_realtime(self.config, observations, now,
+                                        started_at=float(started_at) if started_at is not None else None)
             self.realtime = result.public()
             self.calculated_at = now
+
+    def live_history(self, now: float | None = None):
+        now = time.time() if now is None else now
+        start = max(0, now - 600)
+        config = self.config
+        if config is None:
+            return {'configured': False, 'recovering': False, 'range': {'start': start, 'end': now},
+                    'step_seconds': None, 'context': None, 'points': []}
+        revision = self.store.revision
+        period = self.store.configuration_history(now, now)[-1]
+        observations = self.store.observations(start - config.realtime_window_seconds, now, config.entities, self.origin)
+        anchor = self.calculated_at if self.calculated_at is not None and start <= self.calculated_at <= now else now
+        first = max(start, period.effective_at)
+        started_at = self.store.get_meta('started_at')
+        started_at = float(started_at) if started_at is not None else None
+        endpoints = [anchor - index * config.update_seconds
+                     for index in reversed(range(max(0, int((anchor - first) // config.update_seconds) + 1)))]
+        points = [{'at': at, **result.public()} for at, result in zip(
+            endpoints, calculate_realtime_series(config, observations, endpoints, started_at=started_at))]
+        if points:
+            if self.realtime is not None and anchor == self.calculated_at:
+                points[-1] = {'at': anchor, **self.realtime}
+            elif self.realtime is None:
+                points[-1].update(estimated_power=None, actual_power=None, pr=None, optimizable_power=None,
+                                  quality='unavailable', reason='current_source_unavailable')
+        return {'configured': True, 'recovering': self._recovery_needed, 'range': {'start': start, 'end': now},
+                'step_seconds': config.update_seconds, 'context': {'revision': revision, 'settings': config.model_dump()},
+                'points': points}
 
     def snapshot(self, now: float | None = None):
         now = time.time() if now is None else now
