@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, onUnmounted, ref } from 'vue';
+import brandIcon from '../../icon.png';
 import { Activity, ChartNoAxesCombined, Languages, Settings, Sun, SunMoon } from 'lucide-vue-next';
 import { createThemeController, type ThemePreference } from './theme';
 import { useDashboard } from './dashboard';
@@ -54,7 +55,7 @@ function discardAndNavigate() {
 <template>
   <header class="app-header">
     <a class="brand" href="./" aria-label="PVYieldLens home" :aria-disabled="settingsState.busy || undefined" @click.prevent="requestPage('live')">
-      <span class="brand-icon"><Sun :size="22" aria-hidden="true" /></span>
+      <img class="brand-icon" :src="brandIcon" alt="" width="128" height="128">
       PVYieldLens
     </a>
     <nav id="data-navigation" :aria-label="t('data_pages')">
