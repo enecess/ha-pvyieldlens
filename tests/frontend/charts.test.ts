@@ -26,3 +26,25 @@ it('keeps unavailable gaps and distinct second-level labels in a short power ser
     host.remove();
   }
 });
+
+it('distinguishes repeated local clock ticks when the plotted window spans a DST offset change', () => {
+  const host = document.createElement('div');
+  document.body.append(host);
+  Object.defineProperties(host, { clientWidth: { value: 1200 }, clientHeight: { value: 260 } });
+  const bounds = vi.spyOn(SVGElement.prototype, 'getBoundingClientRect').mockImplementation(function () {
+    return new DOMRect(Number(this.getAttribute('x') ?? 0), 0, 60, 12);
+  });
+  try {
+    plot(host, [{ at: 1793511000, actual_power: 10 }, { at: 1793514600, actual_power: 20 }],
+      [{ key: 'actual_power', label: 'Power', color: 'blue' }], 'W', {
+        language: 'en', timezone: 'America/New_York', translate: key => key,
+      });
+    const ticks = [...host.querySelectorAll('.time-tick')].map(node => node.textContent);
+    expect(ticks[0]).toMatch(/01:30.*GMT-4/);
+    expect(ticks.at(-1)).toMatch(/01:30.*GMT-5/);
+    expect(host.querySelector('circle title')!.textContent).toMatch(/01:30.*GMT-5/);
+  } finally {
+    bounds.mockRestore();
+    host.remove();
+  }
+});

@@ -11,8 +11,8 @@ const payload = () => structuredClone(fixture) as ForecastView;
 const cleanup: (() => void)[] = [];
 const flush = async () => { await new Promise<void>(resolve => setImmediate(resolve)); await nextTick(); };
 function mount(view = payload()) {
-  const props = reactive<{ active: boolean; summary: ForecastSummary | null; language: 'en'; theme: 'light' | 'dark' }>({
-    active: true, summary: structuredClone(view), language: 'en', theme: 'light',
+  const props = reactive<{ active: boolean; summary: ForecastSummary | null; language: 'en'; theme: 'light' | 'dark'; displayTimezone: string }>({
+    active: true, summary: structuredClone(view), language: 'en', theme: 'light', displayTimezone: 'UTC',
   });
   const host = document.createElement('div');
   document.body.append(host);
@@ -133,4 +133,27 @@ it('shows partial and unavailable totals as unavailable even when a numeric part
   expect(text(host, '#forecast-seven-days')).toBe('— kWh');
   expect(text(host, '#forecast-day-total')).toBe('— kWh');
   expect(text(host, '#forecast-day-coverage')).toContain('50%');
+});
+
+it('changes only fetched display time and the conditional note when viewer timezone changes', async () => {
+  const { props, host } = mount();
+  await flush();
+  select(host);
+  await flush();
+  const before = text(host, '#forecast-day-total');
+  const chart = host.querySelector('#forecast-chart svg');
+  const row = host.querySelector('#forecast-rows time')?.textContent;
+  props.displayTimezone = 'America/Los_Angeles';
+  await flush();
+  expect(text(host, '#forecast-fetched')).toContain('Oct 31');
+  expect(text(host, '#forecast-home-time-note')).toContain('UTC');
+  expect(host.querySelector('[data-day="2026-11-03"]')?.getAttribute('aria-pressed')).toBe('true');
+  expect(text(host, '#forecast-day-total')).toBe(before);
+  expect(host.querySelector('#forecast-chart svg')).toBe(chart);
+  expect(host.querySelector('#forecast-rows time')?.textContent).toBe(row);
+  expect(requests).toEqual(['GET api/forecast']);
+  props.displayTimezone = 'Etc/UTC';
+  await flush();
+  expect(host.querySelector('#forecast-home-time-note')).toBeNull();
+  expect(text(host, '#forecast-fetched')).not.toMatch(/GMT|UTC/);
 });

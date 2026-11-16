@@ -1,5 +1,6 @@
 import { onScopeDispose, ref, shallowRef } from 'vue';
 import { api, ApiError } from './api';
+import { resolveDisplayTimezone } from './timezones';
 import type { ChartPoint } from './charts';
 import type { Configuration, ConfigurationSaveResult, Snapshot } from './models';
 
@@ -8,10 +9,20 @@ export function useDashboard() {
   const snapshot = shallowRef<Snapshot | null>(null);
   const livePoints = shallowRef<ChartPoint[]>([]);
   const error = ref<string | null>(null);
+  const displayTimezone = ref('UTC');
   let disposed = false;
   let timer: ReturnType<typeof setTimeout>;
 
-  function acceptConfiguration(value: Configuration) { configuration.value = value; }
+  function updateDisplayTimezone() {
+    const timezone = resolveDisplayTimezone(window, configuration.value?.mode,
+      snapshot.value?.timezone ?? configuration.value?.settings?.timezone ?? configuration.value?.location?.timezone ?? '');
+    if (timezone !== displayTimezone.value) displayTimezone.value = timezone;
+  }
+  function onVisibilityChange() { if (!document.hidden) updateDisplayTimezone(); }
+  function acceptConfiguration(value: Configuration) {
+    configuration.value = value;
+    updateDisplayTimezone();
+  }
   function acceptSavedConfiguration(value: ConfigurationSaveResult) {
     acceptConfiguration(value);
     if (value.monitoring_changed) livePoints.value = [];
@@ -36,12 +47,20 @@ export function useDashboard() {
     } catch (failure) {
       if (!disposed) error.value = failure instanceof ApiError ? failure.code : 'error';
     } finally {
-      if (!disposed) timer = setTimeout(poll, (configuration.value?.settings?.update_seconds ?? 5) * 1000);
+      if (!disposed) {
+        updateDisplayTimezone();
+        timer = setTimeout(poll, (configuration.value?.settings?.update_seconds ?? 5) * 1000);
+      }
     }
   }
 
-  onScopeDispose(() => { disposed = true; clearTimeout(timer); });
+  document.addEventListener('visibilitychange', onVisibilityChange);
+  onScopeDispose(() => {
+    disposed = true;
+    clearTimeout(timer);
+    document.removeEventListener('visibilitychange', onVisibilityChange);
+  });
   void loadConfiguration().catch(failure => { if (!disposed) error.value = failure instanceof ApiError ? failure.code : 'error'; })
     .then(() => { if (!disposed) void poll(); });
-  return { configuration, snapshot, livePoints, error, loadConfiguration, acceptConfiguration, acceptSavedConfiguration };
+  return { configuration, snapshot, livePoints, error, displayTimezone, loadConfiguration, acceptConfiguration, acceptSavedConfiguration };
 }

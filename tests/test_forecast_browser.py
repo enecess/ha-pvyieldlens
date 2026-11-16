@@ -184,7 +184,7 @@ async def test_forecast_ingress_mobile_and_language(forecast_page, width):
         await page.locator('#forecast-details summary').click()
         await expect(page.locator('#forecast-rows tr')).to_have_count(25)
         rows = await page.locator('#forecast-rows').inner_text()
-        assert 'GMT-04:00' in rows and 'GMT-05:00' in rows
+        assert 'GMT-4' in rows and 'GMT-5' in rows
         await expect(page.locator('#forecast-details-help')).to_be_visible()
         await expect(page.locator('#forecast-scroll-hint')).to_be_visible()
         geometry = await page.locator('#forecast-details').evaluate('''details => {
@@ -196,7 +196,7 @@ async def test_forecast_ingress_mobile_and_language(forecast_page, width):
         assert geometry['helpRight'] <= geometry['right'] + 1
         assert geometry['numericRight'] <= geometry['right'] + 1
         await expect(page.locator('#forecast-rows time').first).to_have_attribute('datetime', '2026-11-01T04:00:00.000Z')
-        await expect(page.locator('#forecast-rows time').first).to_have_attribute('aria-label', 'Nov 1, 2026, 00:00 GMT-04:00')
+        await expect(page.locator('#forecast-rows time').first).to_have_attribute('aria-label', 'Nov 1, 2026, 00:00')
         await page.locator('#language-select').select_option('fr')
         await expect(page.locator('#forecast-chart svg')).to_have_attribute('aria-label', 'Puissance prévue')
         assert await page.evaluate('document.documentElement.scrollWidth <= innerWidth')

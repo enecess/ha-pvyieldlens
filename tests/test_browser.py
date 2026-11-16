@@ -541,7 +541,7 @@ async def test_sensor_keyboard_selection_survives_unchanged_location_poll(browse
     await expect(page.locator('main')).to_have_attribute('data-snapshot-ready', 'true')
     await page.locator('#settings-button').click()
     await expect(page.locator('#connection-result')).to_have_text('Connection verified')
-    await expect(page.locator('#forecast-location')).to_have_text('Active · 1, 2 · UTC')
+    await expect(page.locator('#forecast-location')).to_have_text('Active · 1, 2')
     await page.locator('[data-settings-category=sources]').click()
     control = page.get_by_role('combobox', name='Actual Power', exact=True)
     await control.fill('')
@@ -1167,7 +1167,7 @@ async def test_settings_refreshes_active_location_without_changing_drafts(browse
     await page.locator('#settings-button').click()
     await expect(page.locator('[name=rated_power_w]')).to_have_value('5000')
     await page.locator('button[data-settings-category=forecast]').click()
-    await expect(page.locator('#forecast-location')).to_have_text('Active · 1, 2 · UTC' if initial_location else 'HA location is not available yet.')
+    await expect(page.locator('#forecast-location')).to_have_text('Active · 1, 2' if initial_location else 'HA location is not available yet.')
     await page.locator('[name=forecast_noct_c]').fill('48')
     await page.locator('button[data-settings-category=panels]').click()
     await page.locator('[name=rated_power_w]').fill('6100')
@@ -1179,13 +1179,13 @@ async def test_settings_refreshes_active_location_without_changing_drafts(browse
         await page.locator('#load-entities').click()
         await expect(page.locator('#connection-result')).to_have_text('Connection verified')
         await page.locator('button[data-settings-category=forecast]').click()
-        await expect(page.locator('#forecast-location')).to_have_text('Active · 1, 2 · UTC' if initial_location else 'HA location is not available yet.')
+        await expect(page.locator('#forecast-location')).to_have_text('Active · 1, 2' if initial_location else 'HA location is not available yet.')
         drafts = await page.locator('#settings-form').evaluate('form => [...new FormData(form)]')
         for current, expected in (
-            (location, 'Active · 1, 2 · UTC'),
-            (location.model_copy(update={'location_name': 'Renamed'}), 'Renamed · 1, 2 · UTC'),
+            (location, 'Active · 1, 2'),
+            (location.model_copy(update={'location_name': 'Renamed'}), 'Renamed · 1, 2'),
             (location.model_copy(update={'latitude': -33.86, 'longitude': 151.21, 'timezone': 'Australia/Sydney'}),
-             'Active · -33.86, 151.21 · Australia/Sydney'),
+             'Active · -33.86, 151.21'),
             (None, 'HA location is not available yet.'),
         ):
             service.forecast.configure(service.config, service.forecast.settings, service.origin, current)

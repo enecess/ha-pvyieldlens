@@ -7,16 +7,25 @@ import type { ChartPoint, ChartSeries } from './charts';
 import type { Configuration, HistorySummary, Snapshot } from './models';
 import { useI18n, type Language } from './i18n';
 import type { ColorMode } from './theme';
+import { formatTimes } from './timezones';
 
 const props = defineProps<{
-  active: boolean; configuration: Configuration | null; snapshot: Snapshot | null; language: Language; theme: ColorMode;
+  active: boolean; configuration: Configuration | null; snapshot: Snapshot | null; language: Language; theme: ColorMode; displayTimezone: string;
 }>();
 const { t } = useI18n();
 const range = ref('1');
 const points = shallowRef<(ChartPoint & { start: number })[]>([]);
 const summary = shallowRef<HistorySummary | null>(null);
 const error = ref<string | null>(null);
-const timezone = computed(() => props.snapshot?.timezone ?? props.configuration?.settings?.timezone ?? 'UTC');
+const homeTimezone = computed(() => new Intl.DateTimeFormat('en', {
+  timeZone: props.snapshot?.timezone ?? props.configuration?.settings?.timezone ?? 'UTC',
+}).resolvedOptions().timeZone);
+const dailyLabel = computed(() => {
+  if (homeTimezone.value === props.displayTimezone || !props.snapshot?.energy.day) return t('daily');
+  return t('home_daily_energy', { date: new Intl.DateTimeFormat(props.language, {
+    month: 'short', day: 'numeric', timeZone: 'UTC',
+  }).format(new Date(`${props.snapshot.energy.day}T12:00:00Z`)) });
+});
 const powerSeries: ChartSeries[] = [
   { key: 'estimated_power', label: 'estimated', color: 'var(--pv-theoretical)' },
   { key: 'actual_power', label: 'actual', color: 'var(--pv-actual)' },
@@ -26,15 +35,16 @@ let lastKey: string | null = null;
 let pendingRequest: { key: string } | null = null;
 const number = (value: number | null | undefined, digits = 1) => value == null ? '—' :
   new Intl.NumberFormat(props.language, { maximumFractionDigits: digits }).format(value);
-const stamp = (at: number | null | undefined) => at == null ? '—' : new Intl.DateTimeFormat(props.language, {
-  hour: '2-digit', minute: '2-digit', second: '2-digit', timeZone: timezone.value,
-}).format(new Date(at * 1000));
+const settled = computed(() => props.snapshot?.statistics?.end == null ? '—'
+  : formatTimes([props.snapshot.statistics.end], props.language, props.displayTimezone, {
+    hour: '2-digit', minute: '2-digit', second: '2-digit',
+  })[0]);
 const boundaries = computed(() => {
   if (summary.value?.start == null || summary.value.end == null) return t('history_no_periods');
-  const format = new Intl.DateTimeFormat(props.language, { year: 'numeric', month: 'short', day: 'numeric',
-    hour: '2-digit', minute: '2-digit', second: '2-digit', timeZone: timezone.value });
-  return t('history_boundaries', { start: format.format(new Date(summary.value.start * 1000)),
-    end: format.format(new Date(summary.value.end * 1000)), timezone: timezone.value });
+  const [start, end] = formatTimes([summary.value.start, summary.value.end], props.language, props.displayTimezone, {
+    year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit',
+  });
+  return t('history_boundaries', { start, end });
 });
 
 watch(() => [props.active, range.value, props.snapshot, props.configuration?.settings], async () => {
@@ -77,13 +87,13 @@ watch(() => [props.active, range.value, props.snapshot, props.configuration?.set
     <p id="history-boundaries" class="muted">{{ boundaries }}</p>
     <div class="history-grid">
       <article class="panel"><div class="panel-heading"><h2>{{ t('power_chart') }}</h2><div class="legend"><span class="actual-dot">{{ t('actual') }}</span><span class="theoretical-dot">{{ t('estimated') }}</span></div></div>
-        <PowerChart id="history-chart" :points="points" :series="powerSeries" unit="W" :active="active" :language="language" :timezone="timezone" :theme="theme" /></article>
+        <PowerChart id="history-chart" :points="points" :series="powerSeries" unit="W" :active="active" :language="language" :timezone="displayTimezone" :theme="theme" /></article>
       <article class="panel"><div class="panel-heading"><h2>{{ t('pr_chart') }}</h2></div>
-        <PowerChart id="pr-chart" :points="points" :series="prSeries" unit="%" :active="active" :language="language" :timezone="timezone" :theme="theme" /></article>
+        <PowerChart id="pr-chart" :points="points" :series="prSeries" unit="%" :active="active" :language="language" :timezone="displayTimezone" :theme="theme" /></article>
     </div>
-    <div class="inline-notes muted"><span id="last-settled">{{ t('last_settled', { time: stamp(snapshot?.statistics?.end) }) }}</span><span>{{ t('settled_hint') }}</span></div>
+    <div class="inline-notes muted"><span id="last-settled">{{ t('last_settled', { time: settled }) }}</span><span>{{ t('settled_hint') }}</span></div>
     <details id="history-totals" class="panel totals-fold"><summary>{{ t('totals') }}</summary>
-      <div class="fixed-totals"><div><span>{{ t('daily') }}</span><strong id="daily-energy">{{ number(snapshot?.energy.daily_kwh, 3) }}</strong><span class="unit">kWh</span></div>
+      <div class="fixed-totals"><div><span>{{ dailyLabel }}</span><strong id="daily-energy">{{ number(snapshot?.energy.daily_kwh, 3) }}</strong><span class="unit">kWh</span></div>
         <div><span>{{ t('total') }}</span><strong id="total-energy">{{ number(snapshot?.energy.total_kwh, 3) }}</strong><span class="unit">kWh</span></div></div>
       <p class="muted">{{ t('totals_help') }}</p><p class="muted">{{ t('energy_help') }}</p>
     </details>

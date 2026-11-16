@@ -20,7 +20,7 @@ const settingsPage = ref<InstanceType<typeof SettingsPage>>();
 const pendingDestination = ref<{ page: Page; section?: SettingsSection } | null>(null);
 const theme = createThemeController(window);
 const { preference, mode, source } = theme;
-const { configuration, snapshot, livePoints, error, acceptConfiguration, acceptSavedConfiguration } = useDashboard();
+const { configuration, snapshot, livePoints, error, displayTimezone, acceptConfiguration, acceptSavedConfiguration } = useDashboard();
 const { languageChoice, language, t, setLanguage } = useI18n();
 const warnings = computed(() => [error.value, snapshot.value?.error,
   snapshot.value?.history_available === false ? 'history_unavailable' : null,
@@ -94,9 +94,9 @@ function discardAndNavigate() {
   </header>
   <main :class="{ 'settings-active': page === 'settings' }" :data-configuration-ready="configuration !== null" :data-snapshot-ready="snapshot !== null">
     <div v-show="warnings.length" id="banner" class="banner" role="status">{{ warnings.map(key => t(key)).join(' ') }}</div>
-    <LivePage v-show="page === 'live'" :active="page === 'live'" :configuration="configuration" :snapshot="snapshot" :points="livePoints" :language="language" :theme="mode" @open-settings="requestPage('settings')" />
-    <HistoryPage v-show="page === 'history'" :active="page === 'history'" :configuration="configuration" :snapshot="snapshot" :language="language" :theme="mode" />
-    <ForecastPage v-show="page === 'forecast'" :active="page === 'forecast'" :summary="snapshot?.forecast ?? null" :language="language" :theme="mode" @open-settings="requestPage('settings', $event)" />
+    <LivePage v-show="page === 'live'" :active="page === 'live'" :configuration="configuration" :snapshot="snapshot" :points="livePoints" :language="language" :theme="mode" :display-timezone="displayTimezone" @open-settings="requestPage('settings')" />
+    <HistoryPage v-show="page === 'history'" :active="page === 'history'" :configuration="configuration" :snapshot="snapshot" :language="language" :theme="mode" :display-timezone="displayTimezone" />
+    <ForecastPage v-show="page === 'forecast'" :active="page === 'forecast'" :summary="snapshot?.forecast ?? null" :language="language" :theme="mode" :display-timezone="displayTimezone" @open-settings="requestPage('settings', $event)" />
     <SettingsPage v-show="page === 'settings'" ref="settingsPage" :active="page === 'settings'" :initial-section="settingsSection" :location="configuration?.location ?? null" @loaded="acceptConfiguration" @saved="acceptSavedConfiguration" @state-change="settingsState = $event" />
   </main>
   <DiscardChangesDialog :open="pendingDestination !== null" :target-label="pendingDestination ? t(pendingDestination.page === 'live' ? 'live_page' : pendingDestination.page) : ''" @cancel="pendingDestination = null" @discard="discardAndNavigate" />

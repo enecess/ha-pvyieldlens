@@ -45,7 +45,7 @@ beforeEach(() => {
     realtime: Date.now() / 1000 % 2 === 1 ? null : snapshot.realtime,
   }), { status: 200 })));
 });
-afterEach(() => { scopes.splice(0).forEach(scope => scope.stop()); vi.useRealTimers(); vi.unstubAllGlobals(); });
+afterEach(() => { scopes.splice(0).forEach(scope => scope.stop()); vi.useRealTimers(); vi.unstubAllGlobals(); vi.restoreAllMocks(); document.body.replaceChildren(); });
 
 it('continues snapshot polling in Settings and stops on app disposal', async () => {
   const { dashboard, page } = start();
@@ -122,4 +122,54 @@ it('preserves backend error codes and validated field paths at the API boundary'
   const failure = await api.saveConfiguration({ settings: configuration.settings! }).catch(error => error as unknown);
   expect(failure).toBeInstanceOf(ApiError);
   expect(failure).toMatchObject({ code: 'invalid_configuration', fields: ['settings.rated_power_w'] });
+});
+
+it('resolves viewer time on configuration, completed failed polls and foreground without extra requests', async () => {
+  const ha = document.createElement('home-assistant');
+  const preference = { time_zone: 'local' };
+  Object.assign(ha, { hass: { locale: preference } });
+  const frame = document.createElement('iframe');
+  document.body.append(frame);
+  frame.contentDocument!.body.append(ha);
+  vi.spyOn(window, 'parent', 'get').mockReturnValue(frame.contentWindow!);
+  const Native = Intl.DateTimeFormat;
+  vi.spyOn(Intl, 'DateTimeFormat').mockImplementation(function (locales, options) {
+    return new Native(locales, { ...options, timeZone: options?.timeZone ?? 'America/Los_Angeles' });
+  });
+  vi.stubGlobal('fetch', async (path: string) => new Response(JSON.stringify(path.endsWith('config') ? configuration : { ...snapshot, timezone: 'Asia/Shanghai' })));
+  const { dashboard } = start();
+  await flushPromises();
+  dashboard.acceptConfiguration({ ...configuration, mode: 'app',
+    settings: { ...configuration.settings!, timezone: 'Asia/Shanghai' } });
+  expect(dashboard.displayTimezone?.value).toBe('America/Los_Angeles');
+  const readings = dashboard.livePoints.value;
+  const home = dashboard.configuration.value!.settings;
+  preference.time_zone = 'server';
+  const requests = vi.fn(async () => { throw new TypeError('Offline'); });
+  vi.stubGlobal('fetch', requests);
+  await vi.advanceTimersByTimeAsync(1000);
+  expect(dashboard.displayTimezone?.value).toBe('Asia/Shanghai');
+  expect(dashboard.configuration.value!.settings).toBe(home);
+  expect(dashboard.livePoints.value).toBe(readings);
+  expect(requests).toHaveBeenCalledTimes(1);
+  preference.time_zone = 'local';
+  document.dispatchEvent(new Event('visibilitychange'));
+  expect(dashboard.displayTimezone?.value).toBe('America/Los_Angeles');
+  expect(requests).toHaveBeenCalledTimes(1);
+  scopes.splice(0).forEach(scope => scope.stop());
+  preference.time_zone = 'server';
+  document.dispatchEvent(new Event('visibilitychange'));
+  expect(dashboard.displayTimezone?.value).toBe('America/Los_Angeles');
+  frame.remove();
+});
+
+it('uses the latest household snapshot zone and keeps early app fallback in household time', async () => {
+  const { dashboard } = start();
+  await flushPromises();
+  dashboard.acceptConfiguration({ ...configuration, mode: 'app',
+    settings: { ...configuration.settings!, timezone: 'Asia/Shanghai' } });
+  expect(dashboard.displayTimezone?.value).toBe('UTC');
+  vi.stubGlobal('fetch', async () => new Response(JSON.stringify({ ...snapshot, timezone: 'Asia/Shanghai' })));
+  await vi.advanceTimersByTimeAsync(1000);
+  expect(dashboard.displayTimezone?.value).toBe('Asia/Shanghai');
 });

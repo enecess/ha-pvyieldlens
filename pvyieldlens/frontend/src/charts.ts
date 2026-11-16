@@ -1,5 +1,6 @@
 import type { ForecastInterval } from './models';
 import type { Language } from './i18n';
+import { formatTimes } from './timezones';
 
 export interface ChartPoint {
   at: number;
@@ -25,9 +26,10 @@ export interface ChartOptions {
 export function plot(host: HTMLElement, data: ChartPoint[], series: ChartSeries[], unit: string,
   { language, timezone, translate: t, tooltip, currentTime }: ChartOptions) {
   const number = (value: number, digits = 1) => new Intl.NumberFormat(language, { maximumFractionDigits: digits }).format(value);
-  const stamp = (value: number) => new Intl.DateTimeFormat(language, {
-    hour: '2-digit', minute: '2-digit', second: '2-digit', timeZone: timezone,
-  }).format(new Date(value * 1000));
+  const stamps = formatTimes(data.map(point => point.at), language, timezone, {
+    hour: '2-digit', minute: '2-digit', second: '2-digit',
+  });
+  const labels = new Map(data.map((point, index) => [point.at, stamps[index]]));
   host.replaceChildren();
   const valid = data.flatMap(point => series.map(item => point[item.key]))
     .filter((value): value is number => typeof value === 'number' && Number.isFinite(value));
@@ -67,13 +69,13 @@ export function plot(host: HTMLElement, data: ChartPoint[], series: ChartSeries[
     .find(value => value >= duration / (count - 1)) ?? 604800;
   const times = [start, ...Array.from({ length: Math.max(0, Math.ceil(end / step) - Math.ceil(start / step)) },
     (_, index) => (Math.ceil(start / step) + index) * step).filter(at => at > start && at < end), end];
-  const formatter = new Intl.DateTimeFormat(language, { timeZone: timezone,
+  const ticks = formatTimes(times, language, timezone, {
     ...(duration > 86400 ? { month: 'short', day: 'numeric' } : {}),
     ...(duration <= 86400 || step < 86400 ? { hour: '2-digit', minute: '2-digit', ...(duration < 300 ? { second: '2-digit' } : {}) } : {}),
   });
   let previousTick: SVGTextElement | undefined;
   times.forEach((at, index) => {
-    const text = formatter.format(new Date(at * 1000));
+    const text = ticks[index];
     if (previousTick && (text === previousTick.textContent || x(at) - Number(previousTick.getAttribute('x')) < spacing)) return;
     previousTick = add('text', { x: x(at), y: height - 8, class: 'time-tick',
       'text-anchor': index === 0 ? 'start' : index === times.length - 1 ? 'end' : 'middle' }, text);
@@ -95,15 +97,15 @@ export function plot(host: HTMLElement, data: ChartPoint[], series: ChartSeries[
       if (value == null || !Number.isFinite(value)) return;
       const dot = add('circle', { cx: x(point.at), cy: y(value), r: tooltip ? 5 : 3, fill: item.color });
       const title = document.createElementNS('http://www.w3.org/2000/svg', 'title');
-      title.textContent = tooltip ? tooltip(point) : `${t(item.label)}: ${number(value)} ${unit} · ${stamp(point.at)}`;
+      title.textContent = tooltip ? tooltip(point) : `${t(item.label)}: ${number(value)} ${unit} · ${labels.get(point.at)}`;
       dot.append(title);
     });
   });
   const marker = currentTime === undefined ? null : add('line', { class: 'current-time', y1: top, y2: height - bottom });
   host.append(svg);
-  const ticks = [...svg.querySelectorAll<SVGTextElement>('.time-tick')];
-  ticks.slice(1).forEach((tick, index) => {
-    const previous = ticks.slice(0, index + 1).reverse().find(node => node.isConnected)!;
+  const visibleTicks = [...svg.querySelectorAll<SVGTextElement>('.time-tick')];
+  visibleTicks.slice(1).forEach((tick, index) => {
+    const previous = visibleTicks.slice(0, index + 1).reverse().find(node => node.isConnected)!;
     if (tick.getBoundingClientRect().left < previous.getBoundingClientRect().right + 8) tick.remove();
   });
   const updateTime = (at: number) => {
@@ -111,7 +113,7 @@ export function plot(host: HTMLElement, data: ChartPoint[], series: ChartSeries[
     marker.setAttribute('x1', String(x(at)));
     marker.setAttribute('x2', String(x(at)));
     marker.style.display = at < start || at > end ? 'none' : '';
-    marker.setAttribute('aria-label', `${t('forecast_now')}: ${stamp(at)}`);
+    marker.setAttribute('aria-label', `${t('forecast_now')}: ${formatTimes([at], language, timezone, { hour: '2-digit', minute: '2-digit', second: '2-digit' })[0]}`);
   };
   if (currentTime !== undefined) updateTime(currentTime);
   return updateTime;

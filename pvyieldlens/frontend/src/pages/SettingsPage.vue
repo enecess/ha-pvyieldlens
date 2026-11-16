@@ -41,7 +41,7 @@ const connectionStatus = computed(() => discoveryRequest.value === connectionKey
 const locationText = computed(() => {
   const value = props.location;
   const number = new Intl.NumberFormat(language.value, { maximumFractionDigits: 5 });
-  return value ? `${value.location_name || t('ha_location')} · ${number.format(value.latitude)}, ${number.format(value.longitude)} · ${value.timezone}` : t('location_unavailable');
+  return value ? `${value.location_name || t('ha_location')} · ${number.format(value.latitude)}, ${number.format(value.longitude)}` : t('location_unavailable');
 });
 const sections = [
   { key: 'connection', label: 'connection', icon: Plug }, { key: 'panels', label: 'solar', icon: Sun },
@@ -253,7 +253,8 @@ async function save() {
               </section>
               <section class="form-section panel" data-settings-section="forecast">
                 <h2><Compass :size="18" aria-hidden="true" />{{ t('forecast') }}</h2><p class="muted">{{ t('forecast_help') }}</p>
-                <p id="forecast-location" class="readonly-row">{{ locationText }}</p><p class="muted">{{ t('location_help') }}</p>
+                <p id="forecast-location" class="readonly-row">{{ locationText }}</p>
+                <p id="home-timezone" class="readonly-row">{{ t('home_timezone') }}: {{ location?.timezone ?? configuration?.settings?.timezone ?? '—' }}</p><p class="muted">{{ t('location_help') }}</p>
                 <label class="checkbox-row"><span>{{ t('forecast_enabled') }}</span><input v-model="draft.forecast.enabled" name="forecast_enabled" type="checkbox"></label>
                 <div class="form-grid">
                   <label><span>{{ t('forecast_tilt') }}</span><div class="input-unit"><input name="forecast_tilt_deg" type="number" min="0" max="90" step="any" :required="draft.forecast.enabled" :value="draft.forecast.tilt_deg" @input="draft.forecast.tilt_deg = inputValue($event)"><span>°</span></div></label>

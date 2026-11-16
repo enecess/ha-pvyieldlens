@@ -7,25 +7,26 @@ import type { ChartPoint, ChartSeries } from './charts';
 import type { Configuration, Snapshot } from './models';
 import { useI18n, type Language } from './i18n';
 import type { ColorMode } from './theme';
+import { formatTimes } from './timezones';
 
 const props = defineProps<{
   active: boolean; configuration: Configuration | null; snapshot: Snapshot | null;
-  language: Language; theme: ColorMode; points: ChartPoint[];
+  language: Language; theme: ColorMode; points: ChartPoint[]; displayTimezone: string;
 }>();
 defineEmits<{ 'open-settings': [] }>();
 const { t } = useI18n();
 const live = computed(() => props.snapshot?.realtime);
 const settings = computed(() => props.configuration?.settings);
-const timezone = computed(() => props.snapshot?.timezone ?? settings.value?.timezone ?? 'UTC');
 const powerSeries: ChartSeries[] = [
   { key: 'estimated_power', label: 'estimated', color: 'var(--pv-theoretical)' },
   { key: 'actual_power', label: 'actual', color: 'var(--pv-actual)' },
 ];
 const number = (value: number | null | undefined, digits = 1) => value == null ? '—' :
   new Intl.NumberFormat(props.language, { maximumFractionDigits: digits }).format(value);
-const updated = computed(() => props.snapshot?.calculated_at == null ? '—' : new Intl.DateTimeFormat(props.language, {
-  hour: '2-digit', minute: '2-digit', second: '2-digit', timeZone: timezone.value,
-}).format(new Date(props.snapshot.calculated_at * 1000)));
+const updated = computed(() => props.snapshot?.calculated_at == null ? '—'
+  : formatTimes([props.snapshot.calculated_at], props.language, props.displayTimezone, {
+    hour: '2-digit', minute: '2-digit', second: '2-digit',
+  })[0]);
 </script>
 
 <template>
@@ -47,14 +48,14 @@ const updated = computed(() => props.snapshot?.calculated_at == null ? '—' : n
     </div>
     <article class="panel live-panel">
       <div class="panel-heading"><h2>{{ t('power_chart') }}</h2><div class="legend"><span class="actual-dot">{{ t('actual') }}</span><span class="theoretical-dot">{{ t('estimated') }}</span></div></div>
-      <PowerChart id="live-chart" :points="points" :series="powerSeries" unit="W" :active="active" :language="language" :timezone="timezone" :theme="theme" />
+      <PowerChart id="live-chart" :points="points" :series="powerSeries" unit="W" :active="active" :language="language" :timezone="displayTimezone" :theme="theme" />
       <p v-if="live?.reason" id="live-reason" class="muted">{{ t(live.reason) }}</p>
       <div class="live-status muted"><span id="live-quality"><span class="status-dot" :class="{ good: live?.quality === 'complete' }"></span>{{ t(live?.quality ?? 'waiting') }}</span>
-        <span><span id="live-coverage" :title="t('coverage_help')">{{ t('coverage') }} {{ number(live?.coverage_percent) }}%</span> · {{ timezone }}</span></div>
+        <span><span id="live-coverage" :title="t('coverage_help')">{{ t('coverage') }} {{ number(live?.coverage_percent) }}%</span></span></div>
     </article>
     <details id="source-diagnostics" class="panel quality-panel">
       <summary><Radio :size="16" aria-hidden="true" />{{ t('diagnostics') }}</summary>
-      <div class="panel-heading"><h2>{{ t('quality') }}</h2><span id="timezone-note" class="muted">{{ t('timezone') }}: {{ timezone }}</span></div>
+      <div class="panel-heading"><h2>{{ t('quality') }}</h2></div>
       <div class="table-scroll"><table><thead><tr><th>{{ t('source') }}</th><th>{{ t('value') }}</th><th>{{ t('age') }}</th></tr></thead>
         <tbody id="source-rows"><tr v-for="source in snapshot?.sources ?? []" :key="source.entity_id"><td>{{ source.entity_id }}</td><td>{{ source.valid ? `${number(Number(source.state), 2)} ${source.unit ?? ''}` : t('unavailable') }}</td><td>{{ number(Math.max(0, Date.now() / 1000 - source.reported_at), 0) }} s</td></tr></tbody>
         <tbody v-show="!snapshot?.sources.length" id="source-empty"><tr><td colspan="3" class="source-empty muted">{{ t('no_sensor_data') }}</td></tr></tbody>

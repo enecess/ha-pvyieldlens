@@ -370,6 +370,7 @@ async def test_history_summary_and_charts_share_range(layout_page, layout_artifa
     for selector in ['#history-chart path.series', '#pr-chart path.series']:
         assert await page.locator(selector).first.evaluate("path => path.getAttribute('d').match(/[ML]/g).length") == 2
     await expect(page.locator('#history-boundaries')).to_contain_text('Settled periods')
+    await expect(page.locator('#history-boundaries')).not_to_contain_text('UTC')
     requests = []
     page.on('request', lambda request: requests.append(request.url) if '/api/history?' in request.url else None)
     await page.locator('#history-chart svg').evaluate("node => node.dataset.original = 'steady'")
