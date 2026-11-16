@@ -79,6 +79,15 @@ export interface HistoryResponse {
   requested_range: { start: number; end: number };
 }
 
+export interface LiveHistoryResponse {
+  configured: boolean;
+  recovering: boolean;
+  range: { start: number; end: number };
+  step_seconds: number | null;
+  context: { revision: number; settings: MonitoringSettings } | null;
+  points: (WindowResult & { at: number })[];
+}
+
 export interface ForecastInterval {
   start: number;
   end: number;

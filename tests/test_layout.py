@@ -34,7 +34,8 @@ async def layout_page(tmp_path):
             await expect(page.locator('main')).to_have_attribute('data-configuration-ready', 'true')
             await expect(page.locator('main')).to_have_attribute('data-snapshot-ready', 'true')
             await expect(page.locator('#setup-empty')).to_be_hidden()
-            await expect(page.locator('#live-chart .chart-empty')).to_be_visible()
+            await expect(page.locator('#live-chart svg')).to_be_visible()
+            await expect(page.locator('#live-chart path.series').first).to_have_attribute('d', '')
             yield page, service
             assert errors == []
             await browser.close()

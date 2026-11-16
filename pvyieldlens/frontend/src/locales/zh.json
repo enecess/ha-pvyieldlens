@@ -29,6 +29,8 @@
   "source": "传感器",
   "value": "数值",
   "age": "最近更新",
+  "just_now": "刚刚",
+  "live_history_error": "无法加载近期数据，正在显示新的实时读数。",
   "coverage": "数据完整率",
   "connection": "连接 Home Assistant",
   "ha_url": "Home Assistant 地址",

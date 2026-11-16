@@ -29,6 +29,8 @@
   "source": "Sensor",
   "value": "Wert",
   "age": "Letztes Update",
+  "just_now": "Gerade eben",
+  "live_history_error": "Die letzten Daten konnten nicht geladen werden. Neue Live-Messwerte werden angezeigt.",
   "coverage": "Vollständige Daten",
   "connection": "Home-Assistant-Verbindung",
   "ha_url": "Home-Assistant-URL",

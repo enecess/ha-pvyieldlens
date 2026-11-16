@@ -28,6 +28,8 @@
   "source": "Sensor",
   "value": "Value",
   "age": "Last update",
+  "just_now": "Just now",
+  "live_history_error": "Recent data could not be loaded. Showing new live readings.",
   "coverage": "Data completeness",
   "connection": "Home Assistant connection",
   "ha_url": "Home Assistant URL",

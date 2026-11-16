@@ -29,6 +29,8 @@
   "source": "Sensore",
   "value": "Valore",
   "age": "Ultimo aggiornamento",
+  "just_now": "Ora",
+  "live_history_error": "Impossibile caricare i dati recenti. Vengono mostrate le nuove letture in tempo reale.",
   "coverage": "Dati completi",
   "connection": "Connessione a Home Assistant",
   "ha_url": "URL di Home Assistant",

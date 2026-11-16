@@ -1209,25 +1209,29 @@ async def test_settings_refreshes_active_location_without_changing_drafts(browse
 
 
 @pytest.mark.parametrize('change', ['forecast', 'monitoring', 'connection'])
+@pytest.mark.parametrize('browser_workspace', [False], indirect=True)
 async def test_live_curve_save_resets_only_for_monitoring_changes(browser_workspace, change):
+    import re
+    from datetime import datetime, timezone
     from playwright.async_api import expect
-    from test_engine import samples
+    from test_engine import samples, settings
 
     page, service, _ = browser_workspace
     response = await page.request.get(page.url + 'api/config')
     connection = (await response.json())['connection']
-    await service.configure(service.config.model_copy(update={'timezone': 'Asia/Shanghai'}), origin=connection['url'])
+    now = int(time.time())
+    await service.configure(settings(interval_minutes=1, update_seconds=1, timezone='Asia/Shanghai'),
+                            now=now-900, origin=connection['url'])
+    service.store.add_observations(samples(at=now-660), origin=service.origin)
+    await service.tick(now)
+    await page.clock.set_fixed_time(datetime.fromtimestamp(now, timezone.utc))
     await page.reload()
     await expect(page.locator('main')).to_have_attribute('data-configuration-ready', 'true')
-    now = time.time()
-    service.store.add_observations(samples(at=now-60), origin=service.origin)
-    for index in range(3):
-        await service.tick(now-2+index)
-        async with page.expect_response(lambda response: response.url.endswith('/api/snapshot')):
-            pass
-        await expect(page.locator('#live-actual')).to_have_text('3,348')
-    await page.wait_for_function("document.querySelector('#live-chart path.series')?.getAttribute('d').includes('C')")
+    await expect(page.locator('#live-actual')).to_have_text('3,348')
+    await expect(page.locator('#live-chart path.series').first).to_have_attribute('d', re.compile('C'))
     curve = await page.locator('#live-chart path.series').first.get_attribute('d')
+    seeds = []
+    page.on('request', lambda request: seeds.append(request.url) if request.url.endswith('/api/live-history') else None)
     await page.locator('#settings-button').click()
     if change == 'forecast':
         await page.locator('button[data-settings-category=forecast]').click()
@@ -1242,11 +1246,21 @@ async def test_live_curve_save_resets_only_for_monitoring_changes(browser_worksp
     else:
         await page.locator('button[data-settings-category=connection]').click()
         await page.locator('#ha-token').fill('replacement-token')
-    await page.locator('#save-button').click()
+    if change == 'forecast':
+        await page.locator('#save-button').click()
+    else:
+        async with page.expect_response(lambda response: response.url.endswith('/api/live-history')):
+            await page.locator('#save-button').click()
     await expect(page.locator('#save-result')).to_have_text('Configuration saved')
     await expect(page.locator('#ha-token')).to_have_value('')
     await page.locator('#live-tab').click()
     if change == 'forecast':
         await expect(page.locator('#live-chart path.series').first).to_have_attribute('d', curve)
+        assert seeds == []
+    elif change == 'monitoring':
+        await expect(page.locator('#live-chart path.series').first).not_to_have_attribute('d', re.compile('C'))
+        assert len(seeds) == 1
     else:
-        await page.wait_for_function("!document.querySelector('#live-chart path.series')?.getAttribute('d').includes('C')")
+        # Re-authenticating the same HA origin reloads its compatible stored observations.
+        assert len(seeds) == 1
+        await expect(page.locator('#live-chart path.series').first).to_have_attribute('d', re.compile('C'))

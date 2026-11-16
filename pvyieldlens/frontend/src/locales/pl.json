@@ -29,6 +29,8 @@
   "source": "Czujnik",
   "value": "Wartość",
   "age": "Ostatnia aktualizacja",
+  "just_now": "Przed chwilą",
+  "live_history_error": "Nie udało się wczytać ostatnich danych. Wyświetlane są nowe odczyty na żywo.",
   "coverage": "Kompletność danych",
   "connection": "Połączenie z Home Assistant",
   "ha_url": "Adres Home Assistant",

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed } from 'vue';
+import { computed, onUnmounted, ref, watch } from 'vue';
 import { Radio, ArrowUpRight } from 'lucide-vue-next';
 import MetricCard from './MetricCard.vue';
 import PowerChart from './PowerChart.vue';
@@ -12,17 +12,29 @@ import { formatTimes } from './timezones';
 const props = defineProps<{
   active: boolean; configuration: Configuration | null; snapshot: Snapshot | null;
   language: Language; theme: ColorMode; points: ChartPoint[]; displayTimezone: string;
+  range: { start: number; end: number }; historyError: string | null;
 }>();
 defineEmits<{ 'open-settings': [] }>();
 const { t } = useI18n();
 const live = computed(() => props.snapshot?.realtime);
 const settings = computed(() => props.configuration?.settings);
+const now = ref(Date.now() / 1000);
+let clock: ReturnType<typeof setInterval> | undefined;
+function updateClock() {
+  clearInterval(clock);
+  now.value = Date.now() / 1000;
+  if (props.active && !document.hidden) clock = setInterval(() => { now.value = Date.now() / 1000; }, 1000);
+}
+watch(() => [props.active, ...(props.snapshot?.sources.map(source => source.reported_at) ?? [])], updateClock, { immediate: true });
+document.addEventListener('visibilitychange', updateClock);
+onUnmounted(() => { clearInterval(clock); document.removeEventListener('visibilitychange', updateClock); });
 const powerSeries: ChartSeries[] = [
   { key: 'estimated_power', label: 'estimated', color: 'var(--pv-theoretical)' },
   { key: 'actual_power', label: 'actual', color: 'var(--pv-actual)' },
 ];
 const number = (value: number | null | undefined, digits = 1) => value == null ? '—' :
   new Intl.NumberFormat(props.language, { maximumFractionDigits: digits }).format(value);
+const sourceAge = (reportedAt: number) => Math.max(0, now.value - reportedAt) < 1 ? t('just_now') : `${number(Math.floor(Math.max(0, now.value - reportedAt)), 0)} s`;
 const updated = computed(() => props.snapshot?.calculated_at == null ? '—'
   : formatTimes([props.snapshot.calculated_at], props.language, props.displayTimezone, {
     hour: '2-digit', minute: '2-digit', second: '2-digit',
@@ -62,7 +74,8 @@ const tooltip = (point: ChartPoint): ChartTooltip => ({ title: pointLabels.value
     </div>
     <article class="panel live-panel">
       <div class="panel-heading"><h2>{{ t('power_chart') }}</h2><div class="legend"><span class="actual-dot">{{ t('actual') }}</span><span class="theoretical-dot">{{ t('estimated') }}</span></div></div>
-      <PowerChart id="live-chart" :points="points" :series="powerSeries" unit="W" :active="active" :language="language" :timezone="displayTimezone" :theme="theme" :tooltip="tooltip" />
+      <p v-if="historyError" id="live-history-error" class="muted" role="status">{{ t(historyError) }}</p>
+      <PowerChart id="live-chart" :points="points" :range="range" :series="powerSeries" unit="W" :active="active" :language="language" :timezone="displayTimezone" :theme="theme" :tooltip="tooltip" />
       <p v-if="live?.reason" id="live-reason" class="muted">{{ t(live.reason) }}</p>
       <div class="live-status muted"><span id="live-quality"><span class="status-dot" :class="{ good: live?.quality === 'complete' }"></span>{{ t(live?.quality ?? 'waiting') }}</span>
         <span><span id="live-coverage" :title="t('coverage_help')">{{ t('coverage') }} {{ number(live?.coverage_percent) }}%</span></span></div>
@@ -71,7 +84,7 @@ const tooltip = (point: ChartPoint): ChartTooltip => ({ title: pointLabels.value
       <summary><Radio :size="16" aria-hidden="true" />{{ t('diagnostics') }}</summary>
       <div class="panel-heading"><h2>{{ t('quality') }}</h2></div>
       <div class="table-scroll"><table><thead><tr><th>{{ t('source') }}</th><th>{{ t('value') }}</th><th>{{ t('age') }}</th></tr></thead>
-        <tbody id="source-rows"><tr v-for="source in snapshot?.sources ?? []" :key="source.entity_id"><td>{{ source.entity_id }}</td><td>{{ source.valid ? `${number(Number(source.state), 2)} ${source.unit ?? ''}` : t('unavailable') }}</td><td>{{ number(Math.max(0, Date.now() / 1000 - source.reported_at), 0) }} s</td></tr></tbody>
+        <tbody id="source-rows"><tr v-for="source in snapshot?.sources ?? []" :key="source.entity_id"><td>{{ source.entity_id }}</td><td>{{ source.valid ? `${number(Number(source.state), 2)} ${source.unit ?? ''}` : t('unavailable') }}</td><td>{{ sourceAge(source.reported_at) }}</td></tr></tbody>
         <tbody v-show="!snapshot?.sources.length" id="source-empty"><tr><td colspan="3" class="source-empty muted">{{ t('no_sensor_data') }}</td></tr></tbody>
       </table></div>
     </details>

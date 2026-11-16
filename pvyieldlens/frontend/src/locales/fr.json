@@ -29,6 +29,8 @@
   "source": "Capteur",
   "value": "Valeur",
   "age": "Dernière mise à jour",
+  "just_now": "À l’instant",
+  "live_history_error": "Impossible de charger les données récentes. Les nouvelles mesures en direct sont affichées.",
   "coverage": "Données reçues",
   "connection": "Connexion Home Assistant",
   "ha_url": "Adresse Home Assistant",
