@@ -73,7 +73,7 @@ async def test_ha_light_overrides_system_dark(theme_page):
     await theme_page.get_by_role('radio', name='HA Light', exact=True).check()
     app = theme_page.frame_locator('#pvyieldlens-frame')
     await expect(app.locator('html')).to_have_attribute('data-theme', 'light')
-    await expect(app.locator('#theme-mode')).to_have_attribute('data-source', 'ha')
+    await expect(app.locator('#theme-select')).to_have_attribute('data-source', 'ha')
 
 
 async def test_ha_dark_overrides_system_light(theme_page):
@@ -83,7 +83,7 @@ async def test_ha_dark_overrides_system_light(theme_page):
     await theme_page.get_by_role('radio', name='HA Dark', exact=True).check()
     app = theme_page.frame_locator('#pvyieldlens-frame')
     await expect(app.locator('html')).to_have_attribute('data-theme', 'dark')
-    await expect(app.locator('#theme-mode')).to_have_attribute('data-source', 'ha')
+    await expect(app.locator('#theme-select')).to_have_attribute('data-source', 'ha')
 
 
 async def test_auto_tracks_runtime_host_and_system_changes(theme_page):
@@ -108,13 +108,13 @@ async def test_local_override_persists_and_auto_resumes_ha(theme_page):
     await app.locator('#theme-select').select_option('light')
     await theme_page.emulate_media(color_scheme='dark')
     await expect(app.locator('html')).to_have_attribute('data-theme', 'light')
-    await expect(app.locator('#theme-mode')).to_have_attribute('data-source', 'manual')
+    await expect(app.locator('#theme-select')).to_have_attribute('data-source', 'manual')
     await theme_page.reload()
     await expect(app.locator('#theme-select')).to_have_value('light')
     await theme_page.get_by_role('radio', name='HA Dark', exact=True).check()
     await app.locator('#theme-select').select_option('auto')
     await expect(app.locator('html')).to_have_attribute('data-theme', 'dark')
-    await expect(app.locator('#theme-mode')).to_have_attribute('data-source', 'ha')
+    await expect(app.locator('#theme-select')).to_have_attribute('data-source', 'ha')
 
 
 async def test_cross_origin_parent_and_blocked_storage_use_system(theme_page):
@@ -125,7 +125,7 @@ async def test_cross_origin_parent_and_blocked_storage_use_system(theme_page):
     app = theme_page.frame_locator('#pvyieldlens-frame')
     await theme_page.emulate_media(color_scheme='dark')
     await expect(app.locator('html')).to_have_attribute('data-theme', 'dark')
-    await expect(app.locator('#theme-mode')).to_have_attribute('data-source', 'system')
+    await expect(app.locator('#theme-select')).to_have_attribute('data-source', 'system')
     await theme_page.emulate_media(color_scheme='light')
     await expect(app.locator('html')).to_have_attribute('data-theme', 'light')
     await app.locator('#theme-select').select_option('dark')

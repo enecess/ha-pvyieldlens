@@ -48,7 +48,7 @@ def layout_artifacts():
     return path
 
 
-@pytest.mark.parametrize('width', [1440, 1100])
+@pytest.mark.parametrize('width', [1440, 1100, 1920, 2560])
 async def test_data_and_settings_keep_header_and_content_width(layout_page, layout_artifacts, width):
     from playwright.async_api import expect
 
@@ -64,32 +64,48 @@ async def test_data_and_settings_keep_header_and_content_width(layout_page, layo
             viewport: innerWidth, occupied: innerWidth - document.documentElement.clientWidth,
             scrollWidth: document.documentElement.scrollWidth,
             boxes: Object.fromEntries(Object.entries({brand: '.brand', language: '.language-picker',
+                settings: '#settings-button', status: '#connection-state', theme: '.theme-control',
                 content: '#' + destination}).map(([name, selector]) => {
-                const {x, right, width} = document.querySelector(selector).getBoundingClientRect();
-                return [name, {x, right, width}];
+                const {x, right, width, top, bottom} = document.querySelector(selector).getBoundingClientRect();
+                return [name, {x, right, width, top, bottom}];
             }))})''', destination))
+        assert await page.locator('.app-header #connection-state').count() == 1
+        assert await page.locator('#theme-mode, .context-bar').count() == 0
     (layout_artifacts / f'widths-{width}.json').write_text(json.dumps(measurements, indent=2), encoding='utf-8')
     assert measurements[0]['occupied'] > 0
     for measurement in measurements:
         assert measurement['scrollWidth'] <= width
         assert measurement['boxes']['content']['width'] <= 1388
         assert measurement['boxes']['brand']['x'] == pytest.approx(measurement['boxes']['content']['x'], abs=1)
+        assert measurement['boxes']['settings']['right'] == pytest.approx(measurement['boxes']['content']['right'], abs=1)
+        status, theme = measurement['boxes']['status'], measurement['boxes']['theme']
+        assert status['right'] < theme['x']
+        assert (status['top'] + status['bottom']) / 2 == pytest.approx((theme['top'] + theme['bottom']) / 2, abs=1)
         scrollbar_change = measurements[0]['occupied'] - measurement['occupied']
-        for edge, value in measurement['boxes']['brand'].items():
-            assert value == pytest.approx(measurements[0]['boxes']['brand'][edge], abs=1)
-        assert measurement['boxes']['content']['x'] == pytest.approx(measurements[0]['boxes']['content']['x'], abs=1)
-        assert measurement['boxes']['content']['width'] == pytest.approx(measurements[0]['boxes']['content']['width'] + scrollbar_change, abs=1)
-        assert measurement['boxes']['language']['right'] == pytest.approx(measurements[0]['boxes']['language']['right'] + scrollbar_change, abs=1)
+        left_change = scrollbar_change / 2 if width > 1440 else 0
+        assert measurement['boxes']['brand']['x'] == pytest.approx(measurements[0]['boxes']['brand']['x'] + left_change, abs=1)
+        assert measurement['boxes']['brand']['width'] == pytest.approx(measurements[0]['boxes']['brand']['width'], abs=1)
+        assert measurement['boxes']['content']['x'] == pytest.approx(measurements[0]['boxes']['content']['x'] + left_change, abs=1)
+        assert measurement['boxes']['content']['width'] == pytest.approx(measurements[0]['boxes']['content']['width'] + (scrollbar_change if width <= 1440 else 0), abs=1)
+        assert measurement['boxes']['language']['right'] == pytest.approx(measurements[0]['boxes']['language']['right'] + scrollbar_change - left_change, abs=1)
         assert measurement['boxes']['language']['width'] == pytest.approx(measurements[0]['boxes']['language']['width'], abs=1)
 
 
-@pytest.mark.parametrize('width', [601, 700, 768, 800, 801])
+@pytest.mark.parametrize('width', [601, 700, 768, 800, 801, 851, 900, 1024])
 async def test_tablet_data_header_keeps_controls_inside_viewport(layout_page, layout_artifacts, width):
     from playwright.async_api import expect
 
     page, _ = layout_page
     await page.set_viewport_size({'width': width, 'height': 844})
     await page.locator('#language-select').select_option('fr')
+    async def unconfigured(route):
+        response = await route.fetch()
+        configuration = await response.json()
+        configuration['settings'] = None
+        await route.fulfill(response=response, json=configuration)
+    await page.route('**/api/config', unconfigured)
+    await page.reload()
+    await expect(page.locator('#connection-state')).to_contain_text('Configuration requise')
     for control, destination in [('live-tab', 'live-page'), ('history-tab', 'history-page'),
                                   ('forecast-tab', 'forecast-page'), ('settings-button', 'settings-page'),
                                   ('forecast-tab', 'forecast-page')]:
@@ -258,6 +274,9 @@ async def test_short_mobile_settings_keeps_directory_and_actions_usable(layout_p
     assert scroll['y'] <= field['y'] and field['y'] + field['height'] < dock['y']
     evidence.append({'last_field': field, 'dock': dock, 'scroll': scroll})
     await page.screenshot(path=str(layout_artifacts / 'settings-short-390-430-de.png'))
+    for theme in ['light', 'dark']:
+        await page.locator('#theme-select').select_option(theme)
+        await page.screenshot(path=str(layout_artifacts / f'settings-390-430-{theme}.png'))
     (layout_artifacts / 'settings-short-390-430-de.json').write_text(json.dumps(evidence, indent=2), encoding='utf-8')
     await page.locator('[name=forecast_noct_c]').fill('48')
     await page.locator('#history-tab').click()
@@ -452,7 +471,7 @@ async def test_live_readings_keep_polling_while_configuring(layout_page, layout_
         return {viewport: {width: innerWidth, height: innerHeight, devicePixelRatio},
             document: bounds(document.documentElement), body: bounds(document.body),
             main: bounds(document.querySelector('main')), header: bounds(document.querySelector('.app-header')),
-            controls: [...document.querySelectorAll('.app-header button, .app-header select, .metric, #updated, #theme-mode')]
+            controls: [...document.querySelectorAll('.app-header button, .app-header select, .metric, #updated, #connection-state')]
                 .filter(node => node.checkVisibility()).map(node => ({id: node.id, ...bounds(node)}))};
     }''')
     assert geometry['viewport']['width'] == 390
@@ -526,12 +545,12 @@ async def test_live_readings_keep_polling_while_configuring(layout_page, layout_
     await expect(page.locator('#live-chart path.series').nth(1)).to_have_attribute('d', curve)
 
 
-@pytest.mark.parametrize('width', [1440, 390])
-async def test_settings_scrollspy_and_bottom_actions(layout_page, width):
+@pytest.mark.parametrize(('width', 'height'), [(1440, 700), (1920, 1080), (2560, 1440), (390, 844)])
+async def test_settings_scrollspy_and_bottom_actions(layout_page, layout_artifacts, width, height):
     from playwright.async_api import expect
 
     page, _ = layout_page
-    await page.set_viewport_size({'width': width, 'height': 700 if width > 600 else 844})
+    await page.set_viewport_size({'width': width, 'height': height})
     await page.emulate_media(reduced_motion='reduce')
     await page.locator('#settings-button').click()
     await expect(page.locator('[name=rated_power_w]')).to_be_enabled()
@@ -541,6 +560,25 @@ async def test_settings_scrollspy_and_bottom_actions(layout_page, width):
         await expect(page.locator(f'[data-settings-category={category}]')).to_have_attribute('aria-pressed', 'true')
         position = await page.locator('#settings-scroll').evaluate('node => node.scrollTop')
         assert 0 <= position <= 24 if category == 'connection' else position > 24
+        heading_top = await page.locator('#settings-scroll').evaluate('''(node, category) =>
+            node.querySelector(`[data-settings-section=${category}] h2`).getBoundingClientRect().top
+                - node.getBoundingClientRect().top''', category)
+        assert 0 <= heading_top <= 24 if category == 'connection' else heading_top == pytest.approx(20, abs=1), {'category': category, 'heading_top': heading_top}
+    checkbox = await page.locator('.checkbox-row').evaluate('''node => {
+        const text = node.querySelector('span').getBoundingClientRect();
+        const input = node.querySelector('input').getBoundingClientRect();
+        return {gap: input.left - text.right, textMiddle: (text.top + text.bottom) / 2,
+            inputMiddle: (input.top + input.bottom) / 2};
+    }''')
+    assert 0 <= checkbox['gap'] <= 12, checkbox
+    assert checkbox['textMiddle'] == pytest.approx(checkbox['inputMiddle'], abs=1)
+    enabled = await page.locator('[name=forecast_enabled]').is_checked()
+    await page.locator('.checkbox-row span').click()
+    assert await page.locator('[name=forecast_enabled]').is_checked() is not enabled
+    await page.locator('.checkbox-row span').click()
+    for theme in ['light', 'dark']:
+        await page.locator('#theme-select').select_option(theme)
+        await page.screenshot(path=str(layout_artifacts / f'settings-{width}-{height}-{theme}.png'))
     await page.locator('#settings-scroll').evaluate('node => node.scrollTop = 0')
     await expect(page.locator('[data-settings-category=connection]')).to_have_attribute('aria-pressed', 'true')
     await page.locator('#settings-scroll').evaluate('''node => {
@@ -573,3 +611,64 @@ async def test_settings_scrollspy_and_bottom_actions(layout_page, width):
     focused = await page.locator('[name=rated_power_w]').bounding_box()
     assert focused['y'] >= boxes['scroll']['top']
     assert focused['y'] + focused['height'] < boxes['actions']['top']
+
+
+async def test_settings_sections_remeasure_when_visible_resized_and_expanded(layout_page):
+    from playwright.async_api import expect
+
+    page, _ = layout_page
+    await page.emulate_media(reduced_motion='reduce')
+    await page.set_viewport_size({'width': 2560, 'height': 1440})
+    for mode in ['docker', 'app']:
+        if mode == 'app':
+            async def app_configuration(route):
+                response = await route.fetch()
+                configuration = await response.json()
+                configuration['mode'] = 'app'
+                await route.fulfill(response=response, json=configuration)
+            await page.route('**/api/config', app_configuration)
+            await page.reload()
+        await page.locator('#settings-button').click()
+        await expect(page.locator('[name=rated_power_w]')).to_be_enabled()
+        await page.set_viewport_size({'width': 1440, 'height': 700})
+        await page.locator('[data-settings-category=monitoring]').click()
+        await page.locator('#settings-scroll').evaluate('node => node.scrollTop += 50')
+        await page.locator('[name=update_seconds]').focus()
+        await expect(page.locator('[data-settings-category=monitoring]')).to_have_attribute('aria-current', 'location')
+        reading_top = await page.locator('#settings-scroll').evaluate('''node =>
+            node.querySelector('[data-settings-section=monitoring] h2').getBoundingClientRect().top - node.getBoundingClientRect().top''')
+        await page.set_viewport_size({'width': 2560, 'height': 1440})
+        await expect(page.locator('[data-settings-category=monitoring]')).to_have_attribute('aria-current', 'location')
+        await page.wait_for_function('''top => {
+            const container = document.querySelector('#settings-scroll');
+            return Math.abs(container.querySelector('[data-settings-section=monitoring] h2').getBoundingClientRect().top
+                - container.getBoundingClientRect().top - top) <= 1;
+        }''', arg=reading_top)
+        await expect(page.locator('[name=update_seconds]')).to_be_focused()
+        for width, height in [(2560, 1440), (1920, 1080), (1440, 700), (390, 844), (390, 430), (2560, 1440)]:
+            await page.set_viewport_size({'width': width, 'height': height})
+            for category in ['monitoring', 'forecast']:
+                await page.locator(f'[data-settings-category={category}]').click()
+                await expect(page.locator(f'[data-settings-category={category}]')).to_have_attribute('aria-current', 'location')
+                await page.wait_for_function('''category => {
+                    const container = document.querySelector('#settings-scroll');
+                    const heading = container.querySelector(`[data-settings-section=${category}] h2`);
+                    return Math.abs(heading.getBoundingClientRect().top - container.getBoundingClientRect().top - 20) <= 1;
+                }''', arg=category)
+        for direction in ['custom', '180']:
+            await page.locator('#forecast-direction').select_option(direction)
+            await page.locator('#settings-scroll').evaluate('node => node.scrollTo(0, node.scrollHeight)')
+            await expect(page.locator('[data-settings-category=forecast]')).to_have_attribute('aria-current', 'location')
+            await page.wait_for_function('''() => {
+                const container = document.querySelector('#settings-scroll');
+                const heading = container.querySelector('[data-settings-section=forecast] h2');
+                return Math.abs(heading.getBoundingClientRect().top - container.getBoundingClientRect().top - 20) <= 1;
+            }''')
+        await page.locator('#cancel-settings').click()
+        await page.locator('#live-tab').click()
+        await page.locator('#settings-button').click()
+        await expect(page.locator('[name=rated_power_w]')).to_be_enabled()
+        await expect(page.locator('[data-settings-category=connection]')).to_have_attribute('aria-current', 'location')
+        await page.locator('[data-settings-category=monitoring]').click()
+        await expect(page.locator('[data-settings-category=monitoring]')).to_have_attribute('aria-current', 'location')
+        await page.locator('#live-tab').click()

@@ -69,27 +69,28 @@ function discardAndNavigate() {
       </button>
     </nav>
     <div class="utilities">
-      <label class="theme-control" for="theme-select">
-        <SunMoon :size="16" aria-hidden="true" />
-        <span class="sr-only">{{ t('theme_mode') }}</span>
-        <select id="theme-select" :value="preference" :aria-label="t('theme_mode')" @change="changeTheme">
-          <option value="auto">{{ t('auto') }}</option>
-          <option value="light">{{ t('light') }}</option>
-          <option value="dark">{{ t('dark') }}</option>
-        </select>
-      </label>
-      <label class="language-picker"><Languages :size="16" aria-hidden="true" /><select id="language-select" :value="languageChoice" :aria-label="t('language')" @change="changeLanguage">
-        <option value="auto">{{ t('auto') }}</option><option value="en">English</option><option value="zh">中文</option><option value="fr">Français</option><option value="de">Deutsch</option><option value="pl">Polski</option><option value="it">Italiano</option>
-      </select></label>
+      <div class="preferences">
+        <div class="theme-preferences">
+          <span id="connection-state" role="status"><span class="status-dot" :class="{ good: snapshot?.connected && !error }"></span>{{ t(!configuration?.settings ? 'unconfigured' : snapshot?.connected && !error ? 'live' : 'offline') }}</span>
+          <label class="theme-control" for="theme-select">
+            <SunMoon :size="16" aria-hidden="true" />
+            <span class="sr-only">{{ t('theme_mode') }}</span>
+            <select id="theme-select" :value="preference" :data-source="source" :aria-label="t('theme_mode')" @change="changeTheme">
+              <option value="auto">{{ t('auto') }}</option>
+              <option value="light">{{ t('light') }}</option>
+              <option value="dark">{{ t('dark') }}</option>
+            </select>
+          </label>
+        </div>
+        <label class="language-picker"><Languages :size="16" aria-hidden="true" /><select id="language-select" :value="languageChoice" :aria-label="t('language')" @change="changeLanguage">
+          <option value="auto">{{ t('auto') }}</option><option value="en">English</option><option value="zh">中文</option><option value="fr">Français</option><option value="de">Deutsch</option><option value="pl">Polski</option><option value="it">Italiano</option>
+        </select></label>
+      </div>
       <button id="settings-button" :disabled="settingsState.busy" :aria-current="page === 'settings' ? 'page' : undefined" @click="requestPage('settings')">
         <Settings :size="17" aria-hidden="true" />{{ t('settings') }}
       </button>
     </div>
   </header>
-  <div class="context-bar">
-    <span id="connection-state" role="status"><span class="status-dot" :class="{ good: snapshot?.connected && !error }"></span>{{ t(!configuration?.settings ? 'unconfigured' : snapshot?.connected && !error ? 'live' : 'offline') }}</span>
-    <span id="theme-mode" :data-source="source">{{ t(`theme_source_${source}`) }} · {{ t(mode) }}</span>
-  </div>
   <main :class="{ 'settings-active': page === 'settings' }" :data-configuration-ready="configuration !== null" :data-snapshot-ready="snapshot !== null">
     <div v-show="warnings.length" id="banner" class="banner" role="status">{{ warnings.map(key => t(key)).join(' ') }}</div>
     <LivePage v-show="page === 'live'" :active="page === 'live'" :configuration="configuration" :snapshot="snapshot" :points="livePoints" :language="language" :theme="mode" @open-settings="requestPage('settings')" />
