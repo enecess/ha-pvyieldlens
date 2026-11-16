@@ -64,7 +64,7 @@ it('keeps null gaps, at most 600 readings, and only the last 1800 seconds', asyn
   await flushPromises();
   await vi.advanceTimersByTimeAsync(601000);
   expect(dashboard.livePoints.value).toHaveLength(600);
-  expect(dashboard.livePoints.value[0]).toEqual({ at: 10002, estimated_power: 5000, actual_power: 4500 });
+  expect(dashboard.livePoints.value[0]).toEqual({ at: 10002, estimated_power: 5000, actual_power: 4500, window: snapshot.realtime });
   expect(dashboard.livePoints.value[1]).toEqual({ at: 10003, estimated_power: null, actual_power: null });
   dashboard.acceptConfiguration({ ...configuration, settings: { ...configuration.settings!, update_seconds: 60 } });
   await vi.advanceTimersByTimeAsync(1801000);

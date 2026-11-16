@@ -41,7 +41,8 @@ export function useDashboard() {
       if (configuration.value) configuration.value = { ...configuration.value, location: value.location };
       if (value.calculated_at !== null && livePoints.value.at(-1)?.at !== value.calculated_at) {
         livePoints.value = [...livePoints.value, { at: value.calculated_at,
-          estimated_power: value.realtime?.estimated_power ?? null, actual_power: value.realtime?.actual_power ?? null }];
+          estimated_power: value.realtime?.estimated_power ?? null, actual_power: value.realtime?.actual_power ?? null,
+          window: value.realtime ?? undefined }];
       }
       livePoints.value = livePoints.value.filter(point => point.at >= Date.now() / 1000 - 1800).slice(-600);
     } catch (failure) {

@@ -881,7 +881,11 @@ async def test_history_rejects_superseded_range_responses(browser_workspace, sup
     assert await page.locator('#history-range').input_value() == '1'
     assert await page.locator('#history-energy').inner_text() == '0.062'
     assert await page.locator('#history-page .banner').count() == 0
-    assert await page.locator('#history-chart path.series').first.evaluate("path => path.getAttribute('d').match(/[ML]/g).length") == 1
+    await page.locator('#history-chart .chart-hit-area').focus()
+    await page.keyboard.press('ArrowRight')
+    await expect(page.locator('#history-chart .chart-tooltip')).to_contain_text('1,000 W')
+    await page.keyboard.press('ArrowLeft')
+    await expect(page.locator('#history-chart .chart-tooltip')).to_contain_text('1,000 W')
 
 
 async def test_rolling_history_refreshes_only_when_complete_window_membership_changes(tmp_path):
@@ -928,9 +932,9 @@ async def test_rolling_history_refreshes_only_when_complete_window_membership_ch
         await expect(page.locator('#history-chart svg')).to_be_visible()
         charts = page.locator('#history-chart svg, #pr-chart svg')
         await charts.evaluate_all("charts => charts.forEach(chart => chart.dataset.original = 'initial')")
-        actual_y = await page.locator('#history-chart path.series').nth(1).evaluate(
-            "path => path.getAttribute('d').match(/[ML][\\d.]+,[\\d.]+/g).map(command => Number(command.split(',')[1]))")
-        assert len(actual_y) == 3
+        await page.locator('#history-chart .chart-hit-area').focus()
+        await page.keyboard.press('ArrowRight')
+        await expect(page.locator('#history-chart .chart-tooltip')).to_contain_text('1,000 W')
         initial_requests = len(history_requests)
         await advance_clock(0)
         assert await charts.evaluate_all('charts => charts.map(chart => chart.dataset.original)') == ['initial', 'initial']
@@ -939,10 +943,13 @@ async def test_rolling_history_refreshes_only_when_complete_window_membership_ch
         # A straddling window is excluded from both the summary and chart.
         await advance_clock(90)
         await expect(charts.first).not_to_have_attribute('data-original', 'initial')
-        assert await page.locator('#history-chart path.series').nth(1).evaluate(
-            "path => path.getAttribute('d').match(/[ML][\\d.]+,[\\d.]+/g).map(command => Number(command.split(',')[1]))") == actual_y[2:]
-        assert await page.locator('#pr-chart path.series').evaluate(
-            "path => path.getAttribute('d').match(/[ML]/g).length") == 1
+        await expect(page.locator('#history-chart .chart-tooltip')).to_be_hidden()
+        for selector in ['#history-chart', '#pr-chart']:
+            await page.locator(selector + ' .chart-hit-area').focus()
+            await page.keyboard.press('ArrowRight')
+            await expect(page.locator(selector + ' .chart-tooltip')).to_contain_text('3,000 W')
+            await page.keyboard.press('ArrowLeft')
+            await expect(page.locator(selector + ' .chart-tooltip')).to_contain_text('3,000 W')
         assert len(history_requests) == initial_requests + 1
         await charts.evaluate_all("charts => charts.forEach(chart => chart.dataset.original = 'remaining')")
         await advance_clock(100)
@@ -1219,7 +1226,7 @@ async def test_live_curve_save_resets_only_for_monitoring_changes(browser_worksp
         async with page.expect_response(lambda response: response.url.endswith('/api/snapshot')):
             pass
         await expect(page.locator('#live-actual')).to_have_text('3,348')
-    await page.wait_for_function("document.querySelector('#live-chart path.series')?.getAttribute('d').match(/[ML]/g)?.length === 3")
+    await page.wait_for_function("document.querySelector('#live-chart path.series')?.getAttribute('d').includes('C')")
     curve = await page.locator('#live-chart path.series').first.get_attribute('d')
     await page.locator('#settings-button').click()
     if change == 'forecast':
@@ -1242,4 +1249,4 @@ async def test_live_curve_save_resets_only_for_monitoring_changes(browser_worksp
     if change == 'forecast':
         await expect(page.locator('#live-chart path.series').first).to_have_attribute('d', curve)
     else:
-        await page.wait_for_function("!document.querySelector('#live-chart path.series') || document.querySelector('#live-chart path.series').getAttribute('d').match(/[ML]/g).length < 3")
+        await page.wait_for_function("!document.querySelector('#live-chart path.series')?.getAttribute('d').includes('C')")

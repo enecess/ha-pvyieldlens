@@ -76,7 +76,10 @@ async def test_forecast_days_select_hourly_details_and_preserve_selection(foreca
     await expect(page.locator('#forecast-rows tr').first).to_contain_text('20')
     await expect(page.locator('#forecast-rows tr').first).to_contain_text('45')
     await expect(page.locator('#forecast-chart svg')).to_have_attribute('aria-label', 'Forecast power')
-    await expect(page.locator('#forecast-chart title').first).to_contain_text('3.72 kWh')
+    await page.locator('#forecast-chart .chart-hit-area').focus()
+    await page.keyboard.press('ArrowRight')
+    await expect(page.locator('#forecast-chart .chart-tooltip')).to_contain_text('3.72 kWh')
+    await expect(page.locator('#forecast-chart .chart-tooltip')).to_contain_text('3,720 W')
     await expect(page.locator('#forecast-fetched')).to_contain_text('Nov 1')
     await page.locator('#settings-button').click()
     await page.locator('#forecast-tab').click()
@@ -112,6 +115,16 @@ async def test_forecast_states_are_truthful(forecast_page, status):
         await expect(page.locator('#forecast-day-total')).to_have_text('— kWh')
         await expect(page.locator('#forecast-day-coverage')).to_contain_text('50%')
         assert await page.locator('#forecast-chart path.series').evaluate("node => (node.getAttribute('d').match(/M/g) || []).length") == 2
+        geometry = await page.locator('#forecast-chart').evaluate('''host => {
+            const path = host.querySelector('path.series'), width = host.clientWidth - 60;
+            return {left: path.getPointAtLength(0).x,
+                right: path.getPointAtLength(path.getTotalLength()).x,
+                edge: host.clientWidth - 12, gapStart: 48 + width / 2, gapEnd: 48 + width * 13 / 24,
+                samples: Array.from({length: 2001}, (_, index) => path.getPointAtLength(path.getTotalLength() * index / 2000).x)};
+        }''')
+        assert geometry['left'] == pytest.approx(48, abs=0.05)
+        assert geometry['right'] == pytest.approx(geometry['edge'], abs=0.05)
+        assert all(x <= geometry['gapStart'] + 0.05 or x >= geometry['gapEnd'] - 0.05 for x in geometry['samples'])
         await expect(page.locator('#forecast-fetched')).to_contain_text('Nov 1')
         if status == 'stale':
             await expect(page.locator('#forecast-status')).to_contain_text('older')

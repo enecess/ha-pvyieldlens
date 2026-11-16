@@ -367,8 +367,12 @@ async def test_history_summary_and_charts_share_range(layout_page, layout_artifa
     await expect(page.locator('#history-energy')).to_have_text('0.124')
     await expect(page.locator('#history-pr')).to_have_text('67.2')
     await expect(page.locator('#stat-coverage')).to_contain_text('100%')
-    for selector in ['#history-chart path.series', '#pr-chart path.series']:
-        assert await page.locator(selector).first.evaluate("path => path.getAttribute('d').match(/[ML]/g).length") == 2
+    for selector in ['#history-chart', '#pr-chart']:
+        await page.locator(selector + ' .chart-hit-area').focus()
+        await page.keyboard.press('ArrowRight')
+        await expect(page.locator(selector + ' .chart-tooltip')).to_contain_text('2,000 W')
+        await page.keyboard.press('ArrowRight')
+        await expect(page.locator(selector + ' .chart-tooltip')).to_contain_text('3,000 W')
     await expect(page.locator('#history-boundaries')).to_contain_text('Settled periods')
     await expect(page.locator('#history-boundaries')).not_to_contain_text('UTC')
     requests = []
@@ -400,7 +404,10 @@ async def test_history_summary_and_charts_share_range(layout_page, layout_artifa
     async with page.expect_response(lambda response: '/api/history?' in response.url):
         await page.locator('#history-range').select_option('7')
     await expect(page.locator('#history-energy')).to_have_text('0.186')
-    assert await page.locator('#history-chart path.series').first.evaluate("path => path.getAttribute('d').match(/[ML]/g).length") == 3
+    await page.locator('#history-chart .chart-hit-area').focus()
+    await page.keyboard.press('ArrowRight')
+    await expect(page.locator('#history-chart .chart-tooltip')).to_contain_text('1,000 W')
+    assert await page.locator('#history-chart path.series').first.evaluate('path => path.getTotalLength()') > 0
     await expect(page.locator('#total-energy')).to_have_text(total)
     await page.screenshot(path=str(layout_artifacts / 'history-populated-desktop.png'), full_page=True)
     await page.locator('#live-tab').click()

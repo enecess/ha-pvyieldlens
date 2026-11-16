@@ -86,12 +86,24 @@ p { margin: 8px 0; }
 .legend span::before { content: ''; display: inline-block; width: 7px; height: 7px; margin-right: 6px; border-radius: 50%; }
 .actual-dot::before { background: var(--pv-actual); }
 .theoretical-dot::before { background: var(--pv-theoretical); }
-.chart { height: 260px; min-width: 0; }
+.chart { position: relative; height: 260px; min-width: 0; }
 .chart svg { display: block; width: 100%; height: 100%; overflow: visible; }
 .chart .series { fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
 .chart text { fill: var(--pv-muted); font-size: 10px; }
 .chart .grid { stroke: var(--pv-line); stroke-width: 1; }
 .chart .current-time { stroke: var(--pv-muted); stroke-width: 1.5; stroke-dasharray: 5 4; }
+.chart-guide { stroke: var(--pv-muted); stroke-width: 1; pointer-events: none; }
+.active-series-marker { stroke: var(--pv-surface); stroke-width: 2; pointer-events: none; }
+.chart-hit-area { touch-action: pan-y; cursor: crosshair; }
+.chart-hit-area:focus-visible { outline: 2px solid var(--pv-accent); outline-offset: 2px; }
+.chart-tooltip { position: absolute; z-index: 2; width: max-content; max-width: 100%; padding: 9px 11px;
+  border: 1px solid var(--pv-line); border-radius: 8px; background: var(--pv-raised); color: var(--pv-text);
+  box-shadow: 0 3px 12px var(--pv-shadow); font-size: 11px; line-height: 1.35; pointer-events: none; overflow: auto; }
+.chart-tooltip[hidden] { display: none; }
+.chart-tooltip strong { display: block; max-width: 320px; margin-bottom: 7px; font-weight: 600; overflow-wrap: anywhere; }
+.chart-tooltip > div { display: flex; justify-content: space-between; gap: 12px; margin-top: 4px; }
+.chart-tooltip > div span:first-child { min-width: 0; overflow-wrap: anywhere; }
+.chart-tooltip > div span:last-child { flex-shrink: 0; font-variant-numeric: tabular-nums; }
 .chart-empty { display: grid; place-items: center; height: 100%; color: var(--pv-muted); font-size: 12px; }
 .live-status { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px; margin-top: 15px; padding-top: 15px; border-top: 1px solid var(--pv-line); font-size: 11px; }
 .status-dot { display: inline-block; width: 6px; height: 6px; margin-right: 7px; border-radius: 50%; background: var(--pv-amber); }

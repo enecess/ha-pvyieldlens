@@ -3,7 +3,7 @@ import { computed } from 'vue';
 import { Radio, ArrowUpRight } from 'lucide-vue-next';
 import MetricCard from './MetricCard.vue';
 import PowerChart from './PowerChart.vue';
-import type { ChartPoint, ChartSeries } from './charts';
+import type { ChartPoint, ChartSeries, ChartTooltip } from './charts';
 import type { Configuration, Snapshot } from './models';
 import { useI18n, type Language } from './i18n';
 import type { ColorMode } from './theme';
@@ -27,6 +27,20 @@ const updated = computed(() => props.snapshot?.calculated_at == null ? '—'
   : formatTimes([props.snapshot.calculated_at], props.language, props.displayTimezone, {
     hour: '2-digit', minute: '2-digit', second: '2-digit',
   })[0]);
+const pointLabels = computed(() => {
+  const labels = formatTimes(props.points.map(point => point.at), props.language, props.displayTimezone, {
+    year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit',
+  });
+  return new Map(props.points.map((point, index) => [point.at, labels[index]]));
+});
+const tooltip = (point: ChartPoint): ChartTooltip => ({ title: pointLabels.value.get(point.at)!, rows: [
+  { label: t('estimated'), value: `${number(point.window?.estimated_power)} W`, color: powerSeries[0].color },
+  { label: t('actual'), value: `${number(point.window?.actual_power)} W`, color: powerSeries[1].color },
+  { label: t('pr'), value: `${number(point.window?.pr)} %` },
+  { label: t('opportunity'), value: `${number(point.window?.optimizable_power)} W` },
+  { label: t('coverage'), value: `${number(point.window?.coverage_percent)} %` },
+  { label: t('chart_quality'), value: t(point.window?.quality ?? 'unavailable') },
+] });
 </script>
 
 <template>
@@ -48,7 +62,7 @@ const updated = computed(() => props.snapshot?.calculated_at == null ? '—'
     </div>
     <article class="panel live-panel">
       <div class="panel-heading"><h2>{{ t('power_chart') }}</h2><div class="legend"><span class="actual-dot">{{ t('actual') }}</span><span class="theoretical-dot">{{ t('estimated') }}</span></div></div>
-      <PowerChart id="live-chart" :points="points" :series="powerSeries" unit="W" :active="active" :language="language" :timezone="displayTimezone" :theme="theme" />
+      <PowerChart id="live-chart" :points="points" :series="powerSeries" unit="W" :active="active" :language="language" :timezone="displayTimezone" :theme="theme" :tooltip="tooltip" />
       <p v-if="live?.reason" id="live-reason" class="muted">{{ t(live.reason) }}</p>
       <div class="live-status muted"><span id="live-quality"><span class="status-dot" :class="{ good: live?.quality === 'complete' }"></span>{{ t(live?.quality ?? 'waiting') }}</span>
         <span><span id="live-coverage" :title="t('coverage_help')">{{ t('coverage') }} {{ number(live?.coverage_percent) }}%</span></span></div>

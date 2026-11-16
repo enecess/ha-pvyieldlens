@@ -3,7 +3,7 @@ import { computed, ref, shallowRef, watch } from 'vue';
 import MetricCard from './MetricCard.vue';
 import PowerChart from './PowerChart.vue';
 import { api, ApiError } from './api';
-import type { ChartPoint, ChartSeries } from './charts';
+import type { ChartPoint, ChartSeries, ChartTooltip } from './charts';
 import type { Configuration, HistorySummary, Snapshot } from './models';
 import { useI18n, type Language } from './i18n';
 import type { ColorMode } from './theme';
@@ -46,6 +46,19 @@ const boundaries = computed(() => {
   });
   return t('history_boundaries', { start, end });
 });
+const pointLabels = computed(() => {
+  const labels = formatTimes(points.value.flatMap(point => [point.window!.start, point.window!.end]), props.language, props.displayTimezone, {
+    year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit',
+  });
+  return new Map(points.value.map((point, index) => [point.at, `${labels[index * 2]} – ${labels[index * 2 + 1]}`]));
+});
+const tooltip = (point: ChartPoint): ChartTooltip => ({ title: pointLabels.value.get(point.at)!, rows: [
+  { label: t('estimated'), value: `${number(point.window!.estimated_power)} W`, color: powerSeries[0].color },
+  { label: t('actual'), value: `${number(point.window!.actual_power)} W`, color: powerSeries[1].color },
+  { label: t('pr'), value: `${number(point.window!.pr)} %` },
+  { label: t('coverage'), value: `${number(point.window!.coverage_percent)} %` },
+  { label: t('chart_quality'), value: t(point.window!.quality) },
+] });
 
 watch(() => [props.active, range.value, props.snapshot, props.configuration?.settings], async () => {
   if (!props.active || !props.snapshot || !props.configuration) { pendingRequest = null; return; }
@@ -60,7 +73,8 @@ watch(() => [props.active, range.value, props.snapshot, props.configuration?.set
     const result = await api.getHistory(start, end);
     if (pendingRequest !== request) return;
     points.value = result.windows.filter(point => point.start >= result.requested_range.start && point.end <= result.requested_range.end)
-      .map(point => ({ ...point, at: point.end }));
+      .map((point, index, windows) => ({ ...point, at: point.end, window: point,
+        breakBefore: index > 0 && point.start > windows[index - 1].end }));
     summary.value = result.summary;
     error.value = null;
     lastKey = key;
@@ -87,9 +101,9 @@ watch(() => [props.active, range.value, props.snapshot, props.configuration?.set
     <p id="history-boundaries" class="muted">{{ boundaries }}</p>
     <div class="history-grid">
       <article class="panel"><div class="panel-heading"><h2>{{ t('power_chart') }}</h2><div class="legend"><span class="actual-dot">{{ t('actual') }}</span><span class="theoretical-dot">{{ t('estimated') }}</span></div></div>
-        <PowerChart id="history-chart" :points="points" :series="powerSeries" unit="W" :active="active" :language="language" :timezone="displayTimezone" :theme="theme" /></article>
+        <PowerChart id="history-chart" :points="points" :series="powerSeries" unit="W" :active="active" :language="language" :timezone="displayTimezone" :theme="theme" :tooltip="tooltip" /></article>
       <article class="panel"><div class="panel-heading"><h2>{{ t('pr_chart') }}</h2></div>
-        <PowerChart id="pr-chart" :points="points" :series="prSeries" unit="%" :active="active" :language="language" :timezone="displayTimezone" :theme="theme" /></article>
+        <PowerChart id="pr-chart" :points="points" :series="prSeries" unit="%" :active="active" :language="language" :timezone="displayTimezone" :theme="theme" :tooltip="tooltip" /></article>
     </div>
     <div class="inline-notes muted"><span id="last-settled">{{ t('last_settled', { time: settled }) }}</span><span>{{ t('settled_hint') }}</span></div>
     <details id="history-totals" class="panel totals-fold"><summary>{{ t('totals') }}</summary>

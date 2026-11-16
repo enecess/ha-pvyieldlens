@@ -29,13 +29,15 @@ beforeEach(() => {
   view = payload();
   requests = [];
   useI18n().setLanguage('en');
+  vi.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockReturnValue(800);
+  vi.spyOn(HTMLElement.prototype, 'clientHeight', 'get').mockReturnValue(260);
   vi.stubGlobal('ResizeObserver', class { observe() {} disconnect() {} });
   vi.stubGlobal('fetch', async (path: string, options?: RequestInit) => {
     requests.push(`${options?.method ?? 'GET'} ${path}`);
     return new Response(JSON.stringify(path.endsWith('/refresh') ? { scheduled: true, status: view.status } : view));
   });
 });
-afterEach(() => { cleanup.splice(0).forEach(dispose => dispose()); vi.unstubAllGlobals(); });
+afterEach(() => { cleanup.splice(0).forEach(dispose => dispose()); vi.restoreAllMocks(); vi.unstubAllGlobals(); });
 
 it('preserves the selected date through theme changes and a matching refreshed batch', async () => {
   const { props, host } = mount();
@@ -63,6 +65,7 @@ it('updates lightweight energy and time without replacing the detailed chart or 
   const { props, host } = mount();
   await flush();
   const chart = host.querySelector('#forecast-chart svg');
+  expect(chart).not.toBeNull();
   props.summary = { ...view, calculated_at: view.calculated_at + 1200,
     remaining_today: { ...view.remaining_today!, kwh: 38.44 } };
   await flush();
@@ -133,6 +136,21 @@ it('shows partial and unavailable totals as unavailable even when a numeric part
   expect(text(host, '#forecast-seven-days')).toBe('— kWh');
   expect(text(host, '#forecast-day-total')).toBe('— kWh');
   expect(text(host, '#forecast-day-coverage')).toContain('50%');
+});
+
+it('inspects one original hourly row at a time without changing daily energy', async () => {
+  view.intervals[0].power_w = 0;
+  view.intervals[0].energy_kwh = 0;
+  const { host } = mount();
+  await flush();
+  const beforeTotals = text(host, '#forecast-day-total');
+  const hit = host.querySelector('.chart-hit-area')!;
+  hit.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true }));
+  expect(host.querySelector('.chart-tooltip')?.textContent).toContain('Forecast power0 W');
+  hit.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true }));
+  expect(host.querySelector('.chart-tooltip')?.textContent).toContain('Forecast power3,720 W');
+  expect(host.querySelector('.chart-tooltip')?.textContent).toContain('3.72 kWh');
+  expect(text(host, '#forecast-day-total')).toEqual(beforeTotals);
 });
 
 it('changes only fetched display time and the conditional note when viewer timezone changes', async () => {

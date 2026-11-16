@@ -4,7 +4,7 @@ import { RefreshCw, Settings } from 'lucide-vue-next';
 import MetricCard from '../MetricCard.vue';
 import PowerChart from '../PowerChart.vue';
 import { api, ApiError } from '../api';
-import type { ChartPoint, ChartSeries } from '../charts';
+import type { ChartPoint, ChartSeries, ChartTooltip } from '../charts';
 import type { EnergyForecast, ForecastSummary, ForecastView } from '../models';
 import { useI18n, type Language } from '../i18n';
 import type { ColorMode } from '../theme';
@@ -62,19 +62,25 @@ const formattedRows = computed(() => {
     startStamp: stamps[index * 2], endStamp: stamps[index * 2 + 1] }));
 });
 const rowLabels = computed(() => new Map(formattedRows.value.map(row => [row.start, row])));
-const points = computed<ChartPoint[]>(() => rows.value.flatMap(row => [
-  { at: row.start, power_w: row.power_w, interval: row }, { at: row.end, power_w: row.power_w, interval: row },
-]));
+const points = computed<ChartPoint[]>(() => rows.value.map(row => ({ at: (row.start + row.end) / 2, power_w: row.power_w, interval: row })));
+const chartRange = computed(() => selected.value && { start: selected.value.start, end: selected.value.end });
 const series: ChartSeries[] = [{ key: 'power_w', label: 'forecast_power', color: 'var(--pv-theoretical)' }];
 const currentTime = computed(() => {
   // Scalar snapshots advance the retained time marker without rebuilding the series.
   void view.value?.calculated_at;
   return Date.now() / 1000;
 });
-const tooltip = (point: ChartPoint) => {
+const tooltip = (point: ChartPoint): ChartTooltip => {
   const row = point.interval!;
   const labels = rowLabels.value.get(row.start)!;
-  return `${labels.startStamp} – ${labels.endStamp} · ${t('forecast_poa')}: ${number(row.poa_w_m2)} W/m² · ${t('forecast_air')}: ${number(row.air_temperature_c)} °C · ${t('forecast_cell')}: ${number(row.cell_temperature_c)} °C · ${t('forecast_power')}: ${number(row.power_w)} W · ${t('forecast_interval_energy')}: ${number(row.energy_kwh, 3)} kWh`;
+  return { title: `${labels.startStamp} – ${labels.endStamp}`, rows: [
+    { label: t('forecast_power'), value: `${number(row.power_w)} W`, color: series[0].color },
+    { label: t('forecast_interval_energy'), value: `${number(row.energy_kwh, 3)} kWh` },
+    { label: t('forecast_poa'), value: `${number(row.poa_w_m2)} W/m²` },
+    { label: t('forecast_air'), value: `${number(row.air_temperature_c)} °C` },
+    { label: t('forecast_cell'), value: `${number(row.cell_temperature_c)} °C` },
+    { label: t('chart_quality'), value: t(row.quality) },
+  ] };
 };
 
 function loadForecast() {
@@ -139,7 +145,7 @@ async function refreshForecast() {
       <article class="panel forecast-hourly"><div class="panel-heading"><h2><span id="forecast-day-heading">{{ selected ? date(selected.start) : '' }}</span> · {{ t('forecast_hourly') }}</h2>
         <strong id="forecast-day-total">{{ energy(selected) }} kWh</strong></div>
         <p id="forecast-day-coverage" class="muted">{{ selected ? `${t(selected.quality)} · ${t('coverage')} ${number(selected.coverage_percent)}%` : '' }}</p>
-        <PowerChart id="forecast-chart" :points="points" :series="series" unit="W" :active="active && days.length > 0" :language="language" :timezone="homeTimezone" :theme="theme" :current-time="currentTime" :tooltip="tooltip" />
+        <PowerChart id="forecast-chart" :points="points" :series="series" unit="W" :active="active && days.length > 0" :language="language" :timezone="homeTimezone" :theme="theme" :current-time="currentTime" :tooltip="tooltip" :range="chartRange" selection="interval" />
         <p class="muted">{{ t('forecast_marker_help') }}</p>
         <details id="forecast-details"><summary id="forecast-details-label">{{ t('forecast_details') }}</summary>
           <p id="forecast-details-help" class="muted">{{ t('forecast_details_help') }}</p><p id="forecast-scroll-hint" class="muted">{{ t('forecast_scroll') }}</p>
