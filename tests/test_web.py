@@ -370,7 +370,7 @@ async def test_forecast_read_and_refresh_are_authenticated_and_nonblocking(servi
         requests.append(request)
         entered.set()
         await release.wait()
-        return httpx.Response(200, json=hourly_payload(0))
+        return httpx.Response(200, json=hourly_payload(0, weather_code=61))
 
     await service.configure(settings(), now=0, origin='http://ha.test')
     async with httpx.AsyncClient(transport=httpx.MockTransport(weather_response)) as weather_http:
@@ -402,6 +402,7 @@ async def test_forecast_read_and_refresh_are_authenticated_and_nonblocking(servi
                 assert snapshot.json()['forecast']['refreshing'] is True
                 assert 'days' not in snapshot.json()['forecast']
                 assert 'intervals' not in snapshot.json()['forecast']
+                assert 'weather_samples' not in snapshot.json()['forecast']
                 assert len(requests) == 1
                 assert (await client.post('/api/forecast/refresh', auth=auth, headers={'Origin': 'http://evil.test'})).status_code == 403
                 release.set()
@@ -414,6 +415,11 @@ async def test_forecast_read_and_refresh_are_authenticated_and_nonblocking(servi
                 assert ready.json()['fetched_at'] == 180
                 assert ready.json()['calculated_at'] == 180
                 assert len(ready.json()['intervals']) == 168
+                assert ready.json()['days'][0]['weather'] == {
+                    'weather_code': 61, 'temperature_min_c': 20, 'temperature_max_c': 20, 'quality': 'complete',
+                }
+                assert 'weather_samples' not in ready.json()
+                assert 'weather' not in ready.json()['today']
                 assert 'private-token' not in ready.text
             finally:
                 await service.forecast.stop()

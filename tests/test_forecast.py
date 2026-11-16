@@ -235,3 +235,66 @@ def test_staleness_keeps_complete_totals_and_original_fetch_time(age, last_error
     assert view.fetched_at == 0
     assert view.refreshing
     assert view.last_error == last_error
+
+
+def test_daily_weather_uses_raw_hourly_temperature():
+    inputs = forecast_input()
+    samples = tuple(WeatherSample(at=index * 3600, poa_w_m2=800,
+        air_temperature_c=10 if index % 2 == 0 else 30, weather_code=61 if index == 23 else 0)
+        for index in range(7 * 24 + 1))
+    batch = ForecastBatch(inputs=inputs, fetched_at=120, intervals=calculate_forecast(inputs, samples), weather_samples=samples)
+    view = forecast_view(batch, inputs, ForecastSettings(enabled=True, tilt_deg=25, azimuth_deg=180), 180)
+    day = view.days[0]
+    assert day.weather.weather_code == 61
+    assert day.weather.temperature_min_c == 10
+    assert day.weather.temperature_max_c == 30
+    assert day.weather.quality == 'complete'
+    assert batch.intervals[0].air_temperature_c == 20
+    assert day.kwh == pytest.approx(89.28)
+    assert view.today.kwh == day.kwh
+    assert 'weather' not in view.today.model_dump()
+    assert 'weather' not in view.tomorrow.model_dump()
+    assert 'weather_samples' not in view.model_dump()
+
+
+@pytest.mark.parametrize('timezone,start,end,first,last,count', [
+    ('America/New_York', '2026-03-08T05:00:00+00:00', '2026-03-09T04:00:00+00:00', 5, 27, 23),
+    ('America/New_York', '2026-11-01T04:00:00+00:00', '2026-11-02T05:00:00+00:00', 4, 28, 25),
+    ('Asia/Kathmandu', '2026-06-01T18:15:00+00:00', '2026-06-02T18:15:00+00:00', 19, 42, 24),
+])
+def test_weather_days_follow_dst_and_fractional_timezone(timezone, start, end, first, last, count):
+    inputs = forecast_input(timezone=timezone)
+    start, end = datetime.fromisoformat(start).timestamp(), datetime.fromisoformat(end).timestamp()
+    base = start // 86400 * 86400
+    samples = tuple(WeatherSample(at=base+index*3600, poa_w_m2=800,
+        air_temperature_c=float(index), weather_code=61 if index == last else 0) for index in range(216))
+    batch = ForecastBatch(inputs=inputs, fetched_at=start, intervals=constant_intervals(base, base+215*3600), weather_samples=samples)
+    view = forecast_view(batch, inputs, ForecastSettings(enabled=True, tilt_deg=25, azimuth_deg=180), start)
+    assert (view.today.start, view.today.end) == (start, end)
+    members = tuple(sample for sample in samples if start <= sample.at < end)
+    assert len(members) == count
+    assert (members[0].at, members[-1].at) == (base+first*3600, base+last*3600)
+    assert view.days[0].weather.temperature_min_c == first
+    assert view.days[0].weather.temperature_max_c == last
+    assert view.days[0].weather.weather_code == 61
+    assert view.days[0].weather.quality == 'complete'
+    assert view.today.kwh == pytest.approx(count * 3.72)
+
+
+@pytest.mark.parametrize('missing,code,minimum,maximum,quality', [
+    ('code', None, 0, 23, 'partial'), ('temperature', 0, None, None, 'partial'),
+    ('sample', None, None, None, 'partial'), ('all', None, None, None, 'unavailable'),
+])
+def test_missing_weather_field_does_not_erase_other_field_or_power(missing, code, minimum, maximum, quality):
+    inputs = forecast_input()
+    samples = tuple(WeatherSample(at=index*3600, poa_w_m2=800,
+        air_temperature_c=None if missing == 'all' or missing == 'temperature' and index == 12 else float(index),
+        weather_code=None if missing == 'all' or missing == 'code' and index == 12 else 0)
+        for index in range(24) if missing != 'sample' or index != 12)
+    batch = ForecastBatch(inputs=inputs, fetched_at=120, intervals=constant_intervals(0, 7*86400), weather_samples=samples)
+    view = forecast_view(batch, inputs, ForecastSettings(enabled=True, tilt_deg=25, azimuth_deg=180), 180)
+    assert view.status == 'ready'
+    assert view.today.kwh == pytest.approx(89.28)
+    assert view.days[0].weather.model_dump() == dict(weather_code=code, temperature_min_c=minimum,
+        temperature_max_c=maximum, quality=quality)
+    assert view.days[1].weather is None

@@ -85,7 +85,7 @@ class ForecastController:
                 self.client = OpenMeteoClient()
             try:
                 async with self._request_scope:
-                    intervals = await self.client.fetch(inputs)
+                    data = await self.client.fetch(inputs)
             except (httpx.HTTPError, OSError, ValueError):
                 if self._request_scope.when() is None and self.settings.enabled and self.inputs == inputs:
                     self.last_error = 'forecast_fetch_failed'
@@ -93,7 +93,7 @@ class ForecastController:
             else:
                 if self._request_scope.when() is None and self.settings.enabled and self.inputs == inputs:
                     self.batch = ForecastBatch(inputs=inputs, fetched_at=time.time() if now is None else now,
-                                               intervals=intervals)
+                                               intervals=data.intervals, weather_samples=data.weather_samples)
                     self.store.set_meta('forecast_cache', self.batch.model_dump_json())
                     self.last_error = None
                     self._next_refresh = asyncio.get_running_loop().time() + 3600

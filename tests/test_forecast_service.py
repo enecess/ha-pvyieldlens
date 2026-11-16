@@ -31,7 +31,7 @@ async def test_cache_restart_preserves_fetched_at(tmp_path):
     store = Store(path)
     store.save_settings(settings(), 0, ORIGIN)
     async with httpx.AsyncClient(transport=httpx.MockTransport(
-        lambda request: httpx.Response(200, json=hourly_payload(0)),
+        lambda request: httpx.Response(200, json=hourly_payload(0, weather_code=61)),
     )) as http:
         forecast = controller(store, http)
         await forecast.refresh(now=120)
@@ -41,6 +41,8 @@ async def test_cache_restart_preserves_fetched_at(tmp_path):
         restored = ForecastController(store)
         assert restored.view(180).fetched_at == 120
         assert restored.view(180).today.kwh == pytest.approx(89.28)
+        assert restored.view(180).days[0].weather.weather_code == 61
+        assert len(restored.batch.weather_samples) == 217
         assert store.revision == 1
         assert store.cursor == 0
         await restored.stop()
@@ -238,9 +240,11 @@ async def test_disabled_has_no_requests_and_keeps_parameters(tmp_path):
 async def test_midnight_reclips_cache_without_network_or_new_fetched_at(tmp_path):
     requests = []
     start = datetime(2026, 11, 13, tzinfo=timezone.utc).timestamp()
+    payload = hourly_payload(start, weather_code=0)
+    payload['hourly']['weather_code'][24:48] = [61] * 24
     store = Store(tmp_path / 'data.sqlite')
     async with httpx.AsyncClient(transport=httpx.MockTransport(
-        lambda request: requests.append(request) or httpx.Response(200, json=hourly_payload(start)),
+        lambda request: requests.append(request) or httpx.Response(200, json=payload),
     )) as http:
         forecast = controller(store, http)
         await forecast.refresh(now=start + 86300)
@@ -251,6 +255,8 @@ async def test_midnight_reclips_cache_without_network_or_new_fetched_at(tmp_path
         assert after.today.kwh == pytest.approx(89.28)
         assert after.remaining_today.kwh < after.today.kwh
         assert after.fetched_at == before.fetched_at == start + 86300
+        assert before.days[0].weather.weather_code == 0
+        assert after.days[0].weather.weather_code == 61
         assert len(requests) == 1
     store.close()
 
@@ -289,6 +295,7 @@ async def test_changed_inputs_hide_persisted_cache_after_restart(tmp_path):
     assert forecast.view(180).status == 'loading'
     assert forecast.view(180).fetched_at is None
     assert forecast.view(180).intervals == ()
+    assert all(day.weather is None for day in forecast.view(180).days)
     assert store.cursor == 0
     store.close()
 
@@ -553,4 +560,30 @@ async def test_forecast_remaining_updates_without_new_weather(tmp_path):
         assert after_payload['attributes']['calculated_at'] == 49200
         assert after['forecast']['today']['kwh'] == before['forecast']['today']['kwh'] == pytest.approx(52.08)
         assert len(requests) == 1
+    store.close()
+
+
+async def test_legacy_forecast_cache_has_no_weather_until_refresh(tmp_path):
+    from pvyieldlens.forecast_service import ForecastController
+    store = Store(tmp_path / 'data.sqlite')
+    store.save_settings(settings(), 0, ORIGIN)
+    async with httpx.AsyncClient(transport=httpx.MockTransport(
+        lambda request: httpx.Response(200, json=hourly_payload(0, weather_code=61)),
+    )) as http:
+        forecast = controller(store, http)
+        await forecast.refresh(now=120)
+        original_fetched_at = forecast.view(180).fetched_at
+        original_today_kwh = forecast.view(180).today.kwh
+        legacy = forecast.batch.model_dump_json(exclude={'weather_samples'})
+        store.set_meta('forecast_cache', legacy)
+        restored = ForecastController(store, OpenMeteoClient(http))
+        legacy_view = restored.view(180)
+        assert legacy_view.days[0].weather is None
+        assert legacy_view.fetched_at == original_fetched_at
+        assert legacy_view.today.kwh == original_today_kwh
+        assert store.get_meta('forecast_cache') == legacy
+        await restored.refresh(now=300)
+        assert restored.view(360).days[0].weather.weather_code == 61
+        assert restored.view(360).fetched_at == 300
+        assert restored.view(360).today.kwh == original_today_kwh
     store.close()

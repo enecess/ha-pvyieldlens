@@ -30,14 +30,16 @@ def constant_intervals(start: float, end: float, power_w: float = 3720.0) -> tup
 
 
 def hourly_payload(start: float, hours: int = 216, poa_w_m2: float | None = 800.0,
-                   air_temperature_c: float | None = 20.0) -> dict[str, JsonValue]:
+                   air_temperature_c: float | None = 20.0, weather_code: int | None = None) -> dict[str, JsonValue]:
     return {
         'latitude': 0.0, 'longitude': 0.0, 'generationtime_ms': 0.1,
         'utc_offset_seconds': 0, 'timezone': 'GMT', 'timezone_abbreviation': 'GMT', 'elevation': 0.0,
-        'hourly_units': {'time': 'unixtime', 'global_tilted_irradiance': 'W/m²', 'temperature_2m': '°C'},
+        'hourly_units': {'time': 'unixtime', 'global_tilted_irradiance': 'W/m²', 'temperature_2m': '°C',
+                         **({'weather_code': 'wmo code'} if weather_code is not None else {})},
         'hourly': {
             'time': [start + index * 3600 for index in range(hours + 1)],
             'global_tilted_irradiance': [poa_w_m2] * (hours + 1),
             'temperature_2m': [air_temperature_c] * (hours + 1),
+            **({'weather_code': [weather_code] * (hours + 1)} if weather_code is not None else {}),
         },
     }

@@ -30,7 +30,11 @@ def forecast_payload(day='2026-11-01', timezone='UTC'):
             'remaining_today': {**total(boundaries[0]+48000, boundaries[1]), 'kwh': 39.68},
             'tomorrow': total(boundaries[1], boundaries[2]),
             'seven_days': {**total(boundaries[0], boundaries[-1]), 'kwh': 624.96},
-            'days': [{**total(left, right), 'day': dates[i].date().isoformat()}
+            'days': [{**total(left, right), 'day': dates[i].date().isoformat(),
+                      'weather': {'weather_code': [0, 3, 61, 71, 95, None, 48][i],
+                                  'temperature_min_c': 0 if i == 0 else 10 + i,
+                                  'temperature_max_c': 20 + i,
+                                  'quality': 'partial' if i == 5 else 'complete'}}
                      for i, (left, right) in enumerate(zip(boundaries, boundaries[1:]))], 'intervals': rows}
 
 
@@ -149,6 +153,7 @@ async def test_scalar_poll_does_not_redraw_or_refetch_hourly_forecast(forecast_p
     await page.evaluate('now => Date.now = () => now', state['view']['calculated_at']*1000)
     await expect(page.locator('#forecast-remaining')).to_have_text('38.44')
     await expect(page.locator('#forecast-chart svg')).to_have_attribute('data-original', 'steady')
+    await expect(page.locator('#forecast-days .day-weather').first).to_have_text('Clear sky')
     assert state['hourly'] == requests
     assert await page.locator('#forecast-chart .current-time').get_attribute('x1') != marker
     requests = state['hourly']
@@ -177,6 +182,7 @@ async def test_forecast_midnight_refreshes_dates_without_changing_fetched_time(f
     assert state['view']['fetched_at'] == before_view['fetched_at']
     assert state['view']['remaining_today']['kwh'] >= 0
     await expect(page.locator('#forecast-days button').first).to_have_attribute('aria-pressed', 'true')
+    await expect(page.locator('#forecast-days [aria-current=date]')).to_have_attribute('data-day', '2026-11-02')
 
 
 @pytest.mark.parametrize('width', [320, 390])
@@ -304,10 +310,10 @@ async def test_forecast_and_monitoring_layout_evidence(forecast_page, browser_wo
     await page.evaluate('now => Date.now = () => now', now*1000)
     inputs = forecast_input()
     midnight = datetime.fromtimestamp(now, ZoneInfo('UTC')).replace(hour=0, minute=0, second=0, microsecond=0).timestamp()
-    weather = tuple(WeatherSample(at=midnight+i*3600, poa_w_m2=[0,0,0,0,0,0,20,100,300,500,650,800,850,700,500,300,100,20,0,0,0,0,0,0][i % 24], air_temperature_c=20)
+    weather = tuple(WeatherSample(at=midnight+i*3600, poa_w_m2=[0,0,0,0,0,0,20,100,300,500,650,800,850,700,500,300,100,20,0,0,0,0,0,0][i % 24], air_temperature_c=20, weather_code=0)
                     for i in range(7*24+1))
     state['view'] = forecast_view(ForecastBatch(inputs=inputs, fetched_at=now-1800,
-        intervals=calculate_forecast(inputs, weather)), inputs,
+        intervals=calculate_forecast(inputs, weather), weather_samples=weather), inputs,
         ForecastSettings(enabled=True, tilt_deg=25, azimuth_deg=180), now).model_dump(mode='json')
     for offset in range(0,1800,60):
         values = samples(power=2500 + offset/3, at=start+offset)
@@ -370,3 +376,49 @@ async def test_new_batch_keeps_selected_date_with_an_older_light_snapshot(foreca
         pass
     await page.locator('#forecast-tab').click()
     await expect(page.locator('#forecast-days button[data-day="2026-11-03"]')).to_have_attribute('aria-pressed', 'true')
+
+
+async def test_weather_today_layout_in_six_languages_and_both_themes(forecast_page):
+    from playwright.async_api import expect
+    page, state, _ = forecast_page
+    await page.locator('#forecast-tab').click()
+    await expect(page.locator('#forecast-days button')).to_have_count(7)
+    await page.locator('#forecast-days button').nth(2).click()
+    evidence = Path('artifacts/task-5-weather')
+    evidence.mkdir(parents=True, exist_ok=True)
+    for width in (1440, 320):
+        await page.set_viewport_size({'width': width, 'height': 1100})
+        for language, today in [('en', 'Today'), ('zh', '今天'), ('de', 'Heute'), ('fr', 'Aujourd’hui'), ('it', 'Oggi'), ('pl', 'Dzisiaj')]:
+            await page.locator('#language-select').select_option(language)
+            for theme in ('light', 'dark'):
+                await page.locator('#theme-select').select_option(theme)
+                current = page.locator('#forecast-days [aria-current=date]')
+                await expect(current.locator('.day-label')).to_have_text(today)
+                await expect(current).to_have_attribute('data-day', '2026-11-01')
+                await expect(current).to_have_attribute('aria-pressed', 'false')
+                await expect(page.locator('#forecast-days [aria-pressed=true]')).to_have_attribute('data-day', '2026-11-03')
+                await expect(current.locator('.day-temperature')).to_have_text('20° / 0°')
+                assert await page.evaluate('document.documentElement.scrollWidth <= innerWidth')
+                geometry = await page.locator('#forecast-days').evaluate('''host => ({
+                    columns: getComputedStyle(host).gridTemplateColumns.split(' ').length,
+                    cards: [...host.children].map(node => ({width: node.clientWidth, scroll: node.scrollWidth,
+                        weather: node.querySelector('.day-weather').textContent}))})''')
+                assert geometry['columns'] == (7 if width == 1440 else 4)
+                assert all(card['scroll'] <= card['width'] and card['weather'] for card in geometry['cards']), (width, language, theme, geometry)
+                if language == 'zh' and (width == 320 or theme == 'light'):
+                    await page.evaluate('scrollTo(0, 0)')
+                    await page.screenshot(path=str(evidence / f'forecast-zh-{width}-{theme}.png'), full_page=True)
+    assert state['hourly'] == 1
+
+
+async def test_missing_daily_weather_keeps_energy_and_neutral_cards(forecast_page):
+    from playwright.async_api import expect
+    page, state, _ = forecast_page
+    state['view']['days'][0]['weather'] = None
+    state['view']['days'][1]['weather'].update(weather_code=None, temperature_min_c=0, temperature_max_c=0)
+    await page.locator('#forecast-tab').click()
+    await expect(page.locator('#forecast-days .day-weather').first).to_have_text('Unknown weather')
+    await expect(page.locator('#forecast-days .day-temperature').first).to_have_text('— / —')
+    await expect(page.locator('#forecast-days .day-temperature').nth(1)).to_have_text('0° / 0°')
+    await expect(page.locator('#forecast-day-total')).to_have_text('89.28 kWh')
+    await expect(page.locator('#forecast-status')).to_have_attribute('data-status', 'ready')

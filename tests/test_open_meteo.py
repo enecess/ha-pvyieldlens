@@ -19,7 +19,7 @@ async def test_request_uses_only_forecast_inputs(azimuth_deg, provider_azimuth, 
 
     async with httpx.AsyncClient(transport=httpx.MockTransport(respond)) as http:
         client = OpenMeteoClient(http=http)
-        intervals = await client.fetch(forecast_input(
+        fetched = await client.fetch(forecast_input(
             latitude=latitude, longitude=longitude, tilt_deg=tilt_deg, azimuth_deg=azimuth_deg,
             origin='http://ha.test/private', timezone='Asia/Shanghai',
         ))
@@ -34,14 +34,14 @@ async def test_request_uses_only_forecast_inputs(azimuth_deg, provider_azimuth, 
     assert float(request.url.params['longitude']) == longitude
     assert float(request.url.params['tilt']) == tilt_deg
     assert float(request.url.params['azimuth']) == provider_azimuth
-    assert request.url.params['hourly'] == 'global_tilted_irradiance,temperature_2m'
+    assert request.url.params['hourly'] == 'global_tilted_irradiance,temperature_2m,weather_code'
     assert request.url.params['temperature_unit'] == 'celsius'
     assert request.url.params['timezone'] == 'UTC'
     assert request.url.params['timeformat'] == 'unixtime'
     assert (request.url.params['past_days'], request.url.params['forecast_days']) == ('1', '8')
     assert 'authorization' not in request.headers
     assert request.extensions['timeout'] == {'connect': 20, 'read': 20, 'write': 20, 'pool': 20}
-    assert len(intervals) == 216
+    assert len(fetched.intervals) == 216
 
 
 async def test_close_preserves_injected_http_client():
@@ -62,7 +62,7 @@ async def fetch_payload(payload: JsonValue):
         lambda request: httpx.Response(200, content=json.dumps(payload)),
     )) as http:
         client = OpenMeteoClient(http=http)
-        return await client.fetch(forecast_input())
+        return (await client.fetch(forecast_input())).intervals
 
 
 async def test_backward_mean_and_temperature_alignment():
@@ -200,3 +200,48 @@ async def test_invalid_json_is_rejected():
         client = OpenMeteoClient(http=http)
         with pytest.raises(json.JSONDecodeError):
             await client.fetch(forecast_input())
+
+
+@pytest.mark.parametrize('value,expected', [
+    (0, 0), (61, 61), (95, 95), (96, 96), (97, 97), (99, 99),
+    (None, None), (100, None), ('61', None), (True, None), (False, None),
+    (61.0, None), (float('nan'), None), (float('inf'), None), (float('-inf'), None),
+])
+async def test_weather_codes_do_not_invalidate_power(value, expected):
+    payload = hourly_payload(0, hours=2, weather_code=0)
+    payload['hourly']['weather_code'][1] = value
+    async with httpx.AsyncClient(transport=httpx.MockTransport(
+        lambda request: httpx.Response(200, content=json.dumps(payload)),
+    )) as http:
+        fetched = await OpenMeteoClient(http).fetch(forecast_input())
+    assert fetched.intervals[0].power_w == pytest.approx(3720)
+    assert fetched.intervals[1].power_w == pytest.approx(3720)
+    assert [sample.weather_code for sample in fetched.weather_samples] == [0, expected, 0]
+
+
+@pytest.mark.parametrize('section,value', [
+    ('hourly', None), ('hourly', '61'), ('hourly', {}), ('hourly', [61]),
+    ('hourly', [61, 61, 61, 61]), ('hourly_units', None), ('hourly_units', 'code'),
+])
+async def test_malformed_optional_codes_leave_core_weather_available(section, value):
+    payload = hourly_payload(0, hours=2, weather_code=61)
+    payload[section]['weather_code'] = value
+    async with httpx.AsyncClient(transport=httpx.MockTransport(
+        lambda request: httpx.Response(200, json=payload),
+    )) as http:
+        fetched = await OpenMeteoClient(http).fetch(forecast_input())
+    assert all(row.power_w == pytest.approx(3720) for row in fetched.intervals)
+    assert [sample.weather_code for sample in fetched.weather_samples] == [None, None, None]
+    assert [sample.air_temperature_c for sample in fetched.weather_samples] == [20, 20, 20]
+
+
+@pytest.mark.parametrize('section', ['hourly', 'hourly_units'])
+async def test_missing_optional_codes_leave_core_weather_available(section):
+    payload = hourly_payload(0, hours=2, weather_code=61)
+    del payload[section]['weather_code']
+    async with httpx.AsyncClient(transport=httpx.MockTransport(
+        lambda request: httpx.Response(200, json=payload),
+    )) as http:
+        fetched = await OpenMeteoClient(http).fetch(forecast_input())
+    assert fetched.intervals[0].power_w == pytest.approx(3720)
+    assert all(sample.weather_code is None for sample in fetched.weather_samples)

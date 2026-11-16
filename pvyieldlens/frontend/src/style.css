@@ -13,6 +13,8 @@
   --pv-on-button: #ffffff;
   --pv-good: #22765b;
   --pv-amber: #b47425;
+  --pv-today-text: #8b4e08;
+  --pv-today-bg: #fff0d9;
   --pv-shadow: #172b4c0d;
   --pv-actual: #2f74db;
   --pv-theoretical: #b87824;
@@ -35,6 +37,8 @@
   --pv-on-button: #0c192c;
   --pv-good: #69c5a6;
   --pv-amber: #e9b468;
+  --pv-today-text: #f5c47c;
+  --pv-today-bg: #49361e;
   --pv-shadow: #00000029;
   --pv-actual: #82b0ff;
   --pv-theoretical: #e9b56e;
@@ -142,6 +146,11 @@ td:first-child { overflow-wrap: anywhere; }
 #forecast-days { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 8px; margin-top: 18px; }
 #forecast-days button { display: flex; flex-direction: column; align-items: center; gap: 10px; min-width: 44px; min-height: 44px; padding: 10px 4px; border: 1px solid transparent; border-radius: 8px; background: transparent; color: var(--pv-muted); font-size: 12px; font-variant-numeric: tabular-nums; }
 #forecast-days button[aria-pressed='true'] { color: var(--pv-accent); background: var(--pv-soft); border-color: var(--pv-line); }
+#forecast-days .day-label { max-width: 100%; padding: 2px 5px; border-radius: 5px; text-align: center; overflow-wrap: anywhere; }
+#forecast-days button[aria-current='date'] .day-label { color: var(--pv-today-text); background: var(--pv-today-bg); font-weight: 600; }
+.day-weather-icon { flex-shrink: 0; }
+.day-weather { width: 100%; min-height: 3em; text-align: center; overflow-wrap: anywhere; }
+.day-temperature { text-align: center; }
 .day-bar-track { display: flex; align-items: flex-end; height: 70px; width: 25px; }
 .day-bar { display: block; width: 100%; border-radius: 4px 4px 0 0; background: var(--pv-theoretical); }
 .day-bar.unavailable { background: repeating-linear-gradient(135deg, var(--pv-line) 0 4px, transparent 4px 8px); }

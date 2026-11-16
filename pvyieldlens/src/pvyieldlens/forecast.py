@@ -1,4 +1,5 @@
 from datetime import datetime, time, timedelta
+from math import ceil
 from typing import Literal
 from zoneinfo import ZoneInfo
 
@@ -26,6 +27,7 @@ class WeatherSample(_ForecastModel):
     at: float
     poa_w_m2: float | None = Field(ge=0)
     air_temperature_c: float | None
+    weather_code: int | None = None
 
 
 class ForecastInterval(_ForecastModel):
@@ -39,10 +41,14 @@ class ForecastInterval(_ForecastModel):
     quality: Literal['complete', 'unavailable']
 
 
-class ForecastBatch(_ForecastModel):
+class ForecastData(_ForecastModel):
+    intervals: tuple[ForecastInterval, ...]
+    weather_samples: tuple[WeatherSample, ...] = ()
+
+
+class ForecastBatch(ForecastData):
     inputs: ForecastInput
     fetched_at: float
-    intervals: tuple[ForecastInterval, ...]
 
 
 def calculate_forecast(inputs: ForecastInput, samples: tuple[WeatherSample, ...]) -> tuple[ForecastInterval, ...]:
@@ -73,8 +79,16 @@ class EnergyForecast(_ForecastModel):
     quality: Literal['complete', 'partial', 'unavailable']
 
 
+class DailyWeather(_ForecastModel):
+    weather_code: int | None
+    temperature_min_c: float | None
+    temperature_max_c: float | None
+    quality: Literal['complete', 'partial', 'unavailable']
+
+
 class ForecastDay(EnergyForecast):
     day: str
+    weather: DailyWeather | None = None
 
 
 class ForecastView(_ForecastModel):
@@ -124,8 +138,23 @@ def forecast_view(batch: ForecastBatch | None, inputs: ForecastInput | None, set
             quality='complete' if complete else 'partial' if covered_seconds else 'unavailable',
         )
 
-    days = tuple(ForecastDay(day=(today + timedelta(days=offset)).isoformat(), **total(start, end).model_dump())
-                 for offset, (start, end) in enumerate(zip(boundaries, boundaries[1:])))
+    days = []
+    for offset, (start, end) in enumerate(zip(boundaries, boundaries[1:])):
+        samples = {sample.at: sample for sample in usable.weather_samples if start <= sample.at < end} if usable else {}
+        expected = tuple(range(ceil(start / 3600) * 3600, ceil(end / 3600) * 3600, 3600))
+        temperatures = tuple(samples[at].air_temperature_c for at in expected
+                             if at in samples and samples[at].air_temperature_c is not None)
+        codes = tuple(samples[at].weather_code for at in expected
+                      if at in samples and samples[at].weather_code is not None)
+        weather = DailyWeather(
+            weather_code=max(codes) if len(codes) == len(expected) else None,
+            temperature_min_c=min(temperatures) if len(temperatures) == len(expected) else None,
+            temperature_max_c=max(temperatures) if len(temperatures) == len(expected) else None,
+            quality='complete' if len(codes) == len(temperatures) == len(expected) else
+            'partial' if codes or temperatures else 'unavailable',
+        ) if samples else None
+        days.append(ForecastDay(day=(today + timedelta(days=offset)).isoformat(), weather=weather,
+                                **total(start, end).model_dump()))
     seven_days = total(boundaries[0], boundaries[-1])
     if not settings.enabled:
         status = 'disabled'
@@ -138,8 +167,8 @@ def forecast_view(batch: ForecastBatch | None, inputs: ForecastInput | None, set
     return ForecastView(
         status=status, refreshing=refreshing, fetched_at=usable.fetched_at if usable else None,
         calculated_at=now, last_error=last_error, timezone=inputs.location.timezone,
-        today=EnergyForecast(**days[0].model_dump(exclude={'day'})),
+        today=EnergyForecast(**days[0].model_dump(exclude={'day', 'weather'})),
         remaining_today=total(now, boundaries[1]),
-        tomorrow=EnergyForecast(**days[1].model_dump(exclude={'day'})),
-        seven_days=seven_days, days=days, intervals=intervals,
+        tomorrow=EnergyForecast(**days[1].model_dump(exclude={'day', 'weather'})),
+        seven_days=seven_days, days=tuple(days), intervals=intervals,
     )

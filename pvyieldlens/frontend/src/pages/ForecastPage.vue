@@ -1,11 +1,11 @@
 <script setup lang="ts">
 import { computed, ref, shallowRef, watch } from 'vue';
-import { RefreshCw, Settings } from 'lucide-vue-next';
+import { CircleHelp, Cloud, CloudDrizzle, CloudFog, CloudLightning, CloudRain, CloudSnow, CloudSun, RefreshCw, Settings, Sun } from 'lucide-vue-next';
 import MetricCard from '../MetricCard.vue';
 import PowerChart from '../PowerChart.vue';
 import { api, ApiError } from '../api';
 import type { ChartPoint, ChartSeries, ChartTooltip } from '../charts';
-import type { EnergyForecast, ForecastSummary, ForecastView } from '../models';
+import type { EnergyForecast, ForecastDay, ForecastSummary, ForecastView } from '../models';
 import { useI18n, type Language } from '../i18n';
 import type { ColorMode } from '../theme';
 import { formatTimes } from '../timezones';
@@ -37,6 +37,37 @@ const energy = (total: EnergyForecast | null | undefined) => number(total?.quali
 const date = (at: number) => new Intl.DateTimeFormat(props.language, {
   month: 'short', day: 'numeric', timeZone: homeTimezone.value,
 }).format(new Date(at * 1000));
+const weatherTypes = {
+  clear: { icon: Sun, label: 'weather_clear' },
+  mainlyClear: { icon: CloudSun, label: 'weather_mainly_clear' },
+  partlyCloudy: { icon: CloudSun, label: 'weather_partly_cloudy' },
+  overcast: { icon: Cloud, label: 'weather_overcast' },
+  fog: { icon: CloudFog, label: 'weather_fog' },
+  drizzle: { icon: CloudDrizzle, label: 'weather_drizzle' },
+  freezingDrizzle: { icon: CloudDrizzle, label: 'weather_freezing_drizzle' },
+  rain: { icon: CloudRain, label: 'weather_rain' },
+  freezingRain: { icon: CloudRain, label: 'weather_freezing_rain' },
+  snow: { icon: CloudSnow, label: 'weather_snow' },
+  showers: { icon: CloudRain, label: 'weather_showers' },
+  snowShowers: { icon: CloudSnow, label: 'weather_snow_showers' },
+  thunderstorm: { icon: CloudLightning, label: 'weather_thunderstorm' },
+  unknown: { icon: CircleHelp, label: 'weather_unknown' },
+};
+const weatherCodes: Partial<Record<number, keyof typeof weatherTypes>> = {
+  0: 'clear', 1: 'mainlyClear', 2: 'partlyCloudy', 3: 'overcast', 45: 'fog', 48: 'fog',
+  51: 'drizzle', 53: 'drizzle', 55: 'drizzle', 56: 'freezingDrizzle', 57: 'freezingDrizzle',
+  61: 'rain', 63: 'rain', 65: 'rain', 66: 'freezingRain', 67: 'freezingRain',
+  71: 'snow', 73: 'snow', 75: 'snow', 77: 'snow', 80: 'showers', 81: 'showers', 82: 'showers',
+  85: 'snowShowers', 86: 'snowShowers', 95: 'thunderstorm', 96: 'thunderstorm', 97: 'thunderstorm', 99: 'thunderstorm',
+};
+const weatherType = (day: ForecastDay) => weatherTypes[
+  day.weather?.weather_code == null ? 'unknown' : weatherCodes[day.weather.weather_code] ?? 'unknown'];
+const temperature = (value: number | null | undefined) => value == null ? '—' : `${number(value)}°`;
+const dayLabel = (day: ForecastDay) => `${new Intl.DateTimeFormat(props.language, {
+  dateStyle: 'long', timeZone: homeTimezone.value,
+}).format(new Date(day.start * 1000))}: ${t(weatherType(day).label)} · ${t('forecast_temperature_range', {
+  high: number(day.weather?.temperature_max_c), low: number(day.weather?.temperature_min_c),
+})} · ${energy(day)} kWh · ${t(day.quality)}`;
 const fetchedTime = computed(() => view.value?.fetched_at == null ? t('forecast_never_fetched')
   : t('forecast_fetched', { time: formatTimes([view.value.fetched_at], props.language, props.displayTimezone, {
     year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', hourCycle: 'h23',
@@ -131,11 +162,15 @@ async function refreshForecast() {
     <div v-show="days.length" id="forecast-data">
       <p v-if="differentTimezone" id="forecast-home-time-note" class="muted">{{ t('forecast_home_time_note', { timezone: homeTimezone }) }}</p>
       <article class="panel"><div class="panel-heading"><h2>{{ t('forecast_daily') }}</h2><span class="muted">{{ t('forecast_seven_days') }} <strong id="forecast-seven-days">{{ energy(view?.seven_days) }} kWh</strong></span></div>
-        <p class="muted">{{ t('forecast_calendar_help') }}</p>
+        <p id="forecast-calendar-help" class="muted">{{ t('forecast_calendar_help') }}</p>
         <div id="forecast-days" role="group" :aria-label="t('forecast_daily')">
           <button v-for="day in days" :key="day.day" type="button" :data-day="day.day" :aria-pressed="day.day === selectedDay"
-            :aria-label="`${date(day.start)}: ${energy(day)} kWh · ${t(day.quality)}`" @click="selectedDay = day.day">
-            <span class="day-label">{{ date(day.start) }}</span>
+            :aria-current="day.start === view?.today?.start ? 'date' : undefined" :aria-label="dayLabel(day)"
+            aria-describedby="forecast-calendar-help" @click="selectedDay = day.day">
+            <span class="day-label">{{ day.start === view?.today?.start ? t('forecast_today') : date(day.start) }}</span>
+            <component :is="weatherType(day).icon" class="day-weather-icon" :size="24" aria-hidden="true" />
+            <span class="day-weather">{{ t(weatherType(day).label) }}</span>
+            <span class="day-temperature">{{ temperature(day.weather?.temperature_max_c) }} / {{ temperature(day.weather?.temperature_min_c) }}</span>
             <span class="day-bar-track" aria-hidden="true"><span class="day-bar" :class="{ unavailable: day.quality !== 'complete' || day.kwh === null }"
               :style="{ height: `${day.quality !== 'complete' || day.kwh === null ? 100 : Math.max(1, day.kwh / maximum * 100)}%` }"></span></span>
             <span>{{ energy(day) }}</span>

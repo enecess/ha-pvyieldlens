@@ -40,7 +40,13 @@
       "kwh": 89.28,
       "coverage_percent": 100,
       "quality": "complete",
-      "day": "2026-11-01"
+      "day": "2026-11-01",
+      "weather": {
+        "weather_code": 0,
+        "temperature_min_c": 0,
+        "temperature_max_c": 20,
+        "quality": "complete"
+      }
     },
     {
       "start": 1793577600.0,
@@ -48,7 +54,13 @@
       "kwh": 89.28,
       "coverage_percent": 100,
       "quality": "complete",
-      "day": "2026-11-02"
+      "day": "2026-11-02",
+      "weather": {
+        "weather_code": 3,
+        "temperature_min_c": 11,
+        "temperature_max_c": 21,
+        "quality": "complete"
+      }
     },
     {
       "start": 1793664000.0,
@@ -56,7 +68,13 @@
       "kwh": 89.28,
       "coverage_percent": 100,
       "quality": "complete",
-      "day": "2026-11-03"
+      "day": "2026-11-03",
+      "weather": {
+        "weather_code": 61,
+        "temperature_min_c": 12,
+        "temperature_max_c": 22,
+        "quality": "complete"
+      }
     },
     {
       "start": 1793750400.0,
@@ -64,7 +82,13 @@
       "kwh": 89.28,
       "coverage_percent": 100,
       "quality": "complete",
-      "day": "2026-11-04"
+      "day": "2026-11-04",
+      "weather": {
+        "weather_code": 71,
+        "temperature_min_c": 13,
+        "temperature_max_c": 23,
+        "quality": "complete"
+      }
     },
     {
       "start": 1793836800.0,
@@ -72,7 +96,13 @@
       "kwh": 89.28,
       "coverage_percent": 100,
       "quality": "complete",
-      "day": "2026-11-05"
+      "day": "2026-11-05",
+      "weather": {
+        "weather_code": 95,
+        "temperature_min_c": 14,
+        "temperature_max_c": 24,
+        "quality": "complete"
+      }
     },
     {
       "start": 1793923200.0,
@@ -80,7 +110,13 @@
       "kwh": 89.28,
       "coverage_percent": 100,
       "quality": "complete",
-      "day": "2026-11-06"
+      "day": "2026-11-06",
+      "weather": {
+        "weather_code": null,
+        "temperature_min_c": 15,
+        "temperature_max_c": 25,
+        "quality": "partial"
+      }
     },
     {
       "start": 1794009600.0,
@@ -88,7 +124,13 @@
       "kwh": 89.28,
       "coverage_percent": 100,
       "quality": "complete",
-      "day": "2026-11-07"
+      "day": "2026-11-07",
+      "weather": {
+        "weather_code": 48,
+        "temperature_min_c": 16,
+        "temperature_max_c": 26,
+        "quality": "complete"
+      }
     }
   ],
   "intervals": [

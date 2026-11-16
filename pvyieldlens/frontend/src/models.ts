@@ -105,7 +105,13 @@ export interface EnergyForecast {
   coverage_percent: number;
   quality: 'complete' | 'partial' | 'unavailable';
 }
-export interface ForecastDay extends EnergyForecast { day: string }
+export interface DailyWeather {
+  weather_code: number | null;
+  temperature_min_c: number | null;
+  temperature_max_c: number | null;
+  quality: 'complete' | 'partial' | 'unavailable';
+}
+export interface ForecastDay extends EnergyForecast { day: string; weather: DailyWeather | null }
 export interface ForecastView {
   status: 'disabled' | 'location_unavailable' | 'loading' | 'ready' | 'partial' | 'stale' | 'unavailable';
   refreshing: boolean;

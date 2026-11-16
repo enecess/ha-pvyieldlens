@@ -175,3 +175,69 @@ it('changes only fetched display time and the conditional note when viewer timez
   expect(host.querySelector('#forecast-home-time-note')).toBeNull();
   expect(text(host, '#forecast-fetched')).not.toMatch(/GMT|UTC/);
 });
+
+it('shows_weather_and_today_independently_of_selection', async () => {
+  const { props, host } = mount();
+  props.displayTimezone = 'America/Los_Angeles';
+  await flush();
+  const cards = [...host.querySelectorAll<HTMLButtonElement>('#forecast-days button')];
+  expect(cards).toHaveLength(7);
+  expect(cards.map(card => card.querySelector('.day-weather')?.textContent)).toEqual([
+    'Clear sky', 'Overcast', 'Rain', 'Snow', 'Thunderstorm', 'Unknown weather', 'Fog',
+  ]);
+  expect(cards.map(card => card.querySelector('.day-temperature')?.textContent)).toEqual([
+    '20° / 0°', '21° / 11°', '22° / 12°', '23° / 13°', '24° / 14°', '25° / 15°', '26° / 16°',
+  ]);
+  expect(cards.every(card => card.querySelector('.day-weather-icon'))).toBe(true);
+  expect(cards[0].getAttribute('aria-current')).toBe('date');
+  expect(cards[0].querySelector('.day-label')?.textContent).toBe('Today');
+  expect(cards[0].getAttribute('aria-label')).toContain('November 1, 2026');
+  expect(cards[0].getAttribute('aria-label')).toContain('Clear sky');
+  expect(cards[0].getAttribute('aria-label')).toContain('Hourly forecast high 20 °C, low 0 °C');
+  expect(cards[0].getAttribute('aria-label')).toContain('89.28 kWh');
+  select(host);
+  await flush();
+  expect(cards[0].getAttribute('aria-current')).toBe('date');
+  expect(cards[0].getAttribute('aria-pressed')).toBe('false');
+  expect(cards[2].getAttribute('aria-pressed')).toBe('true');
+  expect(cards[2].hasAttribute('aria-current')).toBe(false);
+});
+
+it('keeps_weather_through_scalar_updates', async () => {
+  const { props, host } = mount();
+  await flush();
+  select(host);
+  await flush();
+  const chart = host.querySelector('#forecast-chart svg');
+  const weather = text(host, '#forecast-days .day-weather');
+  expect(weather).toBe('Clear sky');
+  const { days, intervals, ...summary } = view;
+  props.summary = { ...summary, calculated_at: view.calculated_at + 1200,
+    remaining_today: { ...view.remaining_today!, kwh: 38.44 } };
+  await flush();
+  expect(text(host, '#forecast-days .day-weather')).toBe(weather);
+  expect(host.querySelector('#forecast-chart svg')).toBe(chart);
+  expect(requests).toEqual(['GET api/forecast']);
+  host.querySelector<HTMLButtonElement>('#forecast-refresh')!.click();
+  await flush();
+  view = { ...view, fetched_at: view.fetched_at! + 3600, calculated_at: view.calculated_at + 3600 };
+  props.summary = structuredClone(view);
+  await flush();
+  expect(text(host, '#forecast-days .day-weather')).toBe('Clear sky');
+  expect(host.querySelector('[data-day="2026-11-03"]')?.getAttribute('aria-pressed')).toBe('true');
+});
+
+it('shows neutral missing weather and preserves complete zero temperatures', async () => {
+  view.days[0].weather = null;
+  view.days[1].weather = { weather_code: 0, temperature_min_c: null, temperature_max_c: null, quality: 'partial' };
+  view.days[2].weather = { weather_code: null, temperature_min_c: 0, temperature_max_c: 0, quality: 'partial' };
+  const { host } = mount(view);
+  await flush();
+  const cards = [...host.querySelectorAll('#forecast-days button')];
+  expect(cards[0].querySelector('.day-weather')?.textContent).toBe('Unknown weather');
+  expect(cards[0].querySelector('.day-temperature')?.textContent).toBe('— / —');
+  expect(cards[1].querySelector('.day-weather')?.textContent).toBe('Clear sky');
+  expect(cards[1].querySelector('.day-temperature')?.textContent).toBe('— / —');
+  expect(cards[2].querySelector('.day-temperature')?.textContent).toBe('0° / 0°');
+  expect(text(host, '#forecast-day-total')).toBe('89.28 kWh');
+});

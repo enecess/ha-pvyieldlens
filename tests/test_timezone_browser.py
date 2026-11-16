@@ -95,6 +95,8 @@ async def test_viewer_timezone_keeps_household_forecast_day(timezone_page):
     from playwright.async_api import expect
 
     page, app, state, _, _ = timezone_page
+    await page.set_viewport_size({'width': 1440, 'height': 1100})
+    await page.locator('#app').evaluate("node => { node.style.width = 'calc(100vw - 32px)'; node.style.height = '1800px'; }")
     monitoring_clock = re.search(r'\d{2}:\d{2}', await app.locator('#updated').inner_text()).group()
     assert monitoring_clock == '21:00'
     totals_before = [await app.locator(selector).inner_text() for selector in ('#daily-energy', '#total-energy')]
@@ -115,6 +117,13 @@ async def test_viewer_timezone_keeps_household_forecast_day(timezone_page):
     fetched_date = datetime.strptime(fetched, '%b %d, %Y').date().isoformat()
     assert fetched_date == '2026-11-15'
     await expect(app.locator('#forecast-home-time-note')).to_contain_text('Asia/Shanghai')
+    await expect(app.locator('#forecast-days [aria-current=date]')).to_have_attribute('data-day', '2026-11-16')
+    await expect(app.locator('#forecast-days [aria-current=date] .day-label')).to_have_text('Today')
+    from pathlib import Path
+    evidence = Path('artifacts/task-5-weather')
+    evidence.mkdir(parents=True, exist_ok=True)
+    await app.locator('#forecast-details summary').click()
+    await app.locator('#forecast-page').screenshot(path=str(evidence / 'timezone-shanghai-los-angeles.png'))
     await expect(app.locator('#forecast-timezone, #timezone-note')).to_have_count(0)
     assert 'GMT' not in await app.locator('#forecast-rows').inner_text()
     assert 'Asia/Shanghai' not in await app.locator('#live-page').inner_text()
