@@ -247,6 +247,39 @@ it('reseeds_after_resume_without_losing_live_updates', async () => {
   expect(calls).toBe(2);
 });
 
+it.each(['failed', 'pending'])('keeps a resume break through duplicate snapshots while the seed is %s, then fills it', async (outcome) => {
+  const pending = deferred();
+  let seeds = 0, calculatedAt = 10000;
+  vi.stubGlobal('fetch', async (path: string) => {
+    if (path.endsWith('config')) return response(configuration);
+    if (path.endsWith('live-history')) {
+      seeds++;
+      if (seeds === 2) return outcome === 'pending' ? pending.promise : new Response('{}', { status: 503 });
+      return response(history(Date.now() / 1000, 1));
+    }
+    return response({ ...snapshot, calculated_at: calculatedAt });
+  });
+  const { dashboard } = start();
+  await flushPromises();
+  calculatedAt = 10020;
+  vi.setSystemTime(10020000);
+  document.dispatchEvent(new Event('visibilitychange'));
+  await flushPromises();
+  await vi.advanceTimersByTimeAsync(1000);
+  expect(dashboard.livePoints.value.find(point => point.at === 10020)?.breakBefore).toBe(true);
+  await vi.advanceTimersByTimeAsync(1000);
+  expect(dashboard.livePoints.value.find(point => point.at === 10020)?.breakBefore).toBe(true);
+  if (outcome === 'pending') pending.resolve(response(history(10022, 1)));
+  else {
+    expect(dashboard.liveHistoryError.value).toBe('live_history_error');
+    vi.setSystemTime(10030000);
+    document.dispatchEvent(new Event('visibilitychange'));
+  }
+  await flushPromises();
+  expect(dashboard.livePoints.value.find(point => point.at === 10020)?.breakBefore).toBe(false);
+  expect(dashboard.liveHistoryError.value).toBeNull();
+});
+
 it('keeps snapshots and a real gap when seed and snapshot requests fail, then retries on resume', async () => {
   let fail = false;
   vi.stubGlobal('fetch', async (path: string) => {

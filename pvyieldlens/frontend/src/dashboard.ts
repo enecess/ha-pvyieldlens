@@ -127,7 +127,8 @@ export function useDashboard() {
         livePoints.value = [...livePoints.value.filter(point => point.at !== value.calculated_at), { at: value.calculated_at,
           estimated_power: value.realtime?.estimated_power ?? null, actual_power: value.realtime?.actual_power ?? null,
           ...(value.realtime ? { window: value.realtime } : {}),
-          ...(Date.now() / 1000 - lastPollAt > 2 * (configuration.value?.settings?.update_seconds ?? 5) ? { breakBefore: true } : {}) }]
+          ...(livePoints.value.find(point => point.at === value.calculated_at)?.breakBefore ||
+            Date.now() / 1000 - lastPollAt > 2 * (configuration.value?.settings?.update_seconds ?? 5) ? { breakBefore: true } : {}) }]
           .sort((left, right) => left.at - right.at);
       }
       if (reconnected || recoveringSeed && value.connected && value.realtime) {

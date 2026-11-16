@@ -1,3 +1,4 @@
+import asyncio
 import os
 import re
 from datetime import datetime, timezone
@@ -119,3 +120,29 @@ async def test_seed_failure_is_chart_local_and_keeps_live_metrics(live_page):
     await page.reload()
     await expect(page.locator('#live-actual')).to_have_text('3,348')
     await expect(page.locator('#live-history-error')).to_have_text('Recent data could not be loaded. Showing new live readings.')
+
+
+async def test_resume_gap_survives_duplicate_snapshots_until_seed_fills_it(live_page):
+    from playwright.async_api import expect
+
+    page, service, state = live_page
+    release_seed = asyncio.Event()
+
+    async def seed(route):
+        await release_seed.wait()
+        await route.fulfill(json=service.live_history(now=state['now']))
+
+    await page.route('**/api/live-history', seed)
+    state['now'] += 240
+    await service.tick(state['now'])
+    await page.clock.set_system_time(datetime.fromtimestamp(state['now'], timezone.utc))
+    await page.evaluate("document.dispatchEvent(new Event('visibilitychange'))")
+    async with page.expect_response(lambda response: response.url.endswith('/api/snapshot')):
+        await page.clock.fast_forward(60000)
+    await expect(page.locator('#live-chart path.series').first).to_have_attribute('d', re.compile(r'^M[^M]+M[^M]+$'))
+    async with page.expect_response(lambda response: response.url.endswith('/api/snapshot')):
+        await page.clock.fast_forward(60000)
+    await expect(page.locator('#live-chart path.series').first).to_have_attribute('d', re.compile(r'^M[^M]+M[^M]+$'))
+    async with page.expect_response(lambda response: response.url.endswith('/api/live-history')):
+        release_seed.set()
+    await expect(page.locator('#live-chart path.series').first).to_have_attribute('d', re.compile(r'^M[^M]+$'))
