@@ -1,5 +1,6 @@
 {
   "settings": "Paramètres",
+  "no_matching_sensors": "Aucun capteur correspondant",
   "cancel_settings": "Annuler les modifications",
   "settings_loading": "Mise à jour de la configuration…",
   "live": "Connecté",

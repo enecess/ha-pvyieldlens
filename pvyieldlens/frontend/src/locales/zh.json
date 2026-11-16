@@ -1,5 +1,6 @@
 {
   "settings": "设置",
+  "no_matching_sensors": "没有匹配的传感器",
   "cancel_settings": "取消设置",
   "settings_loading": "正在更新配置…",
   "live": "已连接",

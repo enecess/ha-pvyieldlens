@@ -1,10 +1,35 @@
 import asyncio
+import json
 import os
 import time
+from pathlib import Path
 
 import pytest
 
 pytestmark = pytest.mark.skipif(os.getenv('PVYL_BROWSER_TESTS') != '1', reason='Set PVYL_BROWSER_TESTS=1 after installing Playwright Chromium')
+
+
+async def assert_sensor_candidates(page, role, entity_ids):
+    from playwright.async_api import expect
+
+    control = page.locator(f'[name={role}_entity]')
+    await expect(control).to_be_enabled()
+    original = await control.input_value()
+    await control.fill('')
+    await control.click()
+    menu = page.locator('#' + await control.get_attribute('aria-controls'))
+    await expect(control).to_have_attribute('aria-expanded', 'true')
+    await expect(menu).to_have_attribute('role', 'listbox')
+    await expect(menu.get_by_role('option')).to_have_count(len(entity_ids))
+    if entity_ids:
+        await expect(menu).to_be_visible()
+        await expect(menu.get_by_role('option')).to_contain_text(entity_ids)
+    else:
+        await expect(page.locator('.sensor-empty')).to_be_visible()
+    await control.fill(original)
+    await control.press('Escape')
+    await expect(control).to_have_value(original)
+    await expect(menu).not_to_be_visible()
 
 
 async def test_settings_leave_cancel_and_discard(browser_workspace):
@@ -363,7 +388,198 @@ async def test_locales_storage_fallback_and_ingress(browser_workspace):
         await page.locator('#history-tab').click()
         await expect(page.locator('#history-chart .chart-empty')).to_be_visible()
         await page.locator('#settings-button').click()
-        await expect(page.locator('#power-options option')).to_have_attribute('value', 'sensor.power')
+        await assert_sensor_candidates(page, 'power', ['sensor.power'])
+
+
+async def test_sensor_suggestions_filter_select_and_preserve_manual_drafts(browser_workspace):
+    from playwright.async_api import expect
+
+    page, service, _ = browser_workspace
+    saves = []
+    page.on('request', lambda request: saves.append(request) if request.url.endswith('/api/config') and request.method == 'PUT' else None)
+    await page.route('**/api/connection', lambda route: route.fulfill(json={
+        'timezone': 'UTC', 'location': None,
+        'entities': [
+            {'entity_id': 'sensor.roof_power', 'name': 'Roof inverter', 'unit': 'W', 'state': '1'},
+            {'entity_id': 'sensor.garage_power', 'name': 'Garage inverter', 'unit': 'kW', 'state': '2'},
+            {'entity_id': 'sensor.outdoor_temperature', 'name': 'Outdoor temperature', 'unit': '°F', 'state': '3'},
+            {'entity_id': 'sensor.roof_irradiance', 'name': 'Roof irradiance', 'unit': 'W/m²', 'state': '4'},
+            {'entity_id': 'sensor.pvyieldlens_output', 'name': 'Feedback', 'unit': 'W', 'state': '5'},
+            {'entity_id': 'sensor.battery', 'name': 'Battery', 'unit': '%', 'state': '6'},
+        ]}))
+    await page.locator('#settings-button').click()
+    await expect(page.locator('#connection-result')).to_have_text('Connection verified')
+    await page.locator('[data-settings-category=sources]').click()
+    power = page.get_by_role('combobox', name='Actual Power', exact=True)
+    await power.fill('INVERTER')
+    await expect(power).to_have_attribute('aria-expanded', 'true')
+    menu_id = await power.get_attribute('aria-controls')
+    menu = page.locator(f'#{menu_id}')
+    await expect(menu).to_have_attribute('role', 'listbox')
+    await expect(menu.get_by_role('option')).to_have_count(2)
+    await expect(menu).to_contain_text('sensor.roof_power')
+    await expect(menu).to_contain_text('Garage inverter')
+    for key in ['ArrowDown', 'Enter', 'Escape']:
+        assert not await power.evaluate('''(input, key) => {
+            const event = new KeyboardEvent('keydown', {key, isComposing: true, bubbles: true, cancelable: true});
+            input.dispatchEvent(event);
+            return event.defaultPrevented;
+        }''', key)
+    await expect(power).to_have_value('INVERTER')
+    await expect(power).not_to_have_attribute('aria-activedescendant')
+    await expect(power).to_have_attribute('aria-expanded', 'true')
+    await power.press('ArrowDown')
+    first = menu.get_by_role('option').first
+    await expect(first).to_have_attribute('aria-selected', 'true')
+    await expect(power).to_have_attribute('aria-activedescendant', await first.get_attribute('id'))
+    await expect(power).to_be_focused()
+    await expect(power).to_have_value('INVERTER')
+    await power.press('ArrowDown')
+    await power.press('ArrowUp')
+    await power.press('Enter')
+    await expect(power).to_have_value('sensor.roof_power')
+    await expect(power).to_have_attribute('aria-expanded', 'false')
+    assert saves == []
+    assert service.config.power_entity == 'sensor.power'
+    await power.fill('garage_power')
+    await expect(menu.get_by_role('option')).to_have_count(1)
+    await menu.get_by_role('option').click()
+    await expect(power).to_have_value('sensor.garage_power')
+    await expect(power).to_be_focused()
+    await expect(power).to_have_accessible_name('Actual Power')
+    await power.fill('sensor.manual_not_discovered')
+    await expect(menu.get_by_role('option')).to_have_count(0)
+    await expect(page.get_by_role('status').filter(has_text='No matching sensors')).to_be_visible()
+    await power.press('Escape')
+    await expect(power).to_have_attribute('aria-expanded', 'false')
+    await expect(power).to_have_value('sensor.manual_not_discovered')
+    await power.press('ArrowDown')
+    await power.press('Tab')
+    await expect(power).to_have_attribute('aria-expanded', 'false')
+    await expect(page.locator('[name=temperature_entity]')).to_be_focused()
+    for field, name, entity in [
+        ('temperature_entity', 'Module Temperature', 'sensor.outdoor_temperature'),
+        ('irradiance_entity', 'Irradiance', 'sensor.roof_irradiance'),
+    ]:
+        control = page.get_by_role('combobox', name=name, exact=True)
+        await control.fill('')
+        options = page.locator('#' + await control.get_attribute('aria-controls')).get_by_role('option')
+        await expect(options).to_have_count(1)
+        await options.click()
+        await expect(page.locator(f'[name={field}]')).to_have_value(entity)
+    await power.fill('')
+    await expect(menu.get_by_role('option')).to_have_count(2)
+    await power.press('ArrowUp')
+    await power.press('Escape')
+    await expect(power).to_have_value('')
+    await power.fill('sensor.manual_not_discovered')
+    await page.locator('#save-button').click()
+    await expect(page.locator('#save-result')).to_have_text('Configuration saved')
+    assert service.config.power_entity == 'sensor.manual_not_discovered'
+    await power.click()
+    await page.locator('#history-tab').click()
+    await expect(menu).not_to_be_visible()
+
+
+@pytest.mark.parametrize('selection', ['pointer', 'keyboard'])
+async def test_sensor_selection_clears_server_field_feedback(browser_workspace, selection):
+    from playwright.async_api import expect
+
+    page, _, _ = browser_workspace
+    await page.locator('#settings-button').click()
+    await expect(page.locator('#connection-result')).to_have_text('Connection verified')
+    await page.locator('[data-settings-category=panels]').click()
+    await page.locator('[name=rated_power_w]').fill('6000')
+    await page.route('**/api/config', lambda route: route.fulfill(status=422, json={
+        'error': 'invalid_configuration', 'fields': ['settings.power_entity']}))
+    await page.locator('#save-button').click()
+    power = page.get_by_role('combobox', name='Actual Power', exact=True)
+    await expect(power).to_be_focused()
+    await expect(power).to_have_attribute('aria-invalid', 'true')
+    await expect(power).to_have_attribute('aria-expanded', 'true')
+    if selection == 'keyboard':
+        await power.press('ArrowDown')
+        await power.press('Enter')
+    else:
+        await page.get_by_role('option').filter(has_text='sensor.power').click()
+    await expect(power).not_to_have_attribute('aria-invalid', 'true')
+    await expect(page.locator('#save-result')).to_be_empty()
+    await expect(power).to_have_value('sensor.power')
+    await expect(power).to_be_focused()
+
+
+async def test_sensor_menu_closes_when_input_scrolls_out_of_settings(browser_workspace):
+    from playwright.async_api import expect
+
+    page, _, _ = browser_workspace
+    await page.locator('#settings-button').click()
+    await expect(page.locator('#connection-result')).to_have_text('Connection verified')
+    await page.locator('[data-settings-category=sources]').click()
+    control = page.get_by_role('combobox', name='Actual Power', exact=True)
+    await control.fill('')
+    await expect(control).to_have_attribute('aria-expanded', 'true')
+    await page.locator('#settings-scroll').evaluate('''container => container.scrollTo({
+        top: container.scrollTop + document.querySelector('[name=power_entity]').getBoundingClientRect().bottom
+            - container.getBoundingClientRect().top + 20, behavior: 'instant'})''')
+    await expect(control).to_have_attribute('aria-expanded', 'false')
+    await expect(page.get_by_role('listbox')).not_to_be_visible()
+
+
+@pytest.mark.parametrize(('width', 'height', 'theme'), [
+    (1440, 900, 'light'), (1440, 900, 'dark'), (390, 844, 'light'),
+    (390, 844, 'dark'), (390, 480, 'dark'), (320, 480, 'light'),
+])
+async def test_sensor_menu_viewport_geometry_and_active_scroll(browser_workspace, width, height, theme):
+    from playwright.async_api import expect
+
+    page, _, _ = browser_workspace
+    errors = []
+    page.on('console', lambda message: errors.append(message.text) if message.type == 'error' else None)
+    await page.set_viewport_size({'width': width, 'height': height})
+    await page.locator('#theme-select').select_option(theme)
+    await page.route('**/api/connection', lambda route: route.fulfill(json={
+        'timezone': 'UTC', 'location': None,
+        'entities': [{'entity_id': f'sensor.long_roof_inverter_power_{index:02}',
+                      'name': f'Roof inverter with a very long descriptive friendly name for the south array {index:02}',
+                      'unit': 'W', 'state': str(index)} for index in range(20)]}))
+    await page.locator('#settings-button').click()
+    await expect(page.locator('#connection-result')).to_have_text('Connection verified')
+    await page.locator('[data-settings-category=sources]').click()
+    power = page.get_by_role('combobox', name='Actual Power', exact=True)
+    await power.fill('')
+    await power.press('ArrowUp')
+    await expect(page.get_by_role('listbox').get_by_role('option').last).to_have_attribute('aria-selected', 'true')
+    await expect(power).to_be_focused()
+    await expect(power).to_have_value('')
+    geometry = await page.evaluate('''() => {
+        const menu = document.querySelector('.sensor-suggestions');
+        const rect = node => { const {left, right, top, bottom, height} = node.getBoundingClientRect(); return {left, right, top, bottom, height}; };
+        const style = getComputedStyle(menu);
+        return {menu: rect(menu), option: rect(menu.querySelector('[aria-selected=true]')),
+            input: rect(document.querySelector('[name=power_entity]')), dock: rect(document.querySelector('#settings-actions')),
+            viewport: {width: innerWidth, height: innerHeight}, scrollWidth: document.documentElement.scrollWidth,
+            background: style.backgroundColor, expectedBackground: getComputedStyle(document.documentElement).getPropertyValue('--pv-raised').trim(),
+            containerType: getComputedStyle(document.querySelector('#settings-scroll')).containerType,
+            parent: menu.parentElement.tagName};
+    }''')
+    assert geometry['parent'] == 'BODY'
+    assert geometry['containerType'] == 'size'
+    assert geometry['menu']['left'] >= 0
+    assert geometry['menu']['right'] <= width
+    assert geometry['menu']['top'] >= 0
+    assert geometry['menu']['bottom'] <= min(height, geometry['dock']['top']) - 3
+    assert geometry['menu']['height'] <= 242
+    assert geometry['option']['top'] >= geometry['menu']['top']
+    assert geometry['option']['bottom'] <= geometry['menu']['bottom']
+    assert geometry['scrollWidth'] <= width
+    artifacts = Path(os.getenv('PVYL_SENSOR_ARTIFACTS', 'artifacts/task-2-sensors'))
+    artifacts.mkdir(parents=True, exist_ok=True)
+    stem = f'sensors-{width}x{height}-{theme}'
+    (artifacts / f'{stem}.json').write_text(json.dumps(geometry, indent=2), encoding='utf-8')
+    await page.screenshot(path=str(artifacts / f'{stem}.png'))
+    await power.press('Escape')
+    await expect(page.get_by_role('listbox')).not_to_be_visible()
+    assert errors == []
 
 
 @pytest.fixture
@@ -723,11 +939,11 @@ async def test_settings_discovers_once_and_preserves_edits(browser_workspace, mo
     discovery_ready.set()
     await expect(page.locator('#load-entities')).to_be_enabled()
     if edited_connection:
-        await expect(page.locator('#power-options option')).to_have_count(0)
+        await assert_sensor_candidates(page, 'power', [])
         async with page.expect_response(lambda response: response.url.endswith('/api/connection')):
             await page.locator('#load-entities').click()
     for role, entity in [('power', 'sensor.power'), ('temperature', 'sensor.temp'), ('irradiance', 'sensor.sun')]:
-        await expect(page.locator(f'#{role}-options option')).to_have_attribute('value', entity)
+        await assert_sensor_candidates(page, role, [entity])
     await page.locator('#settings-button').click()
     await page.locator('#language-select').select_option('en')
     assert len(requests) == (2 if edited_connection else 1)
@@ -750,7 +966,7 @@ async def test_cancel_settings_retires_temporary_connection_candidates(browser_w
 
     page, _, _ = browser_workspace
     await page.locator('#settings-button').click()
-    await expect(page.locator('#power-options option')).to_have_attribute('value', 'sensor.power')
+    await assert_sensor_candidates(page, 'power', ['sensor.power'])
     saved_url = await page.locator('#ha-url').input_value()
     await page.route('**/api/connection', lambda route: route.fulfill(json={
         'timezone': 'Europe/Paris', 'location': None,
@@ -758,17 +974,17 @@ async def test_cancel_settings_retires_temporary_connection_candidates(browser_w
                      {'entity_id': 'sensor.pvyieldlens_output', 'name': 'Feedback', 'unit': 'W', 'state': '3'}]}))
     await page.locator('#ha-url').fill('http://preview.invalid:8123')
     await page.locator('#ha-token').fill('preview-token')
-    await expect(page.locator('#power-options option')).to_have_count(0)
+    await assert_sensor_candidates(page, 'power', [])
     await page.locator('#load-entities').click()
-    await expect(page.locator('#power-options option')).to_have_attribute('value', 'sensor.preview_power')
+    await assert_sensor_candidates(page, 'power', ['sensor.preview_power'])
     await page.locator('#cancel-settings').click()
     await expect(page.locator('#ha-url')).to_have_value(saved_url)
     await expect(page.locator('#ha-token')).to_have_value('')
-    await expect(page.locator('#power-options option')).to_have_attribute('value', 'sensor.power')
+    await assert_sensor_candidates(page, 'power', ['sensor.power'])
     await expect(page.locator('#save-button')).to_be_disabled()
     await page.locator('#live-tab').click()
     await page.locator('#settings-button').click()
-    await expect(page.locator('#power-options option')).to_have_attribute('value', 'sensor.power')
+    await assert_sensor_candidates(page, 'power', ['sensor.power'])
 
 
 @pytest.mark.parametrize('change_url', [False, True])
@@ -777,18 +993,18 @@ async def test_settings_saving_new_credentials_retires_old_candidates(browser_wo
 
     page, _, _ = browser_workspace
     await page.locator('#settings-button').click()
-    await expect(page.locator('#power-options option')).to_have_attribute('value', 'sensor.power')
+    await assert_sensor_candidates(page, 'power', ['sensor.power'])
     saved_url = await page.locator('#ha-url').input_value()
     if change_url:
         await page.locator('#ha-url').fill('http://preview.invalid:8123')
     await page.locator('#ha-token').fill('replacement-token')
-    await expect(page.locator('#power-options option')).to_have_count(0)
+    await assert_sensor_candidates(page, 'power', [])
     await page.locator('#save-button').click()
     await expect(page.locator('#save-result')).to_have_text('Configuration saved')
-    await expect(page.locator('#power-options option')).to_have_count(0)
+    await assert_sensor_candidates(page, 'power', [])
     if change_url:
         await page.locator('#ha-url').fill(saved_url)
-        await expect(page.locator('#power-options option')).to_have_count(0)
+        await assert_sensor_candidates(page, 'power', [])
 
 
 @pytest.mark.parametrize('saved_credentials', [False, True])
@@ -828,7 +1044,7 @@ async def test_settings_first_connection_failure_keeps_polling_and_allows_retry(
                 pass
             if not saved_credentials:
                 assert requests == []
-                await expect(page.locator('#power-options option')).to_have_count(0)
+                await assert_sensor_candidates(page, 'power', [])
                 await page.locator('#ha-url').fill(ha_url)
                 await page.locator('#ha-token').fill('simulation-token')
                 await page.locator('#load-entities').click()
@@ -839,12 +1055,12 @@ async def test_settings_first_connection_failure_keeps_polling_and_allows_retry(
             fail_ready.set()
             await expect(page.locator('#connection-result')).to_contain_text('Cannot reach Home Assistant')
             await expect(page.locator('#load-entities')).to_be_enabled()
-            await expect(page.locator('#power-options option')).to_have_count(0)
+            await assert_sensor_candidates(page, 'power', [])
             async with page.expect_response(lambda response: response.url.endswith('/api/snapshot')):
                 pass
             async with page.expect_response(lambda response: response.url.endswith('/api/connection')):
                 await page.locator('#load-entities').click()
-            await expect(page.locator('#power-options option')).to_have_attribute('value', 'sensor.power')
+            await assert_sensor_candidates(page, 'power', ['sensor.power'])
             assert requests == [{'url':ha_url, 'token':'' if saved_credentials else 'simulation-token'}] * 2
             await expect(page.locator('#ha-url')).to_have_value(ha_url)
             await expect(page.locator('#ha-token')).to_have_value('' if saved_credentials else 'simulation-token')

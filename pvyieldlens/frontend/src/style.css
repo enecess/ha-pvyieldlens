@@ -171,8 +171,20 @@ main.settings-active > .banner { flex-shrink: 0; }
 .input-unit input, .input-unit select { padding-right: 52px; }
 .input-unit > span { position: absolute; right: 11px; top: 50%; transform: translateY(-50%); color: var(--pv-muted); font-size: 11px; pointer-events: none; }
 .sensor-fields { display: grid; gap: 16px; }
-.sensor-fields label { display: grid; grid-template-columns: 145px minmax(0, 1fr); align-items: center; gap: 15px; }
-.sensor-fields label > span { margin-bottom: 0; }
+.sensor-field { display: grid; grid-template-columns: 145px minmax(0, 1fr); align-items: center; gap: 15px; min-width: 0; }
+.sensor-field > label { font-size: 12px; font-weight: 500; }
+.sensor-combobox { position: relative; min-width: 0; }
+.sensor-combobox input { padding-right: 32px; }
+.sensor-combobox > svg { position: absolute; top: 50%; right: 11px; transform: translateY(-50%); color: var(--pv-muted); pointer-events: none; }
+.sensor-suggestions { position: fixed; z-index: 5; overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin; scrollbar-color: var(--pv-line) transparent; padding: 4px; border: 1px solid var(--pv-line); border-radius: 8px; background: var(--pv-raised); color: var(--pv-text); box-shadow: 0 8px 24px var(--pv-shadow), 0 2px 6px var(--pv-shadow); }
+.sensor-option { padding: 9px 10px; border-radius: 5px; cursor: pointer; }
+.sensor-option:hover, .sensor-option[aria-selected='true'] { background: var(--pv-soft); }
+.sensor-option[aria-selected='true'] { outline: 1px solid var(--pv-accent); outline-offset: -1px; }
+.sensor-option-heading { display: flex; align-items: baseline; gap: 10px; font-size: 12px; font-weight: 500; }
+.sensor-option-heading > span:first-child { min-width: 0; overflow-wrap: anywhere; }
+.sensor-option-unit { flex-shrink: 0; margin-left: auto; color: var(--pv-muted); font-size: 11px; font-weight: 400; }
+.sensor-option-id { display: block; margin-top: 2px; color: var(--pv-muted); font: 11px/1.5 ui-monospace, monospace; overflow-wrap: anywhere; }
+.sensor-empty { margin: 0; padding: 12px 10px; color: var(--pv-muted); font-size: 12px; }
 .connection-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; margin-top: 18px; font-size: 12px; }
 .advanced-settings { margin-top: 24px; padding-top: 18px; border-top: 1px solid var(--pv-line); }
 .advanced-settings > p { margin-bottom: 16px; }
@@ -200,7 +212,7 @@ button:disabled { cursor: default; opacity: .5; }
   .live-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .settings-body { grid-template-columns: 145px minmax(0, 1fr); gap: 18px; }
   .form-grid.three { grid-template-columns: 1fr; }
-  .sensor-fields label { grid-template-columns: 1fr; gap: 7px; }
+  .sensor-field { grid-template-columns: 1fr; gap: 7px; }
 }
 @media (max-width: 600px) {
   .app-header { display: grid; grid-template-columns: minmax(0, 1fr) auto; padding: 13px 13px 9px; }

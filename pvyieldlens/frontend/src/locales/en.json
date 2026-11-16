@@ -45,6 +45,7 @@
   "temp_source": "Module Temperature",
   "irr_source": "Irradiance",
   "select_source": "Search sensors",
+  "no_matching_sensors": "No matching sensors",
   "timing": "Updates",
   "interval": "History interval",
   "minutes": "min",
