@@ -5,17 +5,17 @@ from pvyieldlens.storage import Store
 from test_engine import samples, settings
 
 
-async def test_realtime_does_not_increment_energy_and_statistic_settles_once(tmp_path):
+async def test_live_does_not_increment_energy_and_statistic_settles_once(tmp_path):
     store = Store(tmp_path / 'data.sqlite')
     service = Service(store)
-    await service.configure(settings(interval_minutes=1), now=0)
+    await service.configure(settings(settlement_interval_minutes=1), now=0)
     store.add_observations(samples())
     await service.tick(30)
-    assert service.snapshot(30)['realtime']['pr'] == pytest.approx(90)
-    assert service.snapshot(30)['energy']['total_kwh'] == 0
+    assert service.snapshot(30)['live_window']['pr'] == pytest.approx(90)
+    assert service.snapshot(30)['energy_totals']['estimated_energy_lifetime_kwh'] == 0
     await service.tick(60)
     await service.tick(60)
-    assert service.snapshot(60)['energy']['total_kwh'] == pytest.approx(0.062)
+    assert service.snapshot(60)['energy_totals']['estimated_energy_lifetime_kwh'] == pytest.approx(0.062)
     store.close()
 
 
@@ -26,26 +26,26 @@ async def test_timezone_reprojects_committed_midnight_segments_after_late_histor
     path = tmp_path / 'data.sqlite'
     store = Store(path)
     service = Service(store)
-    await service.configure(settings(interval_minutes=10), now=start)
+    await service.configure(settings(settlement_interval_minutes=10), now=start)
     store.add_observations(samples(at=start) + samples(at=start + 300, sun=400))
     await service.tick(start + 600)
-    assert service.snapshot(start + 600)['energy']['total_kwh'] == pytest.approx(.465)
+    assert service.snapshot(start + 600)['energy_totals']['estimated_energy_lifetime_kwh'] == pytest.approx(.465)
     # The mutable observations have the same total but a different midnight distribution.
     store.add_observations(samples(at=start, sun=400) + samples(at=start + 300))
-    await service.configure(settings(interval_minutes=10, timezone='Asia/Kathmandu'), now=start + 600)
-    energy = service.snapshot(start + 600)['energy']
-    assert energy['daily_kwh'] == pytest.approx(.155)
-    assert energy['daily_valid_seconds'] == 300
-    assert energy['daily_complete'] is True
-    assert energy['total_kwh'] == pytest.approx(.465)
+    await service.configure(settings(settlement_interval_minutes=10, home_timezone='Asia/Kathmandu'), now=start + 600)
+    energy = service.snapshot(start + 600)['energy_totals']
+    assert energy['estimated_energy_today_kwh'] == pytest.approx(.155)
+    assert energy['today_valid_seconds'] == 300
+    assert energy['today_allocation_complete'] is True
+    assert energy['estimated_energy_lifetime_kwh'] == pytest.approx(.465)
     assert 'segments' not in store.history(start, start + 600)[0]
-    await service.configure(settings(interval_minutes=10), now=start + 600)
-    assert service.snapshot(start + 600)['energy']['daily_kwh'] == pytest.approx(.465)
+    await service.configure(settings(settlement_interval_minutes=10), now=start + 600)
+    assert service.snapshot(start + 600)['energy_totals']['estimated_energy_today_kwh'] == pytest.approx(.465)
     store.close()
     store = Store(path)
     service = Service(store)
-    await service.configure(settings(interval_minutes=10, timezone='Asia/Kathmandu'), now=start + 600)
-    assert service.snapshot(start + 600)['energy']['daily_kwh'] == pytest.approx(.155)
+    await service.configure(settings(settlement_interval_minutes=10, home_timezone='Asia/Kathmandu'), now=start + 600)
+    assert service.snapshot(start + 600)['energy_totals']['estimated_energy_today_kwh'] == pytest.approx(.155)
     store.close()
 
 
@@ -55,18 +55,18 @@ async def test_timezone_pending_periods_keep_their_calculation_and_origin_in_cur
     start = datetime(2026, 11, 1, 12, tzinfo=timezone.utc).timestamp()
     store = Store(tmp_path / 'data.sqlite')
     service = Service(store)
-    await service.configure(settings(interval_minutes=1), now=start, origin='old')
+    await service.configure(settings(settlement_interval_minutes=1), now=start, origin='old')
     store.add_observations(samples(at=start), 'old')
     await service.tick(start + 60)
-    await service.configure(settings(interval_minutes=1, timezone='Asia/Shanghai', rated_power_w=10000),
+    await service.configure(settings(settlement_interval_minutes=1, home_timezone='Asia/Shanghai', total_max_power_at_stc_w=10000),
                             now=start + 90, origin='new')
     store.add_observations(samples(at=start + 90, sun=400), 'new')
     await service.tick(start + 120)
-    energy = service.snapshot(start + 120)['energy']
-    assert energy['daily_kwh'] == pytest.approx(.124)
-    assert energy['total_kwh'] == pytest.approx(.124)
-    assert energy['daily_valid_seconds'] == 120
-    assert energy['daily_complete'] is True
+    energy = service.snapshot(start + 120)['energy_totals']
+    assert energy['estimated_energy_today_kwh'] == pytest.approx(.124)
+    assert energy['estimated_energy_lifetime_kwh'] == pytest.approx(.124)
+    assert energy['today_valid_seconds'] == 120
+    assert energy['today_allocation_complete'] is True
     store.close()
 
 
@@ -76,41 +76,39 @@ async def test_timezone_empty_committed_detail_is_not_replaced_by_late_valid_obs
     start = datetime(2026, 11, 1, 18, 10, tzinfo=timezone.utc).timestamp()
     store = Store(tmp_path / 'data.sqlite')
     service = Service(store)
-    await service.configure(settings(interval_minutes=10), now=start)
+    await service.configure(settings(settlement_interval_minutes=10), now=start)
     await service.tick(start + 600)
     store.add_observations(samples(at=start))
-    await service.configure(settings(interval_minutes=10, timezone='Asia/Kathmandu'), now=start + 600)
-    energy = service.snapshot(start + 600)['energy']
-    assert energy['daily_kwh'] == energy['total_kwh'] == 0
-    assert energy['daily_valid_seconds'] == 0
-    assert energy['daily_complete'] is True
+    await service.configure(settings(settlement_interval_minutes=10, home_timezone='Asia/Kathmandu'), now=start + 600)
+    energy = service.snapshot(start + 600)['energy_totals']
+    assert energy['estimated_energy_today_kwh'] == energy['estimated_energy_lifetime_kwh'] == 0
+    assert energy['today_valid_seconds'] == 0
+    assert energy['today_allocation_complete'] is True
     store.close()
 
 
-async def test_legacy_boundary_quality_persists_without_replaying_on_snapshot(tmp_path):
+async def test_pruned_boundary_quality_persists_without_replaying_on_snapshot(tmp_path):
     import sqlite3
     from datetime import datetime, timezone
     from pvyieldlens.home_assistant import entity_payloads
 
     start = datetime(2026, 11, 1, 18, 10, tzinfo=timezone.utc).timestamp()
-    path = tmp_path / 'legacy.sqlite'
-    with sqlite3.connect(path) as old:
-        old.execute('CREATE TABLE days (timezone TEXT, day TEXT, energy_wh REAL, valid_seconds REAL, PRIMARY KEY(timezone, day))')
+    path = tmp_path / 'data.sqlite'
     store = Store(path)
     service = Service(store)
-    await service.configure(settings(interval_minutes=10), now=start)
+    await service.configure(settings(settlement_interval_minutes=10), now=start)
     store.add_observations(samples(at=start) + samples(at=start + 600))
     await service.tick(start + 1200)
-    store.db.execute('DROP TABLE IF EXISTS window_segments')
+    store.prune(start + 4 * 86400)
     store.close()
     store = Store(path)
     service = Service(store)
-    await service.configure(settings(interval_minutes=10, timezone='Asia/Kathmandu'), now=start + 1200)
-    energy = service.snapshot(start + 1200)['energy']
-    assert energy['daily_kwh'] == pytest.approx(.620)
-    assert energy['daily_valid_seconds'] == 600
-    assert energy['daily_complete'] is False
-    assert energy['total_kwh'] == pytest.approx(1.240)
+    await service.configure(settings(settlement_interval_minutes=10, home_timezone='Asia/Kathmandu'), now=start + 1200)
+    energy = service.snapshot(start + 1200)['energy_totals']
+    assert energy['estimated_energy_today_kwh'] == pytest.approx(.620)
+    assert energy['today_valid_seconds'] == 600
+    assert energy['today_allocation_complete'] is False
+    assert energy['estimated_energy_lifetime_kwh'] == pytest.approx(1.240)
     store.close()
     store = Store(path)
     service = Service(store)
@@ -120,11 +118,11 @@ async def test_legacy_boundary_quality_persists_without_replaying_on_snapshot(tm
                             if action == sqlite3.SQLITE_READ and table in ('windows', 'window_segments', 'observations')
                             else sqlite3.SQLITE_OK)
     snapshot = service.snapshot(start + 1800)
-    assert snapshot['energy']['daily_kwh'] == pytest.approx(1.240)
-    assert snapshot['energy']['daily_complete'] is False
+    assert snapshot['energy_totals']['estimated_energy_today_kwh'] == pytest.approx(1.240)
+    assert snapshot['energy_totals']['today_allocation_complete'] is False
     payloads = entity_payloads(snapshot)
-    assert payloads['sensor.pvyieldlens_daily_estimated_energy']['attributes']['daily_complete'] is False
-    assert service.snapshot(start + 2 * 86400)['energy']['daily_complete'] is True
+    assert payloads['sensor.pvyieldlens_estimated_energy_today']['attributes']['today_allocation_complete'] is False
+    assert service.snapshot(start + 2 * 86400)['energy_totals']['today_allocation_complete'] is True
     store.close()
 
 
@@ -143,63 +141,63 @@ async def test_timezone_projection_uses_actual_eastern_day_boundaries(tmp_path, 
     observations = [point for at in range(int(first - 3600), int(last), 300) for point in samples(at=at)]
     store.settle(calculate(settings(), observations, first - 3600, first), 1, 'UTC')
     store.settle(calculate(settings(), observations, first, last), 1, 'UTC')
-    await service.configure(settings(timezone='America/New_York'), now=last - 1)
-    energy = service.snapshot(last - 1)['energy']
-    assert energy['daily_kwh'] == pytest.approx(hours * 3.72)
-    assert energy['daily_valid_seconds'] == hours * 3600
-    assert energy['daily_complete'] is True
+    await service.configure(settings(home_timezone='America/New_York'), now=last - 1)
+    energy = service.snapshot(last - 1)['energy_totals']
+    assert energy['estimated_energy_today_kwh'] == pytest.approx(hours * 3.72)
+    assert energy['today_valid_seconds'] == hours * 3600
+    assert energy['today_allocation_complete'] is True
     store.close()
 
 
 async def test_configuration_change_settles_old_parameters_without_overlap(tmp_path):
     store = Store(tmp_path / 'data.sqlite')
     service = Service(store)
-    await service.configure(settings(interval_minutes=1), now=0)
+    await service.configure(settings(settlement_interval_minutes=1), now=0)
     store.add_observations(samples())
-    await service.configure(settings(interval_minutes=1, rated_power_w=10000), now=30)
+    await service.configure(settings(settlement_interval_minutes=1, total_max_power_at_stc_w=10000), now=30)
     await service.tick(60)
-    assert service.snapshot(60)['energy']['total_kwh'] == pytest.approx(0.093)
+    assert service.snapshot(60)['energy_totals']['estimated_energy_lifetime_kwh'] == pytest.approx(0.093)
     store.close()
 
 
-async def test_only_realtime_settings_do_not_split_statistic_window(tmp_path):
+async def test_only_live_settings_do_not_split_statistic_window(tmp_path):
     store = Store(tmp_path / 'data.sqlite')
     service = Service(store)
-    await service.configure(settings(interval_minutes=1), now=0)
+    await service.configure(settings(settlement_interval_minutes=1), now=0)
     store.add_observations(samples())
-    await service.configure(settings(interval_minutes=1, realtime_window_seconds=120), now=30)
+    await service.configure(settings(settlement_interval_minutes=1, live_window_seconds=120), now=30)
     assert store.cursor == 0
     await service.tick(60)
     assert len(store.history(0, 60)) == 1
     store.close()
 
 
-async def test_current_missing_source_immediately_invalidates_realtime(tmp_path):
+async def test_current_missing_source_immediately_invalidates_live(tmp_path):
     from pvyieldlens.engine import Observation
     store = Store(tmp_path / 'data.sqlite')
     service = Service(store)
     await service.configure(settings(), now=0)
     store.add_observations(samples() + [Observation('sensor.sun', 40, None)])
     await service.tick(45)
-    assert service.snapshot(45)['realtime']['pr'] is None
-    assert service.snapshot(45)['realtime']['reason'] == 'current_source_unavailable'
+    assert service.snapshot(45)['live_window']['pr'] is None
+    assert service.snapshot(45)['live_window']['reason'] == 'current_source_unavailable'
     store.close()
 
 
 async def test_config_change_during_outage_defers_settlement_until_recovery(tmp_path):
     store = Store(tmp_path / 'data.sqlite')
     service = Service(store)
-    await service.configure(settings(interval_minutes=1), now=0)
+    await service.configure(settings(settlement_interval_minutes=1), now=0)
     store.add_observations(samples())
     await service.tick(60)
-    await service.configure(settings(interval_minutes=1, rated_power_w=10000), now=180)
+    await service.configure(settings(settlement_interval_minutes=1, total_max_power_at_stc_w=10000), now=180)
     assert store.cursor == 60
     store.close()
     store = Store(tmp_path / 'data.sqlite')
     service = Service(store)
     store.add_observations(samples(at=60) + samples(at=180))
     await service.tick(240)
-    assert service.snapshot(240)['energy']['total_kwh'] == pytest.approx(0.310)
+    assert service.snapshot(240)['energy_totals']['estimated_energy_lifetime_kwh'] == pytest.approx(0.310)
     assert [row['revision'] for row in store.history(0,240)] == [1,1,1,2]
     store.close()
 
@@ -207,12 +205,12 @@ async def test_config_change_during_outage_defers_settlement_until_recovery(tmp_
 async def test_connection_change_separates_same_named_sources(tmp_path):
     store = Store(tmp_path / 'data.sqlite')
     service = Service(store)
-    await service.configure(settings(interval_minutes=1), now=0, origin='http://old-ha')
+    await service.configure(settings(settlement_interval_minutes=1), now=0, origin='http://old-ha')
     store.add_observations(samples(), origin='http://old-ha')
-    await service.configure(settings(interval_minutes=1), now=30, origin='http://new-ha')
+    await service.configure(settings(settlement_interval_minutes=1), now=30, origin='http://new-ha')
     store.add_observations(samples(sun=400), origin='http://new-ha')
     await service.tick(60)
-    assert service.snapshot(60)['energy']['total_kwh'] == pytest.approx(0.0465)
+    assert service.snapshot(60)['energy_totals']['estimated_energy_lifetime_kwh'] == pytest.approx(0.0465)
     assert len(store.history(0,60)) == 2
     store.close()
 
@@ -257,7 +255,7 @@ async def test_subscription_ready_before_history_and_settlement(tmp_path, monkey
     client = DelayedClient()
     store = Store(tmp_path/'data.sqlite')
     service = Service(store, client)
-    await service.configure(settings(interval_minutes=1), now=120)
+    await service.configure(settings(settlement_interval_minutes=1), now=120)
     await service.start()
     try:
         await asyncio.sleep(0.05)
@@ -267,7 +265,7 @@ async def test_subscription_ready_before_history_and_settlement(tmp_path, monkey
         async with asyncio.timeout(2):
             while store.cursor != 180:
                 await asyncio.sleep(0.01)
-        assert service.snapshot(180)['statistics']['estimated_power'] == pytest.approx(3410)
+        assert service.snapshot(180)['latest_settled_window']['estimated_power_w'] == pytest.approx(3410)
     finally:
         await service.stop()
         store.close()
@@ -277,12 +275,12 @@ async def test_subscription_ready_before_history_and_settlement(tmp_path, monkey
 async def test_selected_grid_interval_settles_at_its_boundary(tmp_path, minutes, energy):
     store = Store(tmp_path/'data.sqlite')
     service = Service(store)
-    await service.configure(settings(interval_minutes=minutes), now=0)
+    await service.configure(settings(settlement_interval_minutes=minutes), now=0)
     store.add_observations(samples())
     await service.tick(minutes*60-1)
-    assert store.latest_window() is None
+    assert store.latest_settled_window() is None
     await service.tick(minutes*60)
-    assert service.snapshot(minutes*60)['energy']['total_kwh'] == pytest.approx(energy)
+    assert service.snapshot(minutes*60)['energy_totals']['estimated_energy_lifetime_kwh'] == pytest.approx(energy)
     store.close()
 
 
@@ -313,7 +311,7 @@ async def test_outage_publishes_a_new_unavailable_snapshot_for_chart_break(tmp_p
     try:
         await asyncio.sleep(0.05)
         assert service.snapshot(180)['calculated_at'] == 180
-        assert service.snapshot(180)['realtime'] is None
+        assert service.snapshot(180)['live_window'] is None
     finally:
         await service.stop()
         store.close()
@@ -376,7 +374,7 @@ async def test_history_unavailable_warning_clears_after_successful_recovery(tmp_
         store = Store(tmp_path / 'data.sqlite')
         client = HomeAssistantClient(url, 'simulation-token')
         service = Service(store, client)
-        await service.configure(settings(interval_minutes=1), now=120)
+        await service.configure(settings(settlement_interval_minutes=1), now=120)
         try:
             await service.recover()
             assert service.snapshot(180)['history_available'] is False
@@ -384,8 +382,8 @@ async def test_history_unavailable_warning_clears_after_successful_recovery(tmp_
             await service.recover()
             assert service.snapshot(180)['history_available'] is True
             await service.tick(180)
-            assert service.snapshot(180)['statistics']['pr'] == pytest.approx(90)
-            assert service.snapshot(180)['statistics']['coverage_percent'] == pytest.approx(100)
+            assert service.snapshot(180)['latest_settled_window']['pr'] == pytest.approx(90)
+            assert service.snapshot(180)['latest_settled_window']['data_completeness_percent'] == pytest.approx(100)
         finally:
             await client.close()
             store.close()
@@ -419,7 +417,7 @@ async def test_http_location_bootstraps_forecast_before_websocket_ready(tmp_path
 
     monkeypatch.setattr('pvyieldlens.service.time.time', lambda: 180)
     store = Store(tmp_path / 'data.sqlite')
-    store.save_settings(settings(interval_minutes=1), 120, 'http://ha.test')
+    store.save_monitoring_settings(settings(settlement_interval_minutes=1), 120, 'http://ha.test')
     store.save_forecast_settings(ForecastSettings(enabled=True, tilt_deg=25.0, azimuth_deg=180.0))
     async with httpx.AsyncClient(transport=httpx.MockTransport(ha_response)) as ha_http, \
             httpx.AsyncClient(transport=httpx.MockTransport(weather_response)) as weather_http:
@@ -450,7 +448,7 @@ async def test_om_timeout_does_not_stop_monitoring(tmp_path, monkeypatch):
     from pvyieldlens.settings import ForecastSettings, HALocation
 
     received = asyncio.Event()
-    location = HALocation(origin='http://ha.test', latitude=0.0, longitude=0.0, timezone='UTC')
+    location = HALocation(origin='http://ha.test', latitude=0.0, longitude=0.0, home_timezone='UTC')
 
     class LiveClient:
         async def events(self):
@@ -485,7 +483,7 @@ async def test_om_timeout_does_not_stop_monitoring(tmp_path, monkeypatch):
 
     monkeypatch.setattr('pvyieldlens.service.time.time', lambda: 180)
     store = Store(tmp_path / 'data.sqlite')
-    store.save_settings(settings(interval_minutes=1), 120, location.origin)
+    store.save_monitoring_settings(settings(settlement_interval_minutes=1), 120, location.origin)
     store.save_forecast_settings(ForecastSettings(enabled=True, tilt_deg=25.0, azimuth_deg=180.0))
     async with httpx.AsyncClient(transport=httpx.MockTransport(timeout)) as http:
         service = Service(store, LiveClient())
@@ -496,7 +494,7 @@ async def test_om_timeout_does_not_stop_monitoring(tmp_path, monkeypatch):
             async with asyncio.timeout(1):
                 while store.cursor != 180:
                     await asyncio.sleep(0)
-            assert service.snapshot(180)['energy']['total_kwh'] == pytest.approx(.062)
+            assert service.snapshot(180)['energy_totals']['estimated_energy_lifetime_kwh'] == pytest.approx(.062)
             assert service.snapshot(180)['connected'] is True
             assert service.snapshot(180)['error'] is None
             assert service.forecast.view(180).status == 'unavailable'
@@ -516,11 +514,11 @@ async def test_ha_outage_uses_cached_location(tmp_path, monkeypatch):
     received = asyncio.Event()
     path = tmp_path / 'data.sqlite'
     store = Store(path)
-    store.save_settings(settings(), 120, 'http://ha.test')
+    store.save_monitoring_settings(settings(), 120, 'http://ha.test')
     forecast = ForecastController(store)
     forecast.configure(settings(), ForecastSettings(enabled=True, tilt_deg=25.0, azimuth_deg=180.0),
                        'http://ha.test', HALocation(origin='http://ha.test', latitude=0.0, longitude=0.0,
-                                                  timezone='UTC'))
+                                                  home_timezone='UTC'))
     store.close()
     store = Store(path)
 
@@ -549,7 +547,7 @@ async def test_ha_outage_uses_cached_location(tmp_path, monkeypatch):
         await service.start()
         try:
             await asyncio.wait_for(received.wait(), 1)
-            assert service.forecast.view(180).today.kwh == pytest.approx(89.28)
+            assert service.forecast.view(180).today.forecast_energy_kwh == pytest.approx(89.28)
             assert service.forecast.location.origin == 'http://ha.test'
             assert service.snapshot(180)['connected'] is False
             assert store.cursor == 120
@@ -558,16 +556,16 @@ async def test_ha_outage_uses_cached_location(tmp_path, monkeypatch):
     store.close()
 
 
-async def test_unchanged_monitoring_configuration_keeps_realtime_and_sources(tmp_path):
+async def test_unchanged_monitoring_configuration_keeps_live_and_sources(tmp_path):
     store = Store(tmp_path / 'data.sqlite')
     service = Service(store)
-    await service.configure(settings(interval_minutes=1), now=0)
+    await service.configure(settings(settlement_interval_minutes=1), now=0)
     store.add_observations(samples())
     await service.tick(60)
     service.sources = [{'entity_id': 'sensor.sun', 'valid': True}]
     before = service.snapshot(60)
     changes = store.db.total_changes
-    await service.configure(settings(interval_minutes=1), now=61)
+    await service.configure(settings(settlement_interval_minutes=1), now=61)
     assert service.snapshot(60) == before
     assert store.db.total_changes == changes
     store.close()
@@ -597,10 +595,10 @@ async def test_service_restart_recreates_separate_owned_weather_client(tmp_path,
     monkeypatch.setattr('pvyieldlens.service.time.time', lambda: 180)
     store = Store(tmp_path / 'data.sqlite')
     service = Service(store)
-    await service.configure(settings(interval_minutes=1), now=120, origin='http://ha.test')
-    service.forecast.configure(service.config, ForecastSettings(enabled=True, tilt_deg=25.0, azimuth_deg=180.0),
+    await service.configure(settings(settlement_interval_minutes=1), now=120, origin='http://ha.test')
+    service.forecast.configure(service.monitoring_settings, ForecastSettings(enabled=True, tilt_deg=25.0, azimuth_deg=180.0),
                                service.origin, HALocation(origin=service.origin, latitude=0.0, longitude=0.0,
-                                                          timezone='UTC'))
+                                                          home_timezone='UTC'))
     for _ in range(2):
         received.clear()
         await service.start()
@@ -631,9 +629,9 @@ async def test_successful_invalid_ha_location_clears_cached_site(tmp_path, monke
     store = Store(path)
     service = Service(store)
     await service.configure(settings(), now=120, origin='http://ha.test')
-    service.forecast.configure(service.config, ForecastSettings(enabled=True, tilt_deg=25.0, azimuth_deg=180.0),
+    service.forecast.configure(service.monitoring_settings, ForecastSettings(enabled=True, tilt_deg=25.0, azimuth_deg=180.0),
                                service.origin, HALocation(origin=service.origin, latitude=0.0, longitude=0.0,
-                                                          timezone='UTC'))
+                                                          home_timezone='UTC'))
     monkeypatch.setattr('pvyieldlens.service.time.time', lambda: 180)
     async with httpx.AsyncClient(transport=httpx.MockTransport(lambda request: httpx.Response(
         200, json={'time_zone': 'UTC', 'latitude': 95.0, 'longitude': 0.0},
@@ -667,13 +665,13 @@ async def test_shared_monitoring_inputs_update_forecast_and_new_origin_drops_sit
     store = Store(tmp_path / 'data.sqlite')
     service = Service(store)
     await service.configure(settings(), now=0, origin='http://ha.test')
-    service.forecast.configure(service.config, ForecastSettings(enabled=True, tilt_deg=25.0, azimuth_deg=180.0),
+    service.forecast.configure(service.monitoring_settings, ForecastSettings(enabled=True, tilt_deg=25.0, azimuth_deg=180.0),
                                service.origin, HALocation(origin=service.origin, latitude=0.0, longitude=0.0,
-                                                          timezone='UTC'))
-    await service.configure(settings(rated_power_w=6000, temperature_coefficient_pct_per_c=-0.4), now=30)
-    assert service.forecast.inputs.rated_power_w == 6000
-    assert service.forecast.inputs.temperature_coefficient_pct_per_c == -0.4
-    await service.configure(service.config, now=60, origin='http://new-ha.test')
+                                                          home_timezone='UTC'))
+    await service.configure(settings(total_max_power_at_stc_w=6000, pmax_temperature_coefficient_pct_per_c=-0.4), now=30)
+    assert service.forecast.inputs.total_max_power_at_stc_w == 6000
+    assert service.forecast.inputs.pmax_temperature_coefficient_pct_per_c == -0.4
+    await service.configure(service.monitoring_settings, now=60, origin='http://new-ha.test')
     assert service.forecast.location is None
     assert service.forecast.view(60).status == 'location_unavailable'
     store.close()

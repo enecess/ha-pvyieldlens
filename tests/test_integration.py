@@ -35,22 +35,22 @@ async def test_real_rest_websocket_collection_and_thirteen_outputs(tmp_path):
     async with fake_server() as url:
         store = Store(tmp_path / 'data.sqlite')
         service = Service(store, HomeAssistantClient(url, 'simulation-token'))
-        await service.configure(settings(interval_minutes=1, timezone='Asia/Shanghai', update_seconds=1), now=time.time()-65, origin=url)
+        await service.configure(settings(settlement_interval_minutes=1, home_timezone='Asia/Shanghai', update_interval_seconds=1), now=time.time()-65, origin=url)
         await service.start()
         async with asyncio.timeout(15):
-            while len(published) != 13 or published['sensor.pvyieldlens_realtime_pr']['state'] == 'unavailable':
+            while len(published) != 13 or published['sensor.pvyieldlens_live_pr']['state'] == 'unavailable':
                 await asyncio.sleep(0.1)
-        assert float(published['sensor.pvyieldlens_realtime_pr']['state']) == pytest.approx(90, abs=0.1)
+        assert float(published['sensor.pvyieldlens_live_pr']['state']) == pytest.approx(90, abs=0.1)
         for name, unit, device_class, state_class in (
-            ('estimated_power', 'W', 'power', 'measurement'),
-            ('actual_power', 'W', 'power', 'measurement'),
-            ('pr', '%', None, 'measurement'),
-            ('daily_estimated_energy', 'kWh', 'energy', 'total_increasing'),
-            ('total_estimated_energy', 'kWh', 'energy', 'total_increasing'),
-            ('realtime_estimated_power', 'W', 'power', 'measurement'),
-            ('realtime_actual_power', 'W', 'power', 'measurement'),
-            ('realtime_pr', '%', None, 'measurement'),
-            ('realtime_optimizable_power', 'W', 'power', 'measurement'),
+            ('settled_estimated_power', 'W', 'power', 'measurement'),
+            ('settled_actual_power', 'W', 'power', 'measurement'),
+            ('settled_pr', '%', None, 'measurement'),
+            ('estimated_energy_today', 'kWh', 'energy', 'total_increasing'),
+            ('estimated_energy_lifetime', 'kWh', 'energy', 'total_increasing'),
+            ('live_estimated_power', 'W', 'power', 'measurement'),
+            ('live_actual_power', 'W', 'power', 'measurement'),
+            ('live_pr', '%', None, 'measurement'),
+            ('live_optimizable_power', 'W', 'power', 'measurement'),
         ):
             payload = published['sensor.pvyieldlens_' + name]
             assert float(payload['state']) >= 0
@@ -66,9 +66,9 @@ async def test_real_rest_websocket_collection_and_thirteen_outputs(tmp_path):
             assert 'state_class' not in payload['attributes']
         assert service.forecast.location.latitude == 31.23
         assert service.forecast.location.longitude == 121.47
-        assert service.forecast.location.timezone == 'Asia/Shanghai'
+        assert service.forecast.location.home_timezone == 'Asia/Shanghai'
         assert service.snapshot()['connected']
-        assert service.snapshot()['energy']['total_kwh'] > 0
+        assert service.snapshot()['energy_totals']['estimated_energy_lifetime_kwh'] > 0
         await service.stop()
         assert all(payload['state'] == 'unavailable' for payload in published.values())
         store.close()
@@ -154,11 +154,11 @@ async def test_forecast_outputs_republish_after_ha_reconnect_and_shutdown(tmp_pa
     )) as weather_http:
         store = Store(tmp_path / 'data.sqlite')
         service = Service(store, HomeAssistantClient(url, 'simulation-token'))
-        await service.configure(settings(interval_minutes=1, timezone='Asia/Shanghai', update_seconds=1),
+        await service.configure(settings(settlement_interval_minutes=1, home_timezone='Asia/Shanghai', update_interval_seconds=1),
             now=time.time() - 65, origin=url)
         service.forecast = ForecastController(store, OpenMeteoClient(weather_http))
-        service.forecast.configure(service.config, ForecastSettings(enabled=True, tilt_deg=25.0, azimuth_deg=180.0),
-            url, HALocation(origin=url, latitude=31.23, longitude=121.47, location_name='Home', timezone='Asia/Shanghai'))
+        service.forecast.configure(service.monitoring_settings, ForecastSettings(enabled=True, tilt_deg=25.0, azimuth_deg=180.0),
+            url, HALocation(origin=url, latitude=31.23, longitude=121.47, location_name='Home', home_timezone='Asia/Shanghai'))
         await service.start()
         try:
             async with asyncio.timeout(5):
@@ -166,7 +166,7 @@ async def test_forecast_outputs_republish_after_ha_reconnect_and_shutdown(tmp_pa
                     await asyncio.sleep(0.01)
             fetched_at = published['sensor.pvyieldlens_forecast_energy_today']['attributes']['fetched_at']
             assert float(published['sensor.pvyieldlens_forecast_energy_today']['state']) == pytest.approx(89.28)
-            assert float(published['sensor.pvyieldlens_realtime_pr']['state']) == pytest.approx(90, abs=0.1)
+            assert float(published['sensor.pvyieldlens_live_pr']['state']) == pytest.approx(90, abs=0.1)
             published.clear()
             disconnect.set()
             await asyncio.wait_for(reconnected.wait(), 2)

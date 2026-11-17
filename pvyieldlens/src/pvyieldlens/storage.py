@@ -9,7 +9,7 @@ from zoneinfo import ZoneInfo
 from pydantic import BaseModel, ConfigDict
 
 from .engine import Observation, WindowResult
-from .settings import ForecastSettings, Settings
+from .settings import ForecastSettings, MonitoringSettings
 
 
 class DayAllocation(TypedDict):
@@ -21,7 +21,7 @@ class DayAllocation(TypedDict):
 
 
 class DayAllocations(TypedDict):
-    timezone: str
+    home_timezone: str
     parts: list[DayAllocation]
 
 
@@ -32,11 +32,11 @@ class HistoryWindow(TypedDict):
     valid_seconds: float
     estimated_energy_wh: float
     actual_energy_wh: float
-    estimated_power: float | None
-    actual_power: float | None
+    estimated_power_w: float | None
+    actual_power_w: float | None
     pr: float | None
-    optimizable_power: float | None
-    coverage_percent: float
+    optimizable_power_w: float | None
+    data_completeness_percent: float
     quality: str
     reason: str | None
     source_start: NotRequired[float]
@@ -52,7 +52,7 @@ class HistorySummary(BaseModel):
     estimated_energy_kwh: float | None
     actual_energy_kwh: float | None
     pr: float | None
-    coverage_percent: float | None
+    data_completeness_percent: float | None
     valid_seconds: float
 
 
@@ -60,7 +60,7 @@ def summarize_history(windows: list[HistoryWindow], start: float, end: float) ->
     included = [row for row in windows if row['start'] >= start and row['end'] <= end]
     if not included:
         return HistorySummary(start=None, end=None, estimated_energy_kwh=None, actual_energy_kwh=None, pr=None,
-                              coverage_percent=None, valid_seconds=0)
+                              data_completeness_percent=None, valid_seconds=0)
     first = min(row['start'] for row in included)
     last = max(row['end'] for row in included)
     valid = sum(row['valid_seconds'] for row in included)
@@ -69,7 +69,7 @@ def summarize_history(windows: list[HistoryWindow], start: float, end: float) ->
         start=first, end=last, estimated_energy_kwh=estimated / 1000 if valid else None,
         actual_energy_kwh=sum(row['actual_energy_wh'] for row in included) / 1000 if valid else None,
         pr=sum(row['actual_energy_wh'] for row in included) / estimated * 100 if valid and estimated else None,
-        coverage_percent=valid / (last - first) * 100, valid_seconds=valid,
+        data_completeness_percent=valid / (last - first) * 100, valid_seconds=valid,
     )
 
 
@@ -77,7 +77,7 @@ def summarize_history(windows: list[HistoryWindow], start: float, end: float) ->
 class ConfigurationRevision:
     revision: int
     effective_at: float
-    settings: Settings
+    monitoring_settings: MonitoringSettings
     origin: str
 
 
@@ -90,7 +90,7 @@ class Store:
             PRAGMA journal_mode=WAL;
             CREATE TABLE IF NOT EXISTS metadata (key TEXT PRIMARY KEY, value TEXT NOT NULL);
             CREATE TABLE IF NOT EXISTS configs (
-                revision INTEGER PRIMARY KEY, effective_at REAL NOT NULL, settings TEXT NOT NULL, origin TEXT NOT NULL);
+                revision INTEGER PRIMARY KEY, effective_at REAL NOT NULL, monitoring_settings TEXT NOT NULL, origin TEXT NOT NULL);
             CREATE TABLE IF NOT EXISTS observations (
                 origin TEXT NOT NULL, entity_id TEXT NOT NULL, at REAL NOT NULL, value REAL, reported_at REAL,
                 PRIMARY KEY(origin, entity_id, at));
@@ -102,14 +102,12 @@ class Store:
                 revision INTEGER NOT NULL, start REAL NOT NULL, end REAL NOT NULL, segments TEXT NOT NULL,
                 PRIMARY KEY(revision, start, end));
             CREATE TABLE IF NOT EXISTS days (
-                timezone TEXT NOT NULL, day TEXT NOT NULL, energy_wh REAL NOT NULL, valid_seconds REAL NOT NULL,
-                complete INTEGER NOT NULL DEFAULT 1,
-                PRIMARY KEY(timezone, day));
-            INSERT OR IGNORE INTO metadata VALUES ('total_wh', '0');
-            INSERT OR IGNORE INTO metadata VALUES ('valid_seconds', '0');
+                home_timezone TEXT NOT NULL, day TEXT NOT NULL, estimated_energy_wh REAL NOT NULL, valid_seconds REAL NOT NULL,
+                allocation_complete INTEGER NOT NULL DEFAULT 1,
+                PRIMARY KEY(home_timezone, day));
+            INSERT OR IGNORE INTO metadata VALUES ('estimated_energy_lifetime_wh', '0');
+            INSERT OR IGNORE INTO metadata VALUES ('lifetime_valid_seconds', '0');
         """)
-        if 'complete' not in {row['name'] for row in self.db.execute('PRAGMA table_info(days)')}:
-            self.db.execute('ALTER TABLE days ADD COLUMN complete INTEGER NOT NULL DEFAULT 1')
 
     def close(self):
         self.db.close()
@@ -131,9 +129,9 @@ class Store:
     def revision(self) -> int:
         return self.db.execute("SELECT COALESCE(MAX(revision),0) FROM configs").fetchone()[0]
 
-    def settings(self) -> Settings | None:
-        row = self.db.execute("SELECT settings FROM configs ORDER BY revision DESC LIMIT 1").fetchone()
-        return Settings.model_validate_json(row[0]) if row else None
+    def monitoring_settings(self) -> MonitoringSettings | None:
+        row = self.db.execute("SELECT monitoring_settings FROM configs ORDER BY revision DESC LIMIT 1").fetchone()
+        return MonitoringSettings.model_validate_json(row[0]) if row else None
 
     def forecast_settings(self) -> ForecastSettings:
         value = self.get_meta('forecast_settings')
@@ -142,22 +140,22 @@ class Store:
     def save_forecast_settings(self, settings: ForecastSettings) -> None:
         self.set_meta('forecast_settings', settings.model_dump_json())
 
-    def save_settings(self, settings: Settings, effective_at: float, origin='') -> int:
+    def save_monitoring_settings(self, monitoring_settings: MonitoringSettings, effective_at: float, origin='') -> int:
         with self.db:
-            result = self.db.execute("INSERT INTO configs(effective_at, settings, origin) VALUES (?,?,?)",
-                                     (effective_at, settings.model_dump_json(), origin))
+            result = self.db.execute("INSERT INTO configs(effective_at, monitoring_settings, origin) VALUES (?,?,?)",
+                                     (effective_at, monitoring_settings.model_dump_json(), origin))
             self.db.execute("INSERT OR IGNORE INTO metadata VALUES ('cursor', ?)", (str(effective_at),))
         return result.lastrowid
 
-    def update_realtime_settings(self, settings: Settings):
+    def update_live_settings(self, monitoring_settings: MonitoringSettings):
         with self.db:
-            self.db.execute('UPDATE configs SET settings=? WHERE revision=?', (settings.model_dump_json(), self.revision))
+            self.db.execute('UPDATE configs SET monitoring_settings=? WHERE revision=?', (monitoring_settings.model_dump_json(), self.revision))
 
     def configuration_history(self, start: float, end: float) -> list[ConfigurationRevision]:
         rows = self.db.execute("""SELECT * FROM configs WHERE
             revision=(SELECT revision FROM configs WHERE effective_at<=? ORDER BY effective_at DESC,revision DESC LIMIT 1)
             OR (effective_at>? AND effective_at<=?) ORDER BY effective_at,revision""", (start, start, end))
-        return [ConfigurationRevision(row['revision'], row['effective_at'], Settings.model_validate_json(row['settings']), row['origin']) for row in rows]
+        return [ConfigurationRevision(row['revision'], row['effective_at'], MonitoringSettings.model_validate_json(row['monitoring_settings']), row['origin']) for row in rows]
 
     def latest_origin(self) -> str:
         row = self.db.execute('SELECT origin FROM configs ORDER BY revision DESC LIMIT 1').fetchone()
@@ -182,13 +180,13 @@ class Store:
         """, (*entities, origin, start, end, origin, origin, start))
         return [Observation(row['entity_id'], row['at'], row['value'], row['reported_at']) for row in rows]
 
-    def settle(self, result: WindowResult, revision: int, timezone: str):
+    def settle(self, result: WindowResult, revision: int, home_timezone: str):
         if self.db.execute("SELECT 1 FROM windows WHERE revision=? AND start=? AND end=?",
                            (revision, result.start, result.end)).fetchone():
             return
         if self.cursor != result.start:
             raise ValueError("non_contiguous_settlement")
-        zone = ZoneInfo(timezone)
+        zone = ZoneInfo(home_timezone)
         public = {**result.public(), 'revision': revision}
         stored = public.copy()
         midnight = datetime.combine(datetime.fromtimestamp(result.start, zone).date() + timedelta(days=1),
@@ -202,20 +200,20 @@ class Store:
                                  for segment in result.segments]
                 parts.append({'start': left, 'end': right,
                               'valid_seconds': sum(duration for _, duration in intersections),
-                              'estimated_energy_wh': sum(segment.estimated_power * duration / 3600
+                              'estimated_energy_wh': sum(segment.estimated_power_w * duration / 3600
                                                          for segment, duration in intersections),
-                              'actual_energy_wh': sum(segment.actual_power * duration / 3600
+                              'actual_energy_wh': sum(segment.actual_power_w * duration / 3600
                                                       for segment, duration in intersections)})
                 left = right
                 midnight = datetime.combine(datetime.fromtimestamp(left, zone).date() + timedelta(days=1),
                                             time(), zone).timestamp()
-            stored['day_allocations'] = {'timezone': timezone, 'parts': parts}
+            stored['day_allocations'] = {'home_timezone': home_timezone, 'parts': parts}
         detail = []
         for segment in result.segments:
-            if detail and detail[-1][1] == segment.start and detail[-1][2] == segment.estimated_power:
+            if detail and detail[-1][1] == segment.start and detail[-1][2] == segment.estimated_power_w:
                 detail[-1][1] = segment.end
             else:
-                detail.append([segment.start, segment.end, segment.estimated_power])
+                detail.append([segment.start, segment.end, segment.estimated_power_w])
         with self.db:
             self.db.execute("INSERT INTO windows VALUES (?,?,?,?)",
                             (revision, result.start, result.end, json.dumps(stored)))
@@ -226,20 +224,20 @@ class Store:
                     day = datetime.fromtimestamp(left, zone).date()
                     midnight = datetime.combine(day + timedelta(days=1), time(), zone).timestamp()
                     right = min(end, midnight)
-                    self.db.execute("""INSERT INTO days(timezone,day,energy_wh,valid_seconds) VALUES (?,?,?,?)
-                        ON CONFLICT(timezone,day) DO UPDATE SET
-                        energy_wh=energy_wh+excluded.energy_wh, valid_seconds=valid_seconds+excluded.valid_seconds""",
-                        (timezone, day.isoformat(), power * (right-left) / 3600, right-left))
+                    self.db.execute("""INSERT INTO days(home_timezone,day,estimated_energy_wh,valid_seconds) VALUES (?,?,?,?)
+                        ON CONFLICT(home_timezone,day) DO UPDATE SET
+                        estimated_energy_wh=estimated_energy_wh+excluded.estimated_energy_wh, valid_seconds=valid_seconds+excluded.valid_seconds""",
+                        (home_timezone, day.isoformat(), power * (right-left) / 3600, right-left))
                     left = right
-            self.db.execute("UPDATE metadata SET value=CAST(value AS REAL)+? WHERE key='total_wh'",
+            self.db.execute("UPDATE metadata SET value=CAST(value AS REAL)+? WHERE key='estimated_energy_lifetime_wh'",
                             (result.estimated_energy_wh,))
-            self.db.execute("UPDATE metadata SET value=CAST(value AS REAL)+? WHERE key='valid_seconds'",
+            self.db.execute("UPDATE metadata SET value=CAST(value AS REAL)+? WHERE key='lifetime_valid_seconds'",
                             (result.valid_seconds,))
             self.db.execute("INSERT OR REPLACE INTO metadata VALUES ('cursor',?)", (str(result.end),))
-            self.db.execute("INSERT OR REPLACE INTO metadata VALUES ('latest_window',?)", (json.dumps(public),))
+            self.db.execute("INSERT OR REPLACE INTO metadata VALUES ('latest_settled_window',?)", (json.dumps(public),))
 
-    def rebuild_day(self, now: float, timezone: str):
-        zone = ZoneInfo(timezone)
+    def rebuild_day(self, now: float, home_timezone: str):
+        zone = ZoneInfo(home_timezone)
         day = datetime.fromtimestamp(now, zone).date()
         start = datetime.combine(day, time(), zone).timestamp()
         end = datetime.combine(day + timedelta(days=1), time(), zone).timestamp()
@@ -252,7 +250,7 @@ class Store:
             WHERE windows.end>? AND windows.start<? AND (windows.start<? OR windows.end>?)''', (start, end, start, end))
         for row in rows:
             if row['segments'] is None:
-                # Legacy boundary windows do not retain their midnight distribution.
+                # Retained boundary windows may no longer have their exact segment distribution.
                 complete = False
             else:
                 for left, right, power in json.loads(row['segments']):
@@ -261,18 +259,18 @@ class Store:
                     valid += duration
         with self.db:
             self.db.execute('INSERT OR REPLACE INTO days VALUES (?,?,?,?,?)',
-                            (timezone, day.isoformat(), energy, valid, complete))
+                            (home_timezone, day.isoformat(), energy, valid, complete))
 
-    def totals(self, now: float, timezone: str):
-        day = datetime.fromtimestamp(now, ZoneInfo(timezone)).date().isoformat()
-        row = self.db.execute("SELECT energy_wh,valid_seconds,complete FROM days WHERE timezone=? AND day=?", (timezone, day)).fetchone()
-        return {"daily_kwh": row[0] / 1000 if row else 0, "total_kwh": float(self.get_meta("total_wh")) / 1000,
-                "day": day, "timezone": timezone, "daily_valid_seconds": row[1] if row else 0,
-                "daily_complete": bool(row[2]) if row else True,
-                "total_valid_seconds": float(self.get_meta("valid_seconds")), "settled_until": self.cursor}
+    def totals(self, now: float, home_timezone: str):
+        day = datetime.fromtimestamp(now, ZoneInfo(home_timezone)).date().isoformat()
+        row = self.db.execute("SELECT estimated_energy_wh,valid_seconds,allocation_complete FROM days WHERE home_timezone=? AND day=?", (home_timezone, day)).fetchone()
+        return {"estimated_energy_today_kwh": row[0] / 1000 if row else 0, "estimated_energy_lifetime_kwh": float(self.get_meta("estimated_energy_lifetime_wh")) / 1000,
+                "day": day, "home_timezone": home_timezone, "today_valid_seconds": row[1] if row else 0,
+                "today_allocation_complete": bool(row[2]) if row else True,
+                "lifetime_valid_seconds": float(self.get_meta("lifetime_valid_seconds")), "settled_until": self.cursor}
 
-    def latest_window(self) -> HistoryWindow | None:
-        value = self.get_meta("latest_window")
+    def latest_settled_window(self) -> HistoryWindow | None:
+        value = self.get_meta("latest_settled_window")
         return json.loads(value) if value else None
 
     def history(self, start: float, end: float, *, include_day_allocations=False) -> list[HistoryWindow]:

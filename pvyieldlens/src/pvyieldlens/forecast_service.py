@@ -6,7 +6,7 @@ import httpx
 
 from .forecast import ForecastBatch, ForecastInput, ForecastView, forecast_view
 from .open_meteo import OpenMeteoClient
-from .settings import ForecastSettings, HALocation, Settings
+from .settings import ForecastSettings, HALocation, MonitoringSettings
 from .storage import Store
 
 
@@ -28,9 +28,9 @@ class ForecastController:
         self._request_scope: asyncio.Timeout | None = None
         self._wake = asyncio.Event()
         self._next_refresh = 0.0
-        self.configure(store.settings(), self.settings, store.latest_origin(), self.location)
+        self.configure(store.monitoring_settings(), self.settings, store.latest_origin(), self.location)
 
-    def configure(self, config: Settings | None, settings: ForecastSettings,
+    def configure(self, monitoring_settings: MonitoringSettings | None, settings: ForecastSettings,
                   origin: str, location: HALocation | None) -> None:
         location = location if location and location.origin == origin else None
         if settings != self.settings:
@@ -39,10 +39,10 @@ class ForecastController:
             self.store.set_meta('ha_location', location.model_dump_json() if location else 'null')
         inputs = ForecastInput(
             location=location.model_copy(update={'location_name': None}),
-            rated_power_w=config.rated_power_w,
-            temperature_coefficient_pct_per_c=config.temperature_coefficient_pct_per_c,
+            total_max_power_at_stc_w=monitoring_settings.total_max_power_at_stc_w,
+            pmax_temperature_coefficient_pct_per_c=monitoring_settings.pmax_temperature_coefficient_pct_per_c,
             tilt_deg=settings.tilt_deg, azimuth_deg=settings.azimuth_deg, noct_c=settings.noct_c,
-        ) if config and location and settings.tilt_deg is not None and settings.azimuth_deg is not None else None
+        ) if monitoring_settings and location and settings.tilt_deg is not None and settings.azimuth_deg is not None else None
         changed = inputs != self.inputs or settings.enabled != self.settings.enabled
         self.settings = settings
         if not settings.enabled and self._request_scope is not None and self._request_scope.when() is None:

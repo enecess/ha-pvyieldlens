@@ -10,26 +10,33 @@ from test_engine import samples, settings
 def test_restart_and_duplicate_settlement_are_idempotent(tmp_path):
     path = tmp_path / 'data.sqlite'
     store = Store(path)
-    revision = store.save_settings(settings(), 0)
+    revision = store.save_monitoring_settings(settings(), 0)
     result = calculate(settings(), samples(), 0, 60)
     store.settle(result, revision, 'UTC')
     store.settle(result, revision, 'UTC')
     store.close()
     restored = Store(path)
-    assert restored.totals(60, 'UTC')['total_kwh'] == pytest.approx(0.062)
+    assert restored.totals(60, 'UTC')['estimated_energy_lifetime_kwh'] == pytest.approx(0.062)
     assert restored.cursor == 60
-    assert restored.settings().temperature_coefficient_pct_per_c == -0.35
+    assert restored.monitoring_settings().pmax_temperature_coefficient_pct_per_c == -0.35
+    assert set(restored.db.execute('SELECT * FROM configs').fetchone().keys()) == {
+        'revision', 'effective_at', 'monitoring_settings', 'origin'}
+    assert set(restored.db.execute('SELECT * FROM days').fetchone().keys()) == {
+        'home_timezone', 'day', 'estimated_energy_wh', 'valid_seconds', 'allocation_complete'}
+    assert {row['key'] for row in restored.db.execute('SELECT key FROM metadata')} == {
+        'estimated_energy_lifetime_wh', 'lifetime_valid_seconds', 'cursor', 'latest_settled_window'}
+    assert restored.latest_settled_window()['estimated_power_w'] == pytest.approx(3720)
     restored.close()
 
 
 def test_midnight_splits_energy_and_empty_new_day_is_zero(tmp_path):
     start = datetime(2026, 10, 28, 15, 59, 30, tzinfo=timezone.utc).timestamp()
     store = Store(tmp_path / 'data.sqlite')
-    revision = store.save_settings(settings(), start)
+    revision = store.save_monitoring_settings(settings(), start)
     store.settle(calculate(settings(), samples(at=start), start, start + 60), revision, 'Asia/Shanghai')
-    assert store.totals(start, 'Asia/Shanghai')['daily_kwh'] == pytest.approx(0.031)
-    assert store.totals(start + 60, 'Asia/Shanghai')['daily_kwh'] == pytest.approx(0.031)
-    assert store.totals(start + 86460, 'Asia/Shanghai')['daily_kwh'] == 0
+    assert store.totals(start, 'Asia/Shanghai')['estimated_energy_today_kwh'] == pytest.approx(0.031)
+    assert store.totals(start + 60, 'Asia/Shanghai')['estimated_energy_today_kwh'] == pytest.approx(0.031)
+    assert store.totals(start + 86460, 'Asia/Shanghai')['estimated_energy_today_kwh'] == 0
     store.close()
 
 
@@ -62,37 +69,37 @@ def test_observation_sources_origin_and_inclusive_bounds_keep_strict_predecessor
     store.close()
 
 
-def test_retention_keeps_totals_and_latest_window(tmp_path):
+def test_retention_keeps_totals_and_latest_settled_window(tmp_path):
     store = Store(tmp_path / 'data.sqlite')
-    revision = store.save_settings(settings(), 0)
+    revision = store.save_monitoring_settings(settings(), 0)
     store.settle(calculate(settings(), samples(), 0, 60), revision, 'UTC')
     store.prune(100 * 86400)
-    assert store.totals(100 * 86400, 'UTC')['total_kwh'] == pytest.approx(0.062)
-    assert store.latest_window()['end'] == 60
+    assert store.totals(100 * 86400, 'UTC')['estimated_energy_lifetime_kwh'] == pytest.approx(0.062)
+    assert store.latest_settled_window()['end'] == 60
     store.close()
 
 
 def test_detail_retention_preserves_three_days_and_committed_history(tmp_path):
     store = Store(tmp_path / 'data.sqlite')
-    revision = store.save_settings(settings(), 0)
+    revision = store.save_monitoring_settings(settings(), 0)
     for start in range(0, 4 * 86400, 86400):
         store.settle(calculate(settings(), samples(at=start), start, start + 86400), revision, 'UTC')
-    before = store.totals(4 * 86400, 'UTC')['total_kwh']
+    before = store.totals(4 * 86400, 'UTC')['estimated_energy_lifetime_kwh']
     store.prune(5 * 86400)
     assert len(store.history(0, 4 * 86400)) == 4
     assert [row[0] for row in store.db.execute('SELECT end FROM window_segments ORDER BY end')] == [
         2 * 86400, 3 * 86400, 4 * 86400,
     ]
-    assert store.totals(5 * 86400, 'UTC')['total_kwh'] == before
+    assert store.totals(5 * 86400, 'UTC')['estimated_energy_lifetime_kwh'] == before
     store.close()
 
 
-def test_legacy_store_defaults_forecast_disabled(tmp_path):
+def test_fresh_store_defaults_forecast_disabled(tmp_path):
     from pvyieldlens.settings import ForecastSettings
 
-    path = tmp_path / 'legacy.sqlite'
+    path = tmp_path / 'fresh.sqlite'
     store = Store(path)
-    store.save_settings(settings(), 0)
+    store.save_monitoring_settings(settings(), 0)
     store.close()
     store = Store(path)
     assert store.forecast_settings() == ForecastSettings()
@@ -106,7 +113,7 @@ def test_forecast_settings_round_trip_keeps_monitoring_metadata(tmp_path):
 
     path = tmp_path / 'data.sqlite'
     store = Store(path)
-    store.save_settings(settings(), 0)
+    store.save_monitoring_settings(settings(), 0)
     forecast = ForecastSettings(enabled=False, tilt_deg=25.0, azimuth_deg=180.0, noct_c=47.0)
     store.save_forecast_settings(forecast)
     store.close()
@@ -121,12 +128,12 @@ def test_history_summary_uses_energy_ratio_not_mean_pr(tmp_path):
     from pvyieldlens.storage import summarize_history
 
     store = Store(tmp_path / 'data.sqlite')
-    first = settings(rated_power_w=600)
-    second = settings(rated_power_w=5400)
+    first = settings(total_max_power_at_stc_w=600)
+    second = settings(total_max_power_at_stc_w=5400)
     store.settle(calculate(first, samples(power=300, temp=25, sun=1000), 0, 600),
-                 store.save_settings(first, 0), 'UTC')
+                 store.save_monitoring_settings(first, 0), 'UTC')
     store.settle(calculate(second, samples(power=5400, temp=25, sun=1000, at=600), 600, 1200),
-                 store.save_settings(second, 600), 'UTC')
+                 store.save_monitoring_settings(second, 600), 'UTC')
     windows = store.history(0, 1200)
     assert [(row['estimated_energy_wh'], row['actual_energy_wh']) for row in windows] == [(100, 50), (900, 900)]
     assert [row['revision'] for row in windows] == [1, 2]
@@ -134,7 +141,7 @@ def test_history_summary_uses_energy_ratio_not_mean_pr(tmp_path):
     assert summary.estimated_energy_kwh == pytest.approx(1.0)
     assert summary.actual_energy_kwh == pytest.approx(0.95)
     assert summary.pr == pytest.approx(95.0)
-    assert summary.coverage_percent == pytest.approx(100.0)
+    assert summary.data_completeness_percent == pytest.approx(100.0)
     assert summary.valid_seconds == 1200
     assert (summary.start, summary.end) == (0, 1200)
     assert store.history(0, 1200) == windows
@@ -146,7 +153,7 @@ def test_partial_boundary_windows_are_excluded_without_proration(tmp_path):
     from pvyieldlens.storage import summarize_history
 
     store = Store(tmp_path / 'data.sqlite')
-    revision = store.save_settings(settings(), 0.25)
+    revision = store.save_monitoring_settings(settings(), 0.25)
     for at in (0.25, 600.25, 1200.25):
         store.settle(calculate(settings(), samples(at=at), at, at + 600), revision, 'UTC')
     store.add_observations(samples(at=600.25, sun=100))
@@ -160,7 +167,7 @@ def test_partial_boundary_windows_are_excluded_without_proration(tmp_path):
     assert summary.estimated_energy_kwh == pytest.approx(0.62)
     assert summary.pr == pytest.approx(90)
     assert summary.valid_seconds == 600
-    assert summary.coverage_percent == 100
+    assert summary.data_completeness_percent == 100
     assert all('segments' not in row for row in windows)
     store.close()
 
@@ -175,7 +182,7 @@ def test_partial_boundary_windows_are_excluded_without_proration(tmp_path):
                  0, 86400, (0, 60, 0, 0, None, 100, 60), id='valid-night'),
     pytest.param([{**calculate(settings(), samples(at=3600), 3600, 3660).public(), 'revision': 1}],
                  0, 86400, (3600, 3660, 0.062, 0.0558, 90, 100, 60), id='short-installation'),
-    pytest.param([{**calculate(settings(power_max_age_seconds=30), samples(), 0, 60).public(), 'revision': 1},
+    pytest.param([{**calculate(settings(actual_power_max_age_seconds=30), samples(), 0, 60).public(), 'revision': 1},
                   {**calculate(settings(), [], 60, 120).public(), 'revision': 1},
                   {**calculate(settings(), samples(at=120), 120, 180).public(), 'revision': 2}],
                  0, 86400, (0, 180, 0.093, 0.0837, 90, 50, 90), id='partial-and-missing'),
@@ -185,7 +192,7 @@ def test_history_summary_no_windows_missing_night_and_short_installation(windows
 
     summary = summarize_history(windows, start, end)
     assert summary.model_dump() == pytest.approx(dict(zip(
-        ('start', 'end', 'estimated_energy_kwh', 'actual_energy_kwh', 'pr', 'coverage_percent', 'valid_seconds'), expected)))
+        ('start', 'end', 'estimated_energy_kwh', 'actual_energy_kwh', 'pr', 'data_completeness_percent', 'valid_seconds'), expected)))
 
 
 @pytest.mark.parametrize('changes', [
@@ -198,4 +205,4 @@ def test_history_summary_rejects_non_strict_or_non_finite_values(changes):
 
     with pytest.raises(ValidationError):
         HistorySummary(**{'start': 0.0, 'end': 60.0, 'estimated_energy_kwh': 0.062, 'actual_energy_kwh': 0.0558,
-                          'pr': 90.0, 'coverage_percent': 100.0, 'valid_seconds': 60.0, **changes})
+                          'pr': 90.0, 'data_completeness_percent': 100.0, 'valid_seconds': 60.0, **changes})

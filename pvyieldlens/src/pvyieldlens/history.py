@@ -35,7 +35,7 @@ class HistoryView(BaseModel):
     summary: HistorySummary
     requested_range: HistoryRange
     period: HistoryPeriod
-    timezone: str
+    home_timezone: str
     today: str
     boundary_unavailable: bool
     days: list[HistoryDay]
@@ -49,18 +49,18 @@ def _allocated_window(window: HistoryWindow, parts: list[DayAllocation]) -> Hist
     actual = sum(part['actual_energy_wh'] for part in parts)
     return {**window, 'start': start, 'end': end, 'valid_seconds': valid,
             'estimated_energy_wh': estimated, 'actual_energy_wh': actual,
-            'estimated_power': estimated * 3600 / valid if valid else None,
-            'actual_power': actual * 3600 / valid if valid else None,
+            'estimated_power_w': estimated * 3600 / valid if valid else None,
+            'actual_power_w': actual * 3600 / valid if valid else None,
             'pr': actual / estimated * 100 if valid and estimated else None,
-            'optimizable_power': (estimated - actual) * 3600 / valid if valid else None,
-            'coverage_percent': valid / (end - start) * 100,
+            'optimizable_power_w': (estimated - actual) * 3600 / valid if valid else None,
+            'data_completeness_percent': valid / (end - start) * 100,
             'quality': 'complete' if valid and abs(valid - (end - start)) < 1e-6 else 'partial' if valid else 'unavailable',
-            'reason': 'missing_data' if not valid else 'zero_expected_power' if not estimated else None}
+            'reason': 'missing_data' if not valid else 'zero_estimated_power' if not estimated else None}
 
 
-def history_view(store: Store, period: HistoryPeriod, now: float, timezone: str) -> HistoryView:
+def history_view(store: Store, period: HistoryPeriod, now: float, home_timezone: str) -> HistoryView:
     """Read one settled history view while the caller holds the service lock."""
-    zone = ZoneInfo(timezone)
+    zone = ZoneInfo(home_timezone)
     today = datetime.fromtimestamp(now, zone).date()
     count = 7 if period == '7d' else 30 if period == '30d' else 1
     first_day = today - timedelta(days=count - 1)
@@ -76,7 +76,7 @@ def history_view(store: Store, period: HistoryPeriod, now: float, timezone: str)
             continue
         allocations = row.get('day_allocations')
         parts = ([part for part in allocations['parts'] if part['start'] >= start and part['end'] <= now]
-                 if allocations and allocations['timezone'] == timezone else [])
+                 if allocations and allocations['home_timezone'] == home_timezone else [])
         # Only a stored calendar boundary can cut a settled source window exactly.
         if parts and parts[0]['start'] == max(start, row['start']) and parts[-1]['end'] == min(now, row['end']):
             windows.append({**_allocated_window(row, parts), 'source_start': row['start'], 'source_end': row['end']})
@@ -98,7 +98,7 @@ def history_view(store: Store, period: HistoryPeriod, now: float, timezone: str)
                     daily.append(window)
                     continue
                 allocations = window.get('day_allocations')
-                if allocations and allocations['timezone'] == timezone:
+                if allocations and allocations['home_timezone'] == home_timezone:
                     daily.extend(_allocated_window(window, [part]) for part in allocations['parts']
                                  if part['start'] >= left and part['end'] <= right)
                 else:
@@ -106,7 +106,7 @@ def history_view(store: Store, period: HistoryPeriod, now: float, timezone: str)
             summary = summarize_history(daily, left, right)
             if unavailable:
                 summary = summary.model_copy(update={'estimated_energy_kwh': None, 'actual_energy_kwh': None,
-                                                     'pr': None, 'coverage_percent': None})
+                                                     'pr': None, 'data_completeness_percent': None})
             days.append(HistoryDay(day=day.isoformat(), start=left, end=right, summary=summary,
                                    in_progress=day == today,
                                    boundary_unavailable=unavailable or any(
@@ -116,5 +116,5 @@ def history_view(store: Store, period: HistoryPeriod, now: float, timezone: str)
     for window in windows:
         window.pop('day_allocations', None)
     return HistoryView(windows=windows, summary=summary, requested_range=HistoryRange(start=start, end=now),
-                       period=period, timezone=timezone, today=today.isoformat(),
+                       period=period, home_timezone=home_timezone, today=today.isoformat(),
                        boundary_unavailable=bool(excluded), days=days)

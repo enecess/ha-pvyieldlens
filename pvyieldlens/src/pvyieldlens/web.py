@@ -20,7 +20,7 @@ from starlette.middleware.gzip import GZipMiddleware
 from .home_assistant import HomeAssistantClient
 from .history import HistoryPeriod, history_view
 from .service import NETWORK_ERRORS, Service
-from .settings import ForecastSettings, Settings
+from .settings import ForecastSettings, MonitoringSettings
 from .storage import Store, summarize_history
 
 
@@ -52,9 +52,9 @@ class Connection(BaseModel):
 
 class ConfigurationUpdate(BaseModel):
     model_config = ConfigDict(extra='forbid')
-    settings: Settings
+    monitoring_settings: MonitoringSettings
     connection: Connection | None = None
-    forecast_settings: ForecastSettings | None = None
+    forecast_settings: ForecastSettings
 
 
 def create_app(service: Service, runtime: Runtime, run_background=True) -> FastAPI:
@@ -74,7 +74,7 @@ def create_app(service: Service, runtime: Runtime, run_background=True) -> FastA
 
     def config_response():
         connection = saved_connection()
-        return {'settings': service.config.model_dump() if service.config else None,
+        return {'monitoring_settings': service.monitoring_settings.model_dump() if service.monitoring_settings else None,
                 'forecast_settings': service.forecast.settings.model_dump(),
                 'location': service.forecast.location.model_dump() if service.forecast.location else None,
                 'mode': 'app' if runtime.supervisor_token else 'docker',
@@ -130,7 +130,7 @@ def create_app(service: Service, runtime: Runtime, run_background=True) -> FastA
 
     @app.get('/health')
     async def health():
-        return {'status': 'ok', 'configured': service.config is not None}
+        return {'status': 'ok', 'configured': service.monitoring_settings is not None}
 
     @app.get('/api/config')
     async def get_configuration():
@@ -148,15 +148,15 @@ def create_app(service: Service, runtime: Runtime, run_background=True) -> FastA
             connection = Connection(url=update.connection.url, token=token)
         if not connection or not connection.token.get_secret_value():
             return JSONResponse({'error': 'connection_required'}, status_code=422)
-        monitoring_changed = service.config != update.settings or service.origin != connection.url or connection != previous_connection
+        monitoring_changed = service.monitoring_settings != update.monitoring_settings or service.origin != connection.url or connection != previous_connection
         if monitoring_changed and run_background:
             await service.stop()
         if monitoring_changed:
-            await service.configure(update.settings, origin=connection.url)
+            await service.configure(update.monitoring_settings, origin=connection.url)
             if not runtime.supervisor_token:
                 service.store.set_meta('connection', json.dumps({'url': connection.url, 'token': connection.token.get_secret_value()}))
         forecast = service.forecast
-        forecast.configure(service.config, update.forecast_settings or forecast.settings, service.origin, forecast.location)
+        forecast.configure(service.monitoring_settings, update.forecast_settings, service.origin, forecast.location)
         if monitoring_changed or service.client is None:
             service.client = HomeAssistantClient(connection.url, connection.token.get_secret_value())
         if monitoring_changed and run_background:
@@ -176,7 +176,7 @@ def create_app(service: Service, runtime: Runtime, run_background=True) -> FastA
         try:
             config = await client.configuration()
             states = await client.states()
-            return {'timezone': config.time_zone, 'location': config.location.model_dump() if config.location else None, 'entities': [
+            return {'home_timezone': config.time_zone, 'location': config.location.model_dump() if config.location else None, 'entities': [
                 {'entity_id': state.entity_id, 'name': state.attributes.friendly_name or state.entity_id,
                  'unit': state.attributes.unit_of_measurement, 'state': state.state}
                 for state in states if state.entity_id.startswith('sensor.') and not state.entity_id.startswith('sensor.pvyieldlens_')]}
@@ -190,10 +190,10 @@ def create_app(service: Service, runtime: Runtime, run_background=True) -> FastA
         async with service.lock:
             return service.snapshot()
 
-    @app.get('/api/live-history')
-    async def live_history():
+    @app.get('/api/live-series')
+    async def live_series():
         async with service.lock:
-            return service.live_history()
+            return service.live_series()
 
     @app.get('/api/forecast')
     async def get_forecast():
@@ -219,8 +219,8 @@ def create_app(service: Service, runtime: Runtime, run_background=True) -> FastA
                 return JSONResponse({'error': 'invalid_time_range'}, status_code=422)
             async with service.lock:
                 store = service.store
-                timezone = service.config.timezone if service.config else 'UTC'
-                return history_view(store, period, time.time(), timezone).model_dump(mode='json')
+                home_timezone = service.monitoring_settings.home_timezone if service.monitoring_settings else 'UTC'
+                return history_view(store, period, time.time(), home_timezone).model_dump(mode='json')
         if start is None or end is None or end <= start or end - start > 90 * 86400:
             return JSONResponse({'error': 'invalid_time_range'}, status_code=422)
         async with service.lock:

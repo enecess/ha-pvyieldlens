@@ -62,7 +62,7 @@ class OpenMeteoClient:
             and len(hourly.weather_code) == len(hourly.time)
         ) else (None,) * len(hourly.time)
         samples = tuple(WeatherSample(
-            at=at, poa_w_m2=_weather_number(poa, minimum=0), air_temperature_c=_weather_number(air),
+            at=at, irradiance_w_m2=_weather_number(poa, minimum=0), air_temperature_c=_weather_number(air),
             weather_code=code,
         ) for at, poa, air, code in zip(hourly.time, hourly.global_tilted_irradiance, hourly.temperature_2m, codes, strict=True))
         return ForecastData(intervals=calculate_forecast(inputs, samples), weather_samples=samples)

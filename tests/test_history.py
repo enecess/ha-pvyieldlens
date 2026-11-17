@@ -1,4 +1,3 @@
-import json
 import sqlite3
 from datetime import datetime
 from zoneinfo import ZoneInfo
@@ -10,8 +9,8 @@ from pvyieldlens.storage import Store, summarize_history
 from test_engine import samples, settings
 
 
-def timestamp(local, timezone='Asia/Shanghai'):
-    return datetime.fromisoformat(local).replace(tzinfo=ZoneInfo(timezone)).timestamp()
+def timestamp(local, home_timezone='Asia/Shanghai'):
+    return datetime.fromisoformat(local).replace(tzinfo=ZoneInfo(home_timezone)).timestamp()
 
 
 @pytest.fixture
@@ -21,16 +20,16 @@ def store(tmp_path):
     instance.close()
 
 
-def settle_cross_midnight(store, *, missing_after=False):
+def settle_cross_midnight(store, *, missing_after=False, home_timezone='Asia/Shanghai'):
     start = timestamp('2026-11-10T23:58:00')
     midnight = timestamp('2026-11-11T00:00:00')
     end = timestamp('2026-11-11T00:03:00')
-    config = settings(rated_power_w=600)
-    revision = store.save_settings(config, start)
+    config = settings(total_max_power_at_stc_w=600, home_timezone=home_timezone)
+    revision = store.save_monitoring_settings(config, start)
     observations = (samples(at=start, power=300, sun=1000, temp=25)
                     + samples(at=midnight, power=None if missing_after else 1200, sun=2000, temp=25))
     store.add_observations(observations)
-    store.settle(calculate(config, observations, start, end), revision, 'Asia/Shanghai')
+    store.settle(calculate(config, observations, start, end), revision, home_timezone)
     return start, midnight, end
 
 
@@ -39,7 +38,7 @@ def test_cross_day_allocation_survives_reload_and_raw_pruning_with_exact_fragmen
 
     start, midnight, end = settle_cross_midnight(store)
     original = store.history(start, end, include_day_allocations=True)[0]
-    assert original['day_allocations'] == {'timezone': 'Asia/Shanghai', 'parts': [
+    assert original['day_allocations'] == {'home_timezone': 'Asia/Shanghai', 'parts': [
         {'start': start, 'end': midnight, 'valid_seconds': 120, 'estimated_energy_wh': 20, 'actual_energy_wh': 10},
         {'start': midnight, 'end': end, 'valid_seconds': 180, 'estimated_energy_wh': 60, 'actual_energy_wh': 60},
     ]}
@@ -56,18 +55,18 @@ def test_cross_day_allocation_survives_reload_and_raw_pruning_with_exact_fragmen
     assert view.requested_range.model_dump() == {'start': midnight, 'end': end}
     assert view.summary.model_dump() == pytest.approx({
         'start': midnight, 'end': end, 'estimated_energy_kwh': 0.06, 'actual_energy_kwh': 0.06,
-        'pr': 100, 'coverage_percent': 100, 'valid_seconds': 180,
+        'pr': 100, 'data_completeness_percent': 100, 'valid_seconds': 180,
     })
     fragment = view.windows[0]
     assert (fragment['start'], fragment['end'], fragment['source_start'], fragment['source_end']) == (
         midnight, end, start, end)
-    assert (fragment['estimated_power'], fragment['actual_power'], fragment['pr']) == (1200, 1200, 100)
-    assert fragment['optimizable_power'] == 0
+    assert (fragment['estimated_power_w'], fragment['actual_power_w'], fragment['pr']) == (1200, 1200, 100)
+    assert fragment['optimizable_power_w'] == 0
     assert fragment['quality'] == 'complete'
     assert not view.boundary_unavailable
     assert view.days == []
     assert restored.history(start, end, include_day_allocations=True) == [original]
-    assert 'source_start' not in restored.latest_window()
+    assert 'source_start' not in restored.latest_settled_window()
     assert restored.totals(end, 'Asia/Shanghai') == before_totals
     assert [tuple(row) for row in restored.db.execute('SELECT * FROM metadata ORDER BY key')] == [tuple(row) for row in before_meta]
     restored.close()
@@ -86,16 +85,16 @@ def test_cross_day_allocation_keeps_unavailable_portion_and_fragment(store):
     assert fragment['start'] == midnight
     assert fragment['quality'] == 'unavailable'
     assert fragment['reason'] == 'missing_data'
-    assert fragment['actual_power'] is None and fragment['pr'] is None
+    assert fragment['actual_power_w'] is None and fragment['pr'] is None
     assert view.summary.actual_energy_kwh is None
-    assert view.summary.coverage_percent == 0
+    assert view.summary.data_completeness_percent == 0
     assert not view.boundary_unavailable
 
 
 def test_same_day_and_exact_midnight_end_do_not_store_allocations(store):
     start = timestamp('2026-11-10T23:58:00')
     end = timestamp('2026-11-11T00:00:00')
-    revision = store.save_settings(settings(), start)
+    revision = store.save_monitoring_settings(settings(), start)
     store.settle(calculate(settings(), samples(at=start), start, end), revision, 'Asia/Shanghai')
     store.settle(calculate(settings(), samples(at=end), end, end + 60), revision, 'Asia/Shanghai')
     assert all('day_allocations' not in row for row in store.history(start, end + 60, include_day_allocations=True))
@@ -134,7 +133,7 @@ def test_calendar_midnight_updates_today_without_new_settlement(store, period, c
     now = timestamp('2026-11-11T00:00:00')
     view = history_view(store, period, now, 'Asia/Shanghai')
     assert view.today == '2026-11-11'
-    assert view.timezone == 'Asia/Shanghai'
+    assert view.home_timezone == 'Asia/Shanghai'
     assert view.requested_range.start == timestamp(start)
     assert view.requested_range.end == now
     assert len(view.days) == count
@@ -161,18 +160,12 @@ def test_calendar_dst_days_use_local_midnights(store, now, day, hours, period, c
     assert view.days[-1].day == now[:10]
 
 
-@pytest.mark.parametrize('metadata', ['legacy', 'different_timezone'])
-def test_unknown_internal_split_preserves_range_but_marks_daily_values_unavailable(store, metadata):
+def test_unknown_internal_split_preserves_range_but_marks_daily_values_unavailable(store):
     from pvyieldlens.history import history_view
 
-    start, _, end = settle_cross_midnight(store)
+    start, _, end = settle_cross_midnight(store, home_timezone='Asia/Taipei')
     original = store.history(start, end, include_day_allocations=True)[0]
-    if metadata == 'legacy':
-        original.pop('day_allocations', None)
-    else:
-        original['day_allocations'] = {'timezone': 'UTC', 'parts': []}
-    with store.db:
-        store.db.execute('UPDATE windows SET result=?', (json.dumps(original),))
+    assert original['day_allocations']['home_timezone'] == 'Asia/Taipei'
     view = history_view(store, '7d', end, 'Asia/Shanghai')
     assert view.summary.actual_energy_kwh == pytest.approx(0.07)
     assert view.summary.pr == pytest.approx(87.5)
@@ -183,23 +176,15 @@ def test_unknown_internal_split_preserves_range_but_marks_daily_values_unavailab
         assert day.summary.actual_energy_kwh is None
         assert day.summary.estimated_energy_kwh is None
         assert day.summary.pr is None
-        assert day.summary.coverage_percent is None
+        assert day.summary.data_completeness_percent is None
 
 
 @pytest.mark.parametrize('period', ['today', '7d', '30d'])
-@pytest.mark.parametrize('metadata', ['legacy', 'different_timezone'])
 @pytest.mark.parametrize('known_remaining', [True, False])
-def test_unknown_outer_split_is_excluded_and_flagged(store, period, metadata, known_remaining):
+def test_unknown_outer_split_is_excluded_and_flagged(store, period, known_remaining):
     from pvyieldlens.history import history_view
 
-    start, midnight, end = settle_cross_midnight(store)
-    with store.db:
-        original = store.history(start, end, include_day_allocations=True)[0]
-        if metadata == 'legacy':
-            original.pop('day_allocations', None)
-        else:
-            original['day_allocations']['timezone'] = 'UTC'
-        store.db.execute('UPDATE windows SET result=?', (json.dumps(original),))
+    start, midnight, end = settle_cross_midnight(store, home_timezone='Asia/Taipei')
     if known_remaining:
         store.settle(calculate(settings(), samples(at=end, power=0), end, end + 60), store.revision, 'Asia/Shanghai')
     now = end + (0 if period == 'today' else 6 if period == '7d' else 29) * 86400 + 60
@@ -231,8 +216,8 @@ def test_daily_pr_is_energy_weighted_and_valid_zero_actual_is_not_missing(store)
 
     start = timestamp('2026-11-11T00:00:00')
     for offset, rated, actual in [(0, 600, 300), (600, 5400, 5400), (1200, 600, 0)]:
-        config = settings(rated_power_w=rated)
-        revision = store.save_settings(config, start + offset)
+        config = settings(total_max_power_at_stc_w=rated)
+        revision = store.save_monitoring_settings(config, start + offset)
         store.settle(calculate(config, samples(at=start + offset, power=actual, temp=25, sun=1000),
                                start + offset, start + offset + 600), revision, 'Asia/Shanghai')
     first_two = history_view(store, '7d', start + 1200, 'Asia/Shanghai')

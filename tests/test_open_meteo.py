@@ -21,7 +21,7 @@ async def test_request_uses_only_forecast_inputs(azimuth_deg, provider_azimuth, 
         client = OpenMeteoClient(http=http)
         fetched = await client.fetch(forecast_input(
             latitude=latitude, longitude=longitude, tilt_deg=tilt_deg, azimuth_deg=azimuth_deg,
-            origin='http://ha.test/private', timezone='Asia/Shanghai',
+            origin='http://ha.test/private', home_timezone='Asia/Shanghai',
         ))
     request, = requests
     assert request.method == 'GET'
@@ -72,14 +72,14 @@ async def test_backward_mean_and_temperature_alignment():
     intervals = await fetch_payload(payload)
     assert len(intervals) == 216
     first, second = intervals[:2]
-    assert (first.start, first.end, first.poa_w_m2, first.air_temperature_c) == (0, 3600, 800, 20)
+    assert (first.start, first.end, first.irradiance_w_m2, first.air_temperature_c) == (0, 3600, 800, 20)
     assert first.cell_temperature_c == 45
-    assert first.power_w == pytest.approx(3720)
-    assert first.energy_kwh == pytest.approx(3.72)
-    assert (second.start, second.end, second.poa_w_m2, second.air_temperature_c) == (3600, 7200, 400, 20)
+    assert first.forecast_power_w == pytest.approx(3720)
+    assert first.forecast_energy_kwh == pytest.approx(3.72)
+    assert (second.start, second.end, second.irradiance_w_m2, second.air_temperature_c) == (3600, 7200, 400, 20)
     assert second.cell_temperature_c == 32.5
-    assert second.power_w == pytest.approx(1947.5)
-    assert second.energy_kwh == pytest.approx(1.9475)
+    assert second.forecast_power_w == pytest.approx(1947.5)
+    assert second.forecast_energy_kwh == pytest.approx(1.9475)
     assert (intervals[-1].start, intervals[-1].end) == (774000, 777600)
 
 
@@ -87,24 +87,24 @@ async def test_null_is_not_night_zero():
     payload = hourly_payload(0, hours=3)
     payload['hourly']['global_tilted_irradiance'] = [800, None, 0, 800]
     missing, night, daylight = await fetch_payload(payload)
-    assert (missing.start, missing.end, missing.poa_w_m2, missing.power_w, missing.energy_kwh) == (0, 3600, None, None, None)
+    assert (missing.start, missing.end, missing.irradiance_w_m2, missing.forecast_power_w, missing.forecast_energy_kwh) == (0, 3600, None, None, None)
     assert missing.quality == 'unavailable'
-    assert (night.start, night.end, night.poa_w_m2, night.power_w, night.energy_kwh) == (3600, 7200, 0, 0, 0)
+    assert (night.start, night.end, night.irradiance_w_m2, night.forecast_power_w, night.forecast_energy_kwh) == (3600, 7200, 0, 0, 0)
     assert night.quality == 'complete'
-    assert daylight.power_w == pytest.approx(3720)
+    assert daylight.forecast_power_w == pytest.approx(3720)
     assert daylight.quality == 'complete'
 
 
 @pytest.mark.parametrize('value', [None, -1, float('nan'), float('inf'), float('-inf'), '800', True, {}, []])
-async def test_invalid_poa_keeps_interval_position(value):
+async def test_invalid_irradiance_keeps_interval_position(value):
     payload = hourly_payload(0, hours=3)
     payload['hourly']['global_tilted_irradiance'][2] = value
     intervals = await fetch_payload(payload)
     assert len(intervals) == 3
-    assert (intervals[1].start, intervals[1].end, intervals[1].poa_w_m2) == (3600, 7200, None)
-    assert intervals[1].power_w is intervals[1].energy_kwh is None
+    assert (intervals[1].start, intervals[1].end, intervals[1].irradiance_w_m2) == (3600, 7200, None)
+    assert intervals[1].forecast_power_w is intervals[1].forecast_energy_kwh is None
     assert intervals[1].quality == 'unavailable'
-    assert intervals[0].power_w == intervals[2].power_w == pytest.approx(3720)
+    assert intervals[0].forecast_power_w == intervals[2].forecast_power_w == pytest.approx(3720)
 
 
 @pytest.mark.parametrize('value', [None, float('nan'), float('inf'), float('-inf'), '20', False, {}, []])
@@ -116,15 +116,15 @@ async def test_invalid_temperature_keeps_affected_intervals(value):
     assert [(row.start, row.end) for row in intervals] == [(0, 3600), (3600, 7200), (7200, 10800)]
     assert [row.air_temperature_c for row in intervals] == [None, None, 20]
     assert [row.quality for row in intervals] == ['unavailable', 'unavailable', 'complete']
-    assert intervals[0].power_w is intervals[1].power_w is None
-    assert intervals[2].power_w == pytest.approx(3720)
+    assert intervals[0].forecast_power_w is intervals[1].forecast_power_w is None
+    assert intervals[2].forecast_power_w == pytest.approx(3720)
 
 
 async def test_negative_air_temperature_remains_valid():
     row, = await fetch_payload(hourly_payload(0, hours=1, air_temperature_c=-10))
     assert row.air_temperature_c == -10
     assert row.cell_temperature_c == 15
-    assert row.power_w == pytest.approx(4140)
+    assert row.forecast_power_w == pytest.approx(4140)
     assert row.quality == 'complete'
 
 
@@ -214,8 +214,8 @@ async def test_weather_codes_do_not_invalidate_power(value, expected):
         lambda request: httpx.Response(200, content=json.dumps(payload)),
     )) as http:
         fetched = await OpenMeteoClient(http).fetch(forecast_input())
-    assert fetched.intervals[0].power_w == pytest.approx(3720)
-    assert fetched.intervals[1].power_w == pytest.approx(3720)
+    assert fetched.intervals[0].forecast_power_w == pytest.approx(3720)
+    assert fetched.intervals[1].forecast_power_w == pytest.approx(3720)
     assert [sample.weather_code for sample in fetched.weather_samples] == [0, expected, 0]
 
 
@@ -230,7 +230,7 @@ async def test_malformed_optional_codes_leave_core_weather_available(section, va
         lambda request: httpx.Response(200, json=payload),
     )) as http:
         fetched = await OpenMeteoClient(http).fetch(forecast_input())
-    assert all(row.power_w == pytest.approx(3720) for row in fetched.intervals)
+    assert all(row.forecast_power_w == pytest.approx(3720) for row in fetched.intervals)
     assert [sample.weather_code for sample in fetched.weather_samples] == [None, None, None]
     assert [sample.air_temperature_c for sample in fetched.weather_samples] == [20, 20, 20]
 
@@ -243,5 +243,5 @@ async def test_missing_optional_codes_leave_core_weather_available(section):
         lambda request: httpx.Response(200, json=payload),
     )) as http:
         fetched = await OpenMeteoClient(http).fetch(forecast_input())
-    assert fetched.intervals[0].power_w == pytest.approx(3720)
+    assert fetched.intervals[0].forecast_power_w == pytest.approx(3720)
     assert all(sample.weather_code is None for sample in fetched.weather_samples)

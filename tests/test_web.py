@@ -39,13 +39,18 @@ async def test_ingress_uses_real_peer_not_forwarded_header(service):
 async def test_configuration_validation_preserves_settings_and_secrets(service):
     app = create_app(service, Runtime(web_password='test-pass'), run_background=False)
     async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url='http://app', auth=('admin','test-pass')) as client:
-        body = {'settings': settings().model_dump(), 'connection': {'url':'http://ha.test:8123','token':'private-token'}}
-        assert (await client.put('/api/config', json=body)).status_code == 200
-        body['settings']['rated_power_w'] = -1
+        body = {'forecast_settings': {}, 'monitoring_settings': settings().model_dump(), 'connection': {'url':'http://ha.test:8123','token':'private-token'}}
+        response = await client.put('/api/config', json=body)
+        assert response.status_code == 200
+        assert set(response.json()) == {'monitoring_settings', 'forecast_settings', 'location', 'mode', 'connection', 'monitoring_changed'}
+        assert response.json()['monitoring_settings'] == body['monitoring_settings']
+        assert (await client.get('/api/config')).json()['monitoring_settings'] == body['monitoring_settings']
+        body['monitoring_settings']['total_max_power_at_stc_w'] = -1
         response = await client.put('/api/config', json=body)
         assert response.status_code == 422
+        assert response.json()['fields'] == ['monitoring_settings.total_max_power_at_stc_w']
         assert 'private-token' not in response.text
-        assert service.config.rated_power_w == 5000
+        assert service.monitoring_settings.total_max_power_at_stc_w == 5000
 
 
 async def test_csrf_and_empty_password_are_rejected(service):
@@ -53,7 +58,7 @@ async def test_csrf_and_empty_password_are_rejected(service):
         create_app(service, Runtime(), run_background=False)
     app = create_app(service, Runtime(web_password='test-pass'), run_background=False)
     async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url='http://app', auth=('admin','test-pass')) as client:
-        response = await client.put('/api/config', json={'settings':settings().model_dump()}, headers={'Origin':'https://evil.test'})
+        response = await client.put('/api/config', json={'forecast_settings': {}, 'monitoring_settings':settings().model_dump()}, headers={'Origin':'https://evil.test'})
         assert response.status_code == 403
 
 
@@ -70,7 +75,7 @@ async def test_large_history_gzip_preserves_response_authentication_and_ingress(
     from pvyieldlens.engine import calculate
     from test_engine import samples
 
-    await service.configure(settings(interval_minutes=1), now=0)
+    await service.configure(settings(settlement_interval_minutes=1), now=0)
     for at in range(0, 6000, 60):
         service.store.settle(calculate(settings(), samples(at=at), at, at + 60), 1, 'UTC')
     app = create_app(service, Runtime(supervisor_token='private-token'), run_background=False)
@@ -91,7 +96,7 @@ async def test_large_history_gzip_preserves_response_authentication_and_ingress(
     assert all('segments' not in row for row in plain.json()['windows'])
     assert plain.json()['requested_range'] == {'start': 0, 'end': 6000}
     assert plain.json()['summary'] == pytest.approx({'start': 0, 'end': 6000, 'estimated_energy_kwh': 6.2,
-                                                  'actual_energy_kwh': 5.58, 'pr': 90, 'coverage_percent': 100, 'valid_seconds': 6000})
+                                                  'actual_energy_kwh': 5.58, 'pr': 90, 'data_completeness_percent': 100, 'valid_seconds': 6000})
     assert 'private-token' not in plain.text
     async with httpx.AsyncClient(transport=httpx.ASGITransport(app=ingress, client=('10.0.0.5', 123)), base_url='http://app') as client:
         assert (await client.get(path, headers={'Accept-Encoding': 'gzip'})).status_code == 403
@@ -107,11 +112,11 @@ async def test_invalid_connection_ports_preserve_configuration_and_credentials(s
     async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app, raise_app_exceptions=False),
                                  base_url='http://app', auth=('admin', 'test-pass')) as client:
         connection = {'url': url, 'token': 'replacement-token'}
-        body = connection if method == 'POST' else {'settings': settings(rated_power_w=10000).model_dump(), 'connection': connection}
+        body = connection if method == 'POST' else {'forecast_settings': {}, 'monitoring_settings': settings(total_max_power_at_stc_w=10000).model_dump(), 'connection': connection}
         response = await client.request(method, path, json=body)
     assert response.status_code == 422
     assert response.json() == {'error': 'invalid_configuration', 'fields': ['url' if method == 'POST' else 'connection.url']}
-    assert service.config.rated_power_w == 5000
+    assert service.monitoring_settings.total_max_power_at_stc_w == 5000
     assert service.store.revision == 1
     assert service.origin == 'http://old-ha.test:8123'
     assert service.store.get_meta('connection') == saved
@@ -122,7 +127,7 @@ async def test_invalid_connection_ports_preserve_configuration_and_credentials(s
 async def test_valid_connection_urls_remain_supported(service, url):
     app = create_app(service, Runtime(web_password='test-pass'), run_background=False)
     async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url='http://app', auth=('admin', 'test-pass')) as client:
-        response = await client.put('/api/config', json={'settings': settings().model_dump(), 'connection': {'url': url, 'token': 'private-token'}})
+        response = await client.put('/api/config', json={'forecast_settings': {}, 'monitoring_settings': settings().model_dump(), 'connection': {'url': url, 'token': 'private-token'}})
     assert response.status_code == 200
     assert response.json()['connection'] == {'url': url.rstrip('/'), 'token_set': True}
     await service.client.close()
@@ -139,11 +144,11 @@ async def test_changed_connection_requires_token_without_changing_saved_state(se
     async with fake_server() as url, httpx.AsyncClient(transport=httpx.ASGITransport(app=app),
             base_url='http://app', auth=('admin', 'test-pass')) as client:
         connection = {'url': url, 'token': ''}
-        body = connection if method == 'POST' else {'settings': settings(rated_power_w=10000).model_dump(), 'connection': connection}
+        body = connection if method == 'POST' else {'forecast_settings': {}, 'monitoring_settings': settings(total_max_power_at_stc_w=10000).model_dump(), 'connection': connection}
         response = await client.request(method, path, json=body)
     assert response.status_code == 422
     assert response.json() == {'error': 'connection_required'}
-    assert service.config.rated_power_w == 5000
+    assert service.monitoring_settings.total_max_power_at_stc_w == 5000
     assert service.store.revision == 1
     assert service.origin == 'http://old-ha.test:8123'
     assert service.store.get_meta('connection') == saved
@@ -160,12 +165,12 @@ async def test_same_normalized_connection_reuses_saved_token(service, method, pa
         app = create_app(service, Runtime(web_password='test-pass'), run_background=False)
         async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url='http://app', auth=('admin', 'test-pass')) as client:
             connection = {'url': url + '/', 'token': ''}
-            body = connection if method == 'POST' else {'settings': settings().model_dump(), 'connection': connection}
+            body = connection if method == 'POST' else {'forecast_settings': {}, 'monitoring_settings': settings().model_dump(), 'connection': connection}
             response = await client.request(method, path, json=body)
         assert response.status_code == 200
         assert service.origin == url
         if method == 'POST':
-            assert response.json()['timezone'] == 'Asia/Shanghai'
+            assert response.json()['home_timezone'] == 'Asia/Shanghai'
         else:
             assert response.json()['connection'] == {'url': url, 'token_set': True}
             await service.client.close()
@@ -181,7 +186,7 @@ async def test_invalid_legacy_connection_keeps_app_reachable_until_correction(se
 
     legacy_url = 'http://legacy-ha.test:' + port
     saved = json.dumps({'url': legacy_url, 'token': 'private-legacy-token'})
-    await service.configure(settings(interval_minutes=1, update_seconds=1), now=120, origin=legacy_url)
+    await service.configure(settings(settlement_interval_minutes=1, update_interval_seconds=1), now=120, origin=legacy_url)
     service.store.add_observations(samples(at=120), origin=legacy_url)
     service.store.set_meta('connection', saved)
     monkeypatch.setattr('pvyieldlens.service.time.time', lambda: 180)
@@ -199,48 +204,27 @@ async def test_invalid_legacy_connection_keeps_app_reachable_until_correction(se
         assert (await client.get('/')).status_code == 200
         response = await client.get('/api/config')
         assert response.status_code == 200
-        assert response.json()['settings']['rated_power_w'] == 5000
+        assert response.json()['monitoring_settings']['total_max_power_at_stc_w'] == 5000
         assert response.json()['connection'] == {'url': '', 'token_set': False}
         assert 'private-legacy-token' not in response.text
         assert (await client.post('/api/connection', json=None)).json() == {'error': 'connection_required'}
-        assert (await client.put('/api/config', json={'settings': settings(rated_power_w=10000).model_dump()})).status_code == 422
+        assert (await client.put('/api/config', json={'forecast_settings': {}, 'monitoring_settings': settings(total_max_power_at_stc_w=10000).model_dump()})).status_code == 422
         await asyncio.sleep(0.05)
         assert service.store.cursor == 120
         assert service.store.history(120, 180) == []
         assert service.store.get_meta('connection') == saved
-        assert service.config.rated_power_w == 5000
+        assert service.monitoring_settings.total_max_power_at_stc_w == 5000
         assert service.client is None
         assert remote_requests == []
         connection = {'url': url, 'token': 'simulation-token'}
         assert (await client.post('/api/connection', json=connection)).status_code == 200
         assert remote_requests == [url, url]
         assert service.store.get_meta('connection') == saved
-        response = await client.put('/api/config', json={'settings': settings().model_dump(), 'connection': connection})
+        response = await client.put('/api/config', json={'forecast_settings': {}, 'monitoring_settings': settings().model_dump(), 'connection': connection})
         assert response.status_code == 200
         assert response.json()['connection'] == {'url': url, 'token_set': True}
         assert json.loads(service.store.get_meta('connection')) == connection
         assert service.client.base_url == url
-
-
-async def test_legacy_update_preserves_forecast_settings(service):
-    from pvyieldlens.settings import ForecastSettings, HALocation
-
-    await service.configure(settings(), now=0, origin='http://ha.test')
-    before_forecast_settings = ForecastSettings(enabled=True, tilt_deg=25.0, azimuth_deg=180.0, noct_c=47.0)
-    location = HALocation(origin=service.origin, latitude=31.23, longitude=121.47, timezone='UTC')
-    service.forecast.configure(service.config, before_forecast_settings, service.origin, location)
-    service.store.set_meta('connection', '{"url":"http://ha.test","token":"private-token"}')
-    app = create_app(service, Runtime(web_password='test-pass'), run_background=False)
-    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url='http://app', auth=('admin', 'test-pass')) as client:
-        legacy_response = await client.put('/api/config', json={'settings': settings(rated_power_w=6000).model_dump()})
-        assert legacy_response.status_code == 200
-        assert legacy_response.json()['forecast_settings'] == before_forecast_settings.model_dump()
-        saved = await client.get('/api/config')
-        assert saved.json()['location'] == location.model_dump()
-        assert 'private-token' not in saved.text
-        assert service.store.forecast_settings() == before_forecast_settings
-        assert service.forecast.inputs.rated_power_w == 6000
-    await service.client.close()
 
 
 async def test_invalid_forecast_preserves_all_configuration_and_secrets(service):
@@ -248,21 +232,21 @@ async def test_invalid_forecast_preserves_all_configuration_and_secrets(service)
 
     await service.configure(settings(), now=0, origin='http://ha.test')
     before_forecast_settings = ForecastSettings(enabled=True, tilt_deg=25.0, azimuth_deg=180.0)
-    location = HALocation(origin=service.origin, latitude=31.23, longitude=121.47, timezone='UTC')
-    service.forecast.configure(service.config, before_forecast_settings, service.origin, location)
+    location = HALocation(origin=service.origin, latitude=31.23, longitude=121.47, home_timezone='UTC')
+    service.forecast.configure(service.monitoring_settings, before_forecast_settings, service.origin, location)
     saved_connection = '{"url":"http://ha.test","token":"private-token"}'
     service.store.set_meta('connection', saved_connection)
-    before_monitor_config = service.config
+    before_monitor_config = service.monitoring_settings
     before_changes = service.store.db.total_changes
     app = create_app(service, Runtime(web_password='test-pass'), run_background=False)
     async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url='http://app', auth=('admin', 'test-pass')) as client:
         invalid_response = await client.put('/api/config', json={
-            'settings': settings(rated_power_w=6000).model_dump(),
+            'monitoring_settings': settings(total_max_power_at_stc_w=6000).model_dump(),
             'connection': {'url': 'http://new-ha.test', 'token': 'private-token'},
             'forecast_settings': {'enabled': True, 'tilt_deg': None, 'azimuth_deg': 360},
         })
     assert invalid_response.status_code == 422
-    assert service.config == before_monitor_config
+    assert service.monitoring_settings == before_monitor_config
     assert service.store.forecast_settings() == before_forecast_settings
     assert 'private-token' not in invalid_response.text
     assert service.store.get_meta('connection') == saved_connection
@@ -278,12 +262,12 @@ async def test_forecast_update_requires_effective_credentials_before_writes(serv
     app = create_app(service, Runtime(web_password='test-pass'), run_background=False)
     async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url='http://app', auth=('admin', 'test-pass')) as client:
         response = await client.put('/api/config', json={
-            'settings': settings(rated_power_w=6000).model_dump(),
+            'monitoring_settings': settings(total_max_power_at_stc_w=6000).model_dump(),
             'forecast_settings': {'enabled': True, 'tilt_deg': 25.0, 'azimuth_deg': 180.0},
         })
     assert response.status_code == 422
     assert response.json() == {'error': 'connection_required'}
-    assert service.config.rated_power_w == 5000
+    assert service.monitoring_settings.total_max_power_at_stc_w == 5000
     assert service.store.forecast_settings().enabled is False
     assert service.store.db.total_changes == before
 
@@ -295,9 +279,9 @@ async def test_forecast_only_put_keeps_running_monitoring(service, monkeypatch):
 
     monkeypatch.setattr('pvyieldlens.service.time.time', lambda: 180)
     async with fake_server() as url:
-        config = settings(interval_minutes=1, update_seconds=60, timezone='Asia/Shanghai')
+        config = settings(settlement_interval_minutes=1, update_interval_seconds=60, home_timezone='Asia/Shanghai')
         await service.configure(config, now=120, origin=url)
-        location = HALocation(origin=url, latitude=31.23, longitude=121.47, location_name='Home', timezone='Asia/Shanghai')
+        location = HALocation(origin=url, latitude=31.23, longitude=121.47, location_name='Home', home_timezone='Asia/Shanghai')
         service.forecast.configure(config, ForecastSettings(tilt_deg=25.0, azimuth_deg=180.0), url, location)
         service.store.set_meta('connection', '{"url":"' + url + '","token":"simulation-token"}')
         app = create_app(service, Runtime(web_password='test-pass'))
@@ -311,7 +295,7 @@ async def test_forecast_only_put_keeps_running_monitoring(service, monkeypatch):
             cursor, started_at = service.store.cursor, service.store.get_meta('started_at')
             observations = service.store.observations(120, 180, config.entities, url)
             days = list(map(tuple, service.store.db.execute('SELECT * FROM days')))
-            response = await client.put('/api/config', json={'settings': config.model_dump(),
+            response = await client.put('/api/config', json={'monitoring_settings': config.model_dump(),
                 'connection': {'url': url + '/', 'token': ''},
                 'forecast_settings': {'enabled': False, 'tilt_deg': 25.0, 'azimuth_deg': 180.0, 'noct_c': 47.0}})
             assert response.status_code == 200
@@ -320,7 +304,7 @@ async def test_forecast_only_put_keeps_running_monitoring(service, monkeypatch):
             assert service.client is ha_client
             assert service._recovery_needed is False
             after = service.snapshot(180)
-            for key in ('revision', 'energy', 'realtime', 'sources', 'statistics', 'connected', 'calculated_at'):
+            for key in ('revision', 'energy_totals', 'live_window', 'sources', 'latest_settled_window', 'connected', 'calculated_at'):
                 assert after[key] == before[key]
             assert service.store.cursor == cursor
             assert service.store.get_meta('started_at') == started_at
@@ -335,8 +319,8 @@ async def test_connection_preview_does_not_replace_active_forecast_location(serv
     from test_integration import fake_server
 
     await service.configure(settings(), now=0, origin='http://active-ha.test')
-    location = HALocation(origin=service.origin, latitude=0.0, longitude=0.0, location_name='Active', timezone='UTC')
-    service.forecast.configure(service.config, ForecastSettings(enabled=True, tilt_deg=25.0, azimuth_deg=180.0), service.origin, location)
+    location = HALocation(origin=service.origin, latitude=0.0, longitude=0.0, location_name='Active', home_timezone='UTC')
+    service.forecast.configure(service.monitoring_settings, ForecastSettings(enabled=True, tilt_deg=25.0, azimuth_deg=180.0), service.origin, location)
     saved = '{"url":"http://active-ha.test","token":"private-token"}'
     service.store.set_meta('connection', saved)
     changes = service.store.db.total_changes
@@ -346,7 +330,7 @@ async def test_connection_preview_does_not_replace_active_forecast_location(serv
         response = await client.post('/api/connection', json={'url': url, 'token': 'simulation-token'})
         assert response.status_code == 200
         assert response.json()['location'] == {'origin': url, 'latitude': 31.23, 'longitude': 121.47,
-                                              'location_name': 'Home', 'timezone': 'Asia/Shanghai'}
+                                              'location_name': 'Home', 'home_timezone': 'Asia/Shanghai'}
         assert len(response.json()['entities']) == 3
         assert service.forecast.location == location
         assert service.store.get_meta('ha_location') == location.model_dump_json()
@@ -375,8 +359,8 @@ async def test_forecast_read_and_refresh_are_authenticated_and_nonblocking(servi
     await service.configure(settings(), now=0, origin='http://ha.test')
     async with httpx.AsyncClient(transport=httpx.MockTransport(weather_response)) as weather_http:
         service.forecast = ForecastController(service.store, OpenMeteoClient(weather_http))
-        service.forecast.configure(service.config, ForecastSettings(enabled=True, tilt_deg=25.0, azimuth_deg=180.0),
-            service.origin, HALocation(origin=service.origin, latitude=0.0, longitude=0.0, timezone='UTC'))
+        service.forecast.configure(service.monitoring_settings, ForecastSettings(enabled=True, tilt_deg=25.0, azimuth_deg=180.0),
+            service.origin, HALocation(origin=service.origin, latitude=0.0, longitude=0.0, home_timezone='UTC'))
         app = create_app(service, Runtime(web_password='test-pass'), run_background=False)
         async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url='http://app') as client:
             try:
@@ -410,13 +394,13 @@ async def test_forecast_read_and_refresh_are_authenticated_and_nonblocking(servi
                     while service.forecast.view(180).refreshing:
                         await asyncio.sleep(0)
                 ready = await client.get('/api/forecast', auth=auth)
-                assert ready.json()['today']['kwh'] == pytest.approx(89.28)
-                assert ready.json()['remaining_today']['kwh'] == pytest.approx(89.094)
+                assert ready.json()['today']['forecast_energy_kwh'] == pytest.approx(89.28)
+                assert ready.json()['remaining_today']['forecast_energy_kwh'] == pytest.approx(89.094)
                 assert ready.json()['fetched_at'] == 180
                 assert ready.json()['calculated_at'] == 180
                 assert len(ready.json()['intervals']) == 168
                 assert ready.json()['days'][0]['weather'] == {
-                    'weather_code': 61, 'temperature_min_c': 20, 'temperature_max_c': 20, 'quality': 'complete',
+                    'weather_code': 61, 'air_temperature_min_c': 20, 'air_temperature_max_c': 20, 'quality': 'complete',
                 }
                 assert 'weather_samples' not in ready.json()
                 assert 'weather' not in ready.json()['today']
@@ -450,22 +434,22 @@ async def test_history_summary_uses_committed_revisions_without_changing_monitor
     from pvyieldlens.home_assistant import entity_payloads
     from test_engine import samples
 
-    await service.configure(settings(interval_minutes=1), now=0)
+    await service.configure(settings(settlement_interval_minutes=1), now=0)
     service.store.add_observations(samples())
     await service.tick(60)
-    await service.configure(settings(interval_minutes=1, rated_power_w=10000), now=60)
+    await service.configure(settings(settlement_interval_minutes=1, total_max_power_at_stc_w=10000), now=60)
     service.store.add_observations(samples(at=60))
     await service.tick(120)
     service.store.add_observations(samples(at=120))
     await service.tick(180.25)
     before = service.snapshot(180.25)
     payloads = entity_payloads(before)
-    original_ids = ('estimated_power', 'actual_power', 'pr', 'daily_estimated_energy', 'total_estimated_energy',
-                    'realtime_estimated_power', 'realtime_actual_power', 'realtime_pr', 'realtime_optimizable_power')
+    original_ids = ('settled_estimated_power', 'settled_actual_power', 'settled_pr', 'estimated_energy_today', 'estimated_energy_lifetime',
+                    'live_estimated_power', 'live_actual_power', 'live_pr', 'live_optimizable_power')
     original_payloads = {name: payloads['sensor.pvyieldlens_' + name] for name in original_ids}
     assert len(original_payloads) == 9
-    assert original_payloads['estimated_power']['state'] == '7440.0'
-    assert original_payloads['pr']['state'] == '45.0'
+    assert original_payloads['settled_estimated_power']['state'] == '7440.0'
+    assert original_payloads['settled_pr']['state'] == '45.0'
     service.store.add_observations(samples(at=60, sun=100))
     service.store.db.set_authorizer(lambda action, table, *_: sqlite3.SQLITE_DENY
                                    if action == sqlite3.SQLITE_READ and table in ('window_segments', 'observations')
@@ -479,7 +463,7 @@ async def test_history_summary_uses_committed_revisions_without_changing_monitor
         complete_body = complete.json()
         assert complete_body['requested_range'] == {'start': 0, 'end': 180.25}
         assert complete_body['summary'] == pytest.approx({'start': 0, 'end': 180,
-            'estimated_energy_kwh': 0.31, 'actual_energy_kwh': 0.1674, 'pr': 54, 'coverage_percent': 100, 'valid_seconds': 180})
+            'estimated_energy_kwh': 0.31, 'actual_energy_kwh': 0.1674, 'pr': 54, 'data_completeness_percent': 100, 'valid_seconds': 180})
         assert [row['revision'] for row in complete_body['windows']] == [1, 2, 2]
         assert [row['estimated_energy_wh'] for row in complete_body['windows']] == pytest.approx([62, 124, 124])
         partial = await client.get('/api/history?start=30.5&end=150.5', auth=auth)
@@ -488,21 +472,21 @@ async def test_history_summary_uses_committed_revisions_without_changing_monitor
         assert partial_body['requested_range'] == {'start': 30.5, 'end': 150.5}
         assert partial_body['windows'] == complete_body['windows']
         assert partial_body['summary'] == pytest.approx({'start': 60, 'end': 120,
-            'estimated_energy_kwh': 0.124, 'actual_energy_kwh': 0.0558, 'pr': 45, 'coverage_percent': 100, 'valid_seconds': 60})
+            'estimated_energy_kwh': 0.124, 'actual_energy_kwh': 0.0558, 'pr': 45, 'data_completeness_percent': 100, 'valid_seconds': 60})
         empty = await client.get('/api/history?start=30.5&end=50.5', auth=auth)
         assert len(empty.json()['windows']) == 1
         assert empty.json()['summary'] == {'start': None, 'end': None, 'estimated_energy_kwh': None,
-                                         'actual_energy_kwh': None, 'pr': None, 'coverage_percent': None, 'valid_seconds': 0}
+                                         'actual_energy_kwh': None, 'pr': None, 'data_completeness_percent': None, 'valid_seconds': 0}
         assert (await client.get('/api/history?start=60&end=60', auth=auth)).status_code == 422
         assert (await client.get('/api/history?start=nan&end=180', auth=auth)).status_code == 422
         assert (await client.get('/api/history?start=0&end=inf', auth=auth)).status_code == 422
     after = service.snapshot(180.25)
-    for channel in ('energy', 'statistics', 'realtime', 'revision'):
+    for channel in ('energy_totals', 'latest_settled_window', 'live_window', 'revision'):
         assert after[channel] == before[channel]
     after_payloads = entity_payloads(after)
     assert {name: after_payloads['sensor.pvyieldlens_' + name] for name in original_ids} == original_payloads
-    assert after['energy']['total_kwh'] == pytest.approx(0.31)
-    assert after['statistics']['pr'] == pytest.approx(45)
+    assert after['energy_totals']['estimated_energy_lifetime_kwh'] == pytest.approx(0.31)
+    assert after['latest_settled_window']['pr'] == pytest.approx(45)
 
 
 @pytest.mark.parametrize('period,count', [('today', 0), ('24h', 0), ('7d', 7), ('30d', 30)])
@@ -510,7 +494,7 @@ async def test_history_presets_use_service_timezone_and_consistent_settlement(se
     from test_history import settle_cross_midnight
 
     start, midnight, end = settle_cross_midnight(service.store)
-    service.config = settings(timezone='Asia/Shanghai')
+    service.monitoring_settings = settings(home_timezone='Asia/Shanghai')
     monkeypatch.setattr('pvyieldlens.web.time.time', lambda: end)
     before = service.snapshot(end)
     original = service.store.history(start, end)
@@ -521,7 +505,7 @@ async def test_history_presets_use_service_timezone_and_consistent_settlement(se
         assert response.status_code == 200
         body = response.json()
         assert body['period'] == period
-        assert body['timezone'] == 'Asia/Shanghai'
+        assert body['home_timezone'] == 'Asia/Shanghai'
         assert body['today'] == '2026-11-11'
         assert body['requested_range']['end'] == end
         assert body['boundary_unavailable'] is False
@@ -560,8 +544,8 @@ async def test_numeric_history_and_snapshot_hide_internal_cross_day_allocations(
         assert body['summary']['actual_energy_kwh'] is None
         assert 'day_allocations' not in response.text
         assert 'source_start' not in response.text
-        assert 'day_allocations' not in service.snapshot(end)['statistics']
-        assert service.store.latest_window() == body['windows'][0]
+        assert 'day_allocations' not in service.snapshot(end)['latest_settled_window']
+        assert service.store.latest_settled_window() == body['windows'][0]
 
 
 async def test_snapshot_refreshes_active_location_with_forecast_disabled(service):
@@ -573,39 +557,39 @@ async def test_snapshot_refreshes_active_location_with_forecast_disabled(service
     app = create_app(service, Runtime(web_password='test-pass'), run_background=False)
     async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url='http://app', auth=('admin', 'test-pass')) as client:
         assert (await client.get('/api/snapshot')).json()['location'] is None
-        location = HALocation(origin=service.origin, latitude=0.0, longitude=0.0, location_name='Active', timezone='UTC')
+        location = HALocation(origin=service.origin, latitude=0.0, longitude=0.0, location_name='Active', home_timezone='UTC')
         for current in (location, location.model_copy(update={'location_name': 'Renamed'}),
-                        location.model_copy(update={'latitude': -33.86, 'longitude': 151.21, 'timezone': 'Australia/Sydney'}), None):
-            service.forecast.configure(service.config, service.forecast.settings, service.origin, current)
+                        location.model_copy(update={'latitude': -33.86, 'longitude': 151.21, 'home_timezone': 'Australia/Sydney'}), None):
+            service.forecast.configure(service.monitoring_settings, service.forecast.settings, service.origin, current)
             response = await client.get('/api/snapshot')
             assert response.status_code == 200
             assert response.json()['location'] == (current.model_dump() if current else None)
             assert response.json()['forecast']['status'] == 'disabled'
             assert 'days' not in response.json()['forecast'] and 'intervals' not in response.json()['forecast']
             assert 'private-token' not in response.text
-        service.forecast.configure(service.config, service.forecast.settings, service.origin, location)
+        service.forecast.configure(service.monitoring_settings, service.forecast.settings, service.origin, location)
         async with fake_server() as url:
             preview = await client.post('/api/connection', json={'url': url, 'token': 'simulation-token'})
             assert preview.status_code == 200 and preview.json()['location']['origin'] == url
         assert (await client.get('/api/snapshot')).json()['location'] == location.model_dump()
-        await service.configure(service.config, origin='http://new-active-ha.test')
+        await service.configure(service.monitoring_settings, origin='http://new-active-ha.test')
         assert (await client.get('/api/snapshot')).json()['location'] is None
 
 
 @pytest.mark.parametrize(('change', 'monitoring_changed'), [
-    ('forecast', False), ('same_token', False), ('settings', True), ('url', True), ('token', True),
+    ('forecast', False), ('same_token', False), ('monitoring_settings', True), ('url', True), ('token', True),
 ])
 async def test_save_reports_effective_monitoring_change(service, change, monitoring_changed):
     await service.configure(settings(), now=0, origin='http://active-ha.test')
     service.store.set_meta('connection', '{"url":"http://active-ha.test","token":"private-token"}')
     app = create_app(service, Runtime(web_password='test-pass'), run_background=False)
-    update = {'settings': service.config.model_dump(),
+    update = {'monitoring_settings': service.monitoring_settings.model_dump(),
               'connection': {'url': service.origin + '/', 'token': ''},
               'forecast_settings': {'enabled': False, 'noct_c': 47}}
     if change == 'same_token':
         update['connection']['token'] = 'private-token'
-    elif change == 'settings':
-        update['settings']['update_seconds'] = 2
+    elif change == 'monitoring_settings':
+        update['monitoring_settings']['update_interval_seconds'] = 2
     elif change == 'url':
         update['connection'] = {'url': 'http://new-ha.test', 'token': 'replacement-token'}
     elif change == 'token':
@@ -616,3 +600,15 @@ async def test_save_reports_effective_monitoring_change(service, change, monitor
         assert response.json()['monitoring_changed'] is monitoring_changed
         assert 'private-token' not in response.text and 'replacement-token' not in response.text
     await service.client.close()
+
+
+async def test_full_configuration_requires_forecast_settings_without_partial_writes(service):
+    await service.configure(settings(), now=0)
+    before = service.store.db.total_changes
+    app = create_app(service, Runtime(web_password='test-pass'), run_background=False)
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url='http://app', auth=('admin', 'test-pass')) as client:
+        response = await client.put('/api/config', json={'monitoring_settings': settings(total_max_power_at_stc_w=6000).model_dump()})
+    assert response.status_code == 422
+    assert response.json() == {'error': 'invalid_configuration', 'fields': ['forecast_settings']}
+    assert service.monitoring_settings.total_max_power_at_stc_w == 5000
+    assert service.store.db.total_changes == before

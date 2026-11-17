@@ -99,7 +99,7 @@ class HomeAssistantClient:
             location = HALocation.model_validate({
                 'origin': self.base_url, 'latitude': response.get('latitude'),
                 'longitude': response.get('longitude'), 'location_name': response.get('location_name'),
-                'timezone': config.time_zone,
+                'home_timezone': config.time_zone,
             })
         except ValidationError:
             location = None
@@ -158,28 +158,28 @@ class HomeAssistantClient:
 
 def entity_payloads(snapshot):
     definitions = (
-        ('estimated_power', 'statistics', 'estimated_power', 'W', 'power'),
-        ('actual_power', 'statistics', 'actual_power', 'W', 'power'),
-        ('pr', 'statistics', 'pr', '%', None),
-        ('daily_estimated_energy', 'energy', 'daily_kwh', 'kWh', 'energy'),
-        ('total_estimated_energy', 'energy', 'total_kwh', 'kWh', 'energy'),
-        ('realtime_estimated_power', 'realtime', 'estimated_power', 'W', 'power'),
-        ('realtime_actual_power', 'realtime', 'actual_power', 'W', 'power'),
-        ('realtime_pr', 'realtime', 'pr', '%', None),
-        ('realtime_optimizable_power', 'realtime', 'optimizable_power', 'W', 'power'),
+        ('settled_estimated_power', 'latest_settled_window', 'estimated_power_w', 'W', 'power'),
+        ('settled_actual_power', 'latest_settled_window', 'actual_power_w', 'W', 'power'),
+        ('settled_pr', 'latest_settled_window', 'pr', '%', None),
+        ('estimated_energy_today', 'energy_totals', 'estimated_energy_today_kwh', 'kWh', 'energy'),
+        ('estimated_energy_lifetime', 'energy_totals', 'estimated_energy_lifetime_kwh', 'kWh', 'energy'),
+        ('live_estimated_power', 'live_window', 'estimated_power_w', 'W', 'power'),
+        ('live_actual_power', 'live_window', 'actual_power_w', 'W', 'power'),
+        ('live_pr', 'live_window', 'pr', '%', None),
+        ('live_optimizable_power', 'live_window', 'optimizable_power_w', 'W', 'power'),
     )
     payloads = {}
     for name, channel, field, unit, device_class in definitions:
         data = snapshot.get(channel) or {}
         value = data.get(field)
         attributes = {
-            'friendly_name': 'PVYieldLens ' + name.replace('_', ' ').title(),
-            'unit_of_measurement': unit, 'state_class': 'total_increasing' if channel == 'energy' else 'measurement',
+            'friendly_name': name,
+            'unit_of_measurement': unit, 'state_class': 'total_increasing' if channel == 'energy_totals' else 'measurement',
             'calculated_at': snapshot['calculated_at'], 'configuration_revision': data.get('revision', snapshot['revision']),
             'sampling_method': 'state_hold',
-            **{key: data[key] for key in ('start', 'end', 'valid_seconds', 'coverage_percent', 'quality', 'reason',
-                                          'settled_until', 'day', 'timezone', 'daily_valid_seconds', 'total_valid_seconds',
-                                          'daily_complete') if key in data},
+            **{key: data[key] for key in ('start', 'end', 'valid_seconds', 'data_completeness_percent', 'quality', 'reason',
+                                          'settled_until', 'day', 'home_timezone', 'today_valid_seconds', 'lifetime_valid_seconds',
+                                          'today_allocation_complete') if key in data},
         }
         if device_class:
             attributes['device_class'] = device_class
@@ -192,16 +192,16 @@ def entity_payloads(snapshot):
         ('forecast_energy_7d', 'seven_days'),
     ):
         data = forecast.get(target) or {}
-        value = data.get('kwh')
+        value = data.get('forecast_energy_kwh')
         payloads['sensor.pvyieldlens_' + name] = {
             'state': 'unavailable' if value is None else str(round(value, 6)),
             'attributes': {
-                'friendly_name': 'PVYieldLens ' + name.replace('_', ' ').title(),
+                'friendly_name': name,
                 'unit_of_measurement': 'kWh', 'device_class': 'energy',
                 'start': data.get('start'), 'end': data.get('end'),
-                'timezone': forecast.get('timezone'), 'fetched_at': forecast.get('fetched_at'),
+                'home_timezone': forecast.get('home_timezone'), 'fetched_at': forecast.get('fetched_at'),
                 'calculated_at': forecast.get('calculated_at'),
-                'coverage_percent': data.get('coverage_percent', 0), 'quality': data.get('quality', 'unavailable'),
+                'data_completeness_percent': data.get('data_completeness_percent', 0), 'quality': data.get('quality', 'unavailable'),
                 'status': forecast.get('status', 'disabled'), 'refreshing': forecast.get('refreshing', False),
                 'last_error': forecast.get('last_error'),
             },
