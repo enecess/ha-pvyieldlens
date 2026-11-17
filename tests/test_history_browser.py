@@ -40,11 +40,11 @@ async def test_daily_slots_zero_gaps_cutoff_and_viewport(browser_workspace, widt
 
     await page.route('**/api/history?*', history)
     await page.locator('#history-tab').click()
-    await expect(page.locator('#history-range')).to_have_value('today')
+    await expect(page.locator('#history-range [data-value="today"]')).to_have_attribute('aria-pressed', 'true')
     await expect(page.locator('#history-actual-energy')).to_have_text('0.07')
     await expect(page.locator('#history-pr')).to_have_text('87.5')
     await expect(page.locator('#history-totals')).to_have_count(0)
-    await page.locator('#history-range').select_option(period)
+    await page.locator(f'#history-range [data-value="{period}"]').click()
     count = 7 if period == '7d' else 30
     await expect(page.locator('#daily-energy-chart .daily-column')).to_have_count(count)
     await expect(page.locator('#daily-energy-chart .daily-bar')).to_have_count(4)
@@ -60,7 +60,7 @@ async def test_daily_slots_zero_gaps_cutoff_and_viewport(browser_workspace, widt
     await hit.focus()
     await page.keyboard.press('End')
     await expect(chart.locator('.chart-tooltip')).to_contain_text('Through 12:03 AM')
-    await expect(chart.locator('.chart-tooltip')).to_contain_text('60 %')
+    await expect(chart.locator('.chart-tooltip')).not_to_contain_text('Data completeness')
     await page.keyboard.press('Escape')
     await expect(chart.locator('.chart-tooltip')).to_have_count(0)
     await page.locator('#language-select').select_option(language)
@@ -83,7 +83,7 @@ async def test_daily_slots_zero_gaps_cutoff_and_viewport(browser_workspace, widt
     box = await hit.bounding_box()
     await page.mouse.move(box['x'] + 2.5/count*box['width'], box['y']+5)
     await expect(hit).to_have_attribute('aria-valuenow', '2')
-    await expect(tip.locator('p').last).to_be_visible()
+    await expect(tip).not_to_contain_text('cannot be allocated exactly')
     artifacts = Path(os.getenv('PVYL_HISTORY_ARTIFACTS', 'artifacts/task-3-history'))
     artifacts.mkdir(parents=True, exist_ok=True)
     await page.screenshot(path=str(artifacts / f'daily-{width}-{period}-{language}-{theme}.png'))
@@ -110,12 +110,12 @@ async def test_ha_midnight_refreshes_without_settlement(browser_workspace, monke
     await page.clock.set_fixed_time(datetime.fromtimestamp(now, timezone.utc))
     await page.reload()
     await expect(page.locator('main')).to_have_attribute('data-snapshot-ready', 'true')
-    async with page.expect_response('**/api/history?period=today') as pending:
+    async with page.expect_response('**/api/history?period=today&compare=true') as pending:
         await page.locator('#history-tab').click()
     before = await (await pending.value).json()
     assert before['today'] == '2026-11-10'
     clock.time = lambda: now+2
-    async with page.expect_response('**/api/history?period=today') as pending:
+    async with page.expect_response('**/api/history?period=today&compare=true') as pending:
         pass
     after = await (await pending.value).json()
     assert after['today'] == '2026-11-11'
@@ -138,7 +138,7 @@ async def test_daily_touch_columns_preserve_vertical_scroll(browser_workspace):
     await touch.route('**/api/history?*', lambda route: route.fulfill(json=payload))
     await touch.goto(page.url)
     await touch.locator('#history-tab').click()
-    await touch.locator('#history-range').select_option('7d')
+    await touch.locator('#history-range [data-value="7d"]').click()
     chart = touch.locator('#daily-energy-chart')
     await chart.scroll_into_view_if_needed()
     hit = chart.locator('.chart-hit-area')
@@ -162,3 +162,32 @@ async def test_daily_touch_columns_preserve_vertical_scroll(browser_workspace):
     await touch.wait_for_function('before => document.querySelector("#content-scroll").scrollTop > before', arg=before)
     await expect(chart.locator('.chart-tooltip')).to_have_count(0)
     await context.close()
+
+async def test_dashboard_midnight_uses_household_day_with_fixed_offline_measurement(browser_workspace, monkeypatch):
+    import pvyieldlens.web as web_module
+    import pvyieldlens.service as service_module
+
+    page, service, _ = browser_workspace
+    await service.configure(service.monitoring_settings.model_copy(update={'home_timezone': 'Asia/Shanghai'}))
+    now = datetime(2026, 11, 10, 15, 59, 59, tzinfo=timezone.utc).timestamp()
+    clock = SimpleNamespace(time=lambda: now)
+    monkeypatch.setattr(web_module, 'time', clock)
+    monkeypatch.setattr(service_module, 'time', clock)
+    service._mark_offline()
+    calculated = service.snapshot(now=now)['calculated_at']
+    async with page.expect_response('**/api/generation-data') as first_generation, page.expect_response('**/api/history?period=7d') as first_history:
+        await page.reload()
+    before_generation = await (await first_generation.value).json()
+    before_history = await (await first_history.value).json()
+    clock.time = lambda: now + 2
+    async with page.expect_response('**/api/generation-data') as next_generation, page.expect_response('**/api/history?period=7d') as next_history:
+        pass
+    after_generation = await (await next_generation.value).json()
+    after_history = await (await next_history.value).json()
+    assert service.snapshot(now=now+2)['calculated_at'] == calculated
+    assert before_history['today'] == '2026-11-10'
+    assert after_history['today'] == '2026-11-11'
+    assert after_history['days'][-1]['day'] == '2026-11-11'
+    assert after_history['days'][-1]['summary']['estimated_energy_kwh'] is None
+    assert after_generation['requested_range']['start'] == now + 1
+    assert before_generation['requested_range']['start'] < after_generation['requested_range']['start']

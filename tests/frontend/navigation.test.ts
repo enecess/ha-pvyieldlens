@@ -120,3 +120,14 @@ it('opens the confirmation when it is initially requested on mount', async () =>
   await flush();
   expect(host.querySelector<HTMLDialogElement>('dialog')!.open).toBe(true);
 });
+
+it('retains Efficiency range and aggregation while visiting Dashboard and Settings', async () => {
+  await click('#history-tab');
+  await click('#history-range [data-value="7d"]');
+  await click('#history-aggregation [data-value=settlement]');
+  await click('#live-tab');
+  await click('#settings-button');
+  await click('#history-tab');
+  expect(host.querySelector('#history-range [data-value="7d"]')?.getAttribute('aria-pressed')).toBe('true');
+  expect(host.querySelector('#history-aggregation [data-value=settlement]')?.getAttribute('aria-pressed')).toBe('true');
+});

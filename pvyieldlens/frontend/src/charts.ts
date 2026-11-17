@@ -8,12 +8,14 @@ export interface ChartPoint {
   actual_power_w?: number | null;
   pr?: number | null;
   forecast_power_w?: number | null;
+  irradiance_w_m2?: number | null;
+  module_temperature_c?: number | null;
   interval?: ForecastInterval;
   window?: WindowResult;
   breakBefore?: boolean;
 }
 export interface ChartSeries {
-  key: 'estimated_power_w' | 'actual_power_w' | 'pr' | 'forecast_power_w';
+  key: 'estimated_power_w' | 'actual_power_w' | 'pr' | 'forecast_power_w' | 'irradiance_w_m2' | 'module_temperature_c';
   label: string;
   color: string;
 }
@@ -59,7 +61,7 @@ export function plot(host: HTMLElement, data: ChartPoint[], series: ChartSeries[
   }
   const width = Math.max(host.clientWidth, 1), height = host.clientHeight, left = 48, right = 12, top = 16, bottom = 34;
   const start = range?.start ?? data[0].at, end = Math.max(range?.end ?? data[data.length - 1].at, start + 1);
-  const maximum = Math.max(1, ...valid) * 1.1;
+  const maximum = Math.max(series.some(item => item.key === 'pr') ? 100 : 1, ...valid) * 1.1;
   const minimum = Math.min(0, ...valid);
   const x = (at: number) => left + (at - start) / (end - start) * (width - left - right);
   const y = (value: number) => top + (maximum - value) / (maximum - minimum) * (height - top - bottom);
@@ -79,6 +81,9 @@ export function plot(host: HTMLElement, data: ChartPoint[], series: ChartSeries[
     add('text', { x: left - 10, y: y(value) + 4, 'text-anchor': 'end' }, number(value, 0));
   });
   add('text', { x: left, y: 9 }, unit);
+  if (series.some(item => item.key === 'pr')) {
+    add('line', { x1: left, x2: width - right, y1: y(100), y2: y(100), class: 'reference-line' });
+  }
   const duration = end - start;
   const spacing = duration > 86400 ? 120 : 76;
   const count = Math.max(2, Math.min(6, Math.floor((width - left - right) / spacing) + 1));
@@ -198,8 +203,7 @@ export function plot(host: HTMLElement, data: ChartPoint[], series: ChartSeries[
       return { label: t(item.label), value: `${value == null ? '—' : number(value)} ${unit}`, color: item.color };
     }) } : { title: formatTimes([at], language, timezone, {
       year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit',
-    })[0], rows: [...series.map(item => ({ label: t(item.label), value: `— ${unit}`, color: item.color })),
-      { label: t('data_quality'), value: t('unavailable') }] };
+    })[0], rows: series.map(item => ({ label: t(item.label), value: `— ${unit}`, color: item.color })) };
     const title = document.createElement('strong');
     title.textContent = content.title;
     tip.replaceChildren(title);

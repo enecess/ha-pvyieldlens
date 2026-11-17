@@ -29,7 +29,7 @@ const slot = computed(() => plotWidth.value / Math.max(1, props.days.length));
 const x = (index: number) => 48 + (index + 0.5) * slot.value;
 const values = computed(() => props.days.flatMap(day => props.mode === 'energy'
   ? [day.summary.estimated_energy_kwh, day.summary.actual_energy_kwh] : [day.summary.pr]).filter((value): value is number => value != null));
-const maximum = computed(() => (Math.max(0, ...values.value) || 1) * 1.1);
+const maximum = computed(() => (Math.max(props.mode === 'pr' ? 100 : 0, ...values.value) || 1) * 1.1);
 const y = (value: number) => 16 + (maximum.value - value) / maximum.value * plotHeight.value;
 const rows = computed(() => props.days.map((day, index) => ({ day, index, label: date(day.day),
   bars: [ { value: day.summary.estimated_energy_kwh, color: 'var(--pv-estimated)' },
@@ -42,12 +42,6 @@ const selectedDay = computed(() => selected.value == null ? null : props.days[se
 const cutoff = (day: HistoryDay) => t('history_cutoff', { time: day.summary.end == null ? '—' : formatTimes([
   day.summary.end,
 ], props.language, props.timezone, { hour: '2-digit', minute: '2-digit' })[0] });
-const span = computed(() => {
-  const summary = selectedDay.value?.summary;
-  return summary?.start == null || summary.end == null ? t('history_no_periods') : formatTimes([
-    summary.start, summary.end,
-  ], props.language, props.timezone, { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit' }).join(' – ');
-});
 async function positionTip() {
   await nextTick();
   if (!host.value || !tip.value || selected.value == null) return;
@@ -96,6 +90,7 @@ onBeforeUnmount(() => {
       <g v-for="index in 5" :key="index"><line class="grid" x1="48" :x2="width - 12" :y1="y(maximum * (index - 1) / 4)" :y2="y(maximum * (index - 1) / 4)" />
         <text x="38" :y="y(maximum * (index - 1) / 4) + 4" text-anchor="end">{{ number(maximum * (index - 1) / 4, mode === 'energy' ? 3 : 1) }}</text></g>
       <text x="48" y="9">{{ mode === 'energy' ? 'kWh' : '%' }}</text>
+      <line v-if="mode === 'pr'" class="reference-line" x1="48" :x2="width - 12" :y1="y(100)" :y2="y(100)" />
       <path v-if="mode === 'pr'" class="series" :d="prPath" stroke="var(--pv-actual)" />
       <g v-for="row in rows" :key="row.day.day" class="daily-column" :data-day="row.day.day" :aria-current="row.day.in_progress ? 'date' : undefined">
         <template v-if="mode === 'energy'"><rect v-for="(bar, index) in row.bars" :key="index" class="daily-bar"
@@ -113,14 +108,11 @@ onBeforeUnmount(() => {
     </svg>
     <div v-else-if="active" class="chart-empty">{{ t('history_no_periods') }}</div>
     <div v-if="selectedDay" ref="tip" class="chart-tooltip daily-tooltip" :style="tipStyle" tabindex="0" role="status" @keydown.esc="selected = null; hit?.focus()">
-      <strong>{{ date(selectedDay.day, true) }}<template v-if="selectedDay.in_progress"> · {{ t('today') }} · {{ cutoff(selectedDay) }}</template></strong>
+      <strong>{{ date(selectedDay.day, true) }}<template v-if="selectedDay.in_progress"> · {{ t('today') }} · {{ cutoff(selectedDay) }} · {{ timezone }}</template></strong>
       <div><span>{{ t('estimated_energy') }}</span><span>{{ number(selectedDay.summary.estimated_energy_kwh, 3) }} kWh</span></div>
       <div><span>{{ t('actual_energy') }}</span><span>{{ number(selectedDay.summary.actual_energy_kwh, 3) }} kWh</span></div>
       <div><span>{{ t('pr') }}</span><span>{{ number(selectedDay.summary.pr) }} %</span></div>
-      <div><span>{{ t('data_completeness') }}</span><span>{{ number(selectedDay.summary.data_completeness_percent) }} %</span></div>
-      <p class="daily-span">{{ t('included_settled_span') }}: {{ span }}</p>
-      <p v-if="selectedDay.boundary_unavailable">{{ t('history_day_unavailable') }}</p>
     </div>
-    <p v-if="days.at(-1)?.in_progress" class="daily-cutoff muted">* {{ t('today') }} · {{ cutoff(days.at(-1)!) }}</p>
+    <p v-if="days.at(-1)?.in_progress" class="daily-cutoff muted">* {{ t('today') }} · {{ cutoff(days.at(-1)!) }} · {{ timezone }}</p>
   </div>
 </template>

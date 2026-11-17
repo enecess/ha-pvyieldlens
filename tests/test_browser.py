@@ -37,7 +37,7 @@ async def test_settings_leave_cancel_and_discard(browser_workspace):
 
     page, service, _ = browser_workspace
     await page.locator('#history-tab').click()
-    await page.locator('#history-range').select_option('7d')
+    await page.locator('#history-range [data-value="7d"]').click()
     await page.locator('#settings-button').click()
     await page.locator('button[data-settings-category=modules]').click()
     await page.locator('[name=total_max_power_at_stc_w]').fill('6100')
@@ -61,7 +61,7 @@ async def test_settings_leave_cancel_and_discard(browser_workspace):
     await page.locator('#history-tab').click()
     await page.locator('#discard-changes').click()
     await expect(page.locator('#history-page')).to_be_visible()
-    await expect(page.locator('#history-range')).to_have_value('7d')
+    await expect(page.locator('#history-range [data-value="7d"]')).to_have_attribute('aria-pressed', 'true')
     assert service.monitoring_settings.total_max_power_at_stc_w == 5000
     await page.locator('#settings-button').click()
     await expect(page.locator('[name=total_max_power_at_stc_w]')).to_have_value('5000')
@@ -129,7 +129,7 @@ async def test_data_pages_and_gear_settings_preserve_context(browser_workspace):
     await expect(page.locator('#forecast-page')).to_be_hidden()
     assert history_requests == []
     await page.locator('#history-tab').click()
-    await page.locator('#history-range').select_option('7d')
+    await page.locator('#history-range [data-value="7d"]').click()
     await page.locator('#settings-button').click()
     await expect(page.locator('#settings-page')).to_be_visible()
     await expect(page.locator('#data-navigation')).to_be_visible()
@@ -148,7 +148,7 @@ async def test_data_pages_and_gear_settings_preserve_context(browser_workspace):
     await expect(page.locator('#ha-token')).to_have_value('')
     await expect(page.locator('#save-button')).to_be_disabled()
     await page.locator('#history-tab').click()
-    await expect(page.locator('#history-range')).to_have_value('7d')
+    await expect(page.locator('#history-range [data-value="7d"]')).to_have_attribute('aria-pressed', 'true')
     await page.locator('#forecast-tab').click()
     await expect(page.locator('#forecast-page')).to_be_visible()
     await expect(page.locator('#live-page')).to_be_hidden()
@@ -163,7 +163,7 @@ async def test_french_tablet_settings_returns_to_selected_history_range(browser_
     await page.set_viewport_size({'width': width, 'height': 844})
     await page.locator('#language-select').select_option('fr')
     await page.locator('#history-tab').click()
-    await page.locator('#history-range').select_option('7d')
+    await page.locator('#history-range [data-value="7d"]').click()
     await page.locator('#settings-button').click()
     await expect(page.locator('#settings-page')).to_be_visible()
     await expect(page.locator('#data-navigation')).to_be_visible()
@@ -174,7 +174,7 @@ async def test_french_tablet_settings_returns_to_selected_history_range(browser_
     await expect(page.locator('#save-button')).to_be_disabled()
     await page.locator('#history-tab').click()
     await expect(page.locator('#history-page')).to_be_visible()
-    await expect(page.locator('#history-range')).to_have_value('7d')
+    await expect(page.locator('#history-range [data-value="7d"]')).to_have_attribute('aria-pressed', 'true')
     assert await page.evaluate('scrollX') == 0
 
 
@@ -899,10 +899,11 @@ async def test_history_rejects_superseded_range_responses(browser_workspace, sup
     monkeypatch.setattr(web_module, 'time', clock)
     monkeypatch.setattr(service_module, 'time', clock)
     await page.evaluate('now => Date.now = () => now', (recent+120)*1000)
-    await expect(page.locator('#last-settled')).not_to_contain_text('—')
+    async with page.expect_response(lambda response: response.url.endswith('/api/snapshot')):
+        pass
     await page.locator('#history-tab').click()
     await expect(page.locator('#history-energy')).to_have_text('0.062')
-    await page.locator('#history-range').select_option('7d')
+    await page.locator('#history-range [data-value="7d"]').click()
     await expect(page.locator('#history-energy')).to_have_text('0.124')
 
     older_requested = asyncio.Event()
@@ -925,14 +926,14 @@ async def test_history_rejects_superseded_range_responses(browser_workspace, sup
             await route.fulfill(response=response)
 
     await page.route('**/api/history?*', history)
-    await page.locator('#history-range').select_option('30d')
+    await page.locator('#history-range [data-value="30d"]').click()
     await asyncio.wait_for(older_requested.wait(), timeout=5)
-    await page.locator('#history-range').select_option('24h')
+    await page.locator('#history-range [data-value="24h"]').click()
     await expect(page.locator('#history-energy')).to_have_text('0.062')
     release_older.set()
     await asyncio.wait_for(older_completed.wait(), timeout=5)
     await page.evaluate('() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))')
-    assert await page.locator('#history-range').input_value() == '24h'
+    assert await page.locator('#history-range [data-value="24h"]').get_attribute('aria-pressed') == 'true'
     assert await page.locator('#history-energy').inner_text() == '0.062'
     assert await page.locator('#history-page .banner').count() == 0
     await page.locator('#history-chart .chart-hit-area').focus()
@@ -988,9 +989,10 @@ async def test_rolling_history_refreshes_only_when_complete_window_membership_ch
         await expect(page.locator('main')).to_have_attribute('data-configuration-ready', 'true')
         await expect(page.locator('main')).to_have_attribute('data-snapshot-ready', 'true')
         # Wait for the initial snapshot to seed the history latest_settled_window key.
-        await expect(page.locator('#last-settled')).not_to_contain_text('—')
+        async with page.expect_response(lambda response: response.url.endswith('/api/snapshot')):
+            pass
         await page.locator('#history-tab').click()
-        await page.locator('#history-range').select_option('24h')
+        await page.locator('#history-range [data-value="24h"]').click()
         await expect(page.locator('#history-chart svg')).to_be_visible()
         charts = page.locator('#history-chart svg, #pr-chart svg')
         await charts.evaluate_all("charts => charts.forEach(chart => chart.dataset.original = 'initial')")
@@ -1028,7 +1030,8 @@ async def test_rolling_history_refreshes_only_when_complete_window_membership_ch
         assert len(history_requests) == initial_requests + 2
 
         async with page.expect_response(lambda response: '/api/history?' in response.url):
-            await page.locator('#history-range').select_option('7d')
+            await page.locator('#history-range [data-value="7d"]').click()
+        await page.locator('#history-aggregation [data-value=settlement]').click()
         await expect(charts).to_have_count(2)
         await charts.evaluate_all("charts => charts.forEach(chart => chart.dataset.original = 'hidden')")
         await page.locator('#settings-button').click()

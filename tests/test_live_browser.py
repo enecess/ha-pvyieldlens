@@ -12,9 +12,11 @@ pytestmark = [pytest.mark.skipif(os.getenv('PVYL_BROWSER_TESTS') != '1', reason=
 
 
 @pytest.fixture
-async def live_page(browser_workspace):
+async def live_page(browser_workspace, monkeypatch):
     from playwright.async_api import expect
     from test_engine import samples, settings
+    from types import SimpleNamespace
+    import pvyieldlens.web as web_module
 
     page, service, _ = browser_workspace
     now = 1794805200
@@ -25,6 +27,7 @@ async def live_page(browser_workspace):
     service._recovery_needed = False
     state = {'now': now, 'seeds': 0, 'snapshots': 0, 'fail_seed': False,
              'diagnostics': 0, 'reported_at': now - 10}
+    monkeypatch.setattr(web_module, 'time', SimpleNamespace(time=lambda: state['now']))
 
     async def seed(route):
         state['seeds'] += 1
@@ -97,7 +100,7 @@ async def test_unavailable_interval_remains_a_break_and_inspects_raw_values(live
     await page.keyboard.press('ArrowRight')
     for _ in range(6):
         await page.keyboard.press('ArrowRight')
-    await expect(page.locator('#live-chart .chart-tooltip')).to_contain_text('Unavailable')
+    await expect(page.locator('#live-chart .chart-tooltip')).to_contain_text('— W')
     await expect(page.locator('#live-chart .chart-tooltip')).to_contain_text('— W')
     await page.screenshot(path='artifacts/task-4-live/tooltip-gap.png')
 
@@ -118,58 +121,28 @@ async def test_uncovered_live_range_inspects_unavailable_instead_of_distant_samp
     box = await chart.locator('.chart-hit-area').bounding_box()
     for fraction in [0.1, 0.9]:
         await page.mouse.move(box['x'] + fraction * box['width'], box['y'] + 3)
-        await expect(chart.locator('.chart-tooltip')).to_contain_text('Unavailable')
+        await expect(chart.locator('.chart-tooltip')).to_contain_text('— W')
         await expect(chart.locator('.chart-tooltip')).to_contain_text('— W')
         assert await chart.locator('.active-series-marker[visibility=visible]').count() == 0
 
 
-async def test_source_reports_refresh_without_snapshots_and_stop_when_not_viewed(live_page):
+async def test_dashboard_does_not_request_source_diagnostics(live_page):
     from playwright.async_api import expect
 
     page, _, state = live_page
-    errors = []
-    page.on('console', lambda message: errors.append(message.text) if message.type == 'error' else None)
-    assert state['diagnostics'] == 0
-    await page.locator('#source-diagnostics summary').click()
-    await page.locator('#live-chart svg').evaluate("node => node.dataset.original = 'age-clock'")
-    age = page.locator('#source-rows td').nth(2)
-    await expect(age).to_have_text('10 s')
-    await expect(page.locator('#source-rows td').nth(1)).to_have_text('3.35 kW')
-    await expect(page.locator('#source-rows tr').last.locator('td').nth(2)).to_have_text('—')
-    requests = state['snapshots']
-    state['now'] += 1
-    state['reported_at'] = state['now']
-    async with page.expect_response(lambda response: response.url.endswith('/api/source-diagnostics')):
-        await page.clock.fast_forward(1000)
-    await expect(age).to_have_text('Just now')
-    assert state['diagnostics'] == 2
-    state['now'] += 1
-    async with page.expect_response(lambda response: response.url.endswith('/api/source-diagnostics')):
-        await page.clock.fast_forward(1000)
-    await expect(age).to_have_text('1 s')
-    await expect(page.locator('#live-chart svg')).to_have_attribute('data-original', 'age-clock')
-    assert state['snapshots'] == requests
-    Path('.superpowers/task-2').mkdir(parents=True, exist_ok=True)
-    await page.locator('#source-diagnostics').scroll_into_view_if_needed()
-    await page.screenshot(path='.superpowers/task-2/source-age.png', full_page=True)
-    await page.locator('#source-diagnostics summary').click()
-    diagnostics_requests = state['diagnostics']
+    await expect(page.locator('#source-diagnostics')).to_have_count(0)
     await page.clock.fast_forward(3000)
-    assert state['diagnostics'] == diagnostics_requests
-    async with page.expect_response(lambda response: response.url.endswith('/api/source-diagnostics')):
-        await page.locator('#source-diagnostics summary').click()
-    assert state['diagnostics'] == diagnostics_requests + 1
+    assert state['diagnostics'] == 0
+    await expect(page.locator('#generation-power-chart')).to_have_count(1)
+    await expect(page.locator('#generation-irradiance-chart')).to_have_count(1)
+    await expect(page.locator('#generation-temperature-chart')).to_have_count(1)
     await page.locator('#settings-button').click()
-    diagnostics_requests = state['diagnostics']
     await page.locator('[data-settings-category=modules]').click()
     await page.locator('[name=total_max_power_at_stc_w]').fill('6100')
     async with page.expect_response(lambda response: response.url.endswith('/api/snapshot')):
         await page.clock.fast_forward(60000)
-    assert state['snapshots'] > requests
-    assert state['diagnostics'] == diagnostics_requests
+    assert state['diagnostics'] == 0
     await expect(page.locator('[name=total_max_power_at_stc_w]')).to_have_value('6100')
-    assert errors == []
-
 
 async def test_seed_failure_is_chart_local_and_keeps_live_metrics(live_page):
     from playwright.async_api import expect
@@ -202,7 +175,7 @@ async def test_resume_gap_survives_duplicate_snapshots_until_seed_fills_it(live_
     chart = page.locator('#live-chart')
     box = await chart.locator('.chart-hit-area').bounding_box()
     await page.mouse.move(box['x'] + 0.7 * box['width'], box['y'] + 3)
-    await expect(chart.locator('.chart-tooltip')).to_contain_text('Unavailable')
+    await expect(chart.locator('.chart-tooltip')).to_contain_text('— W')
     await expect(chart.locator('.chart-tooltip')).to_contain_text('— W')
     async with page.expect_response(lambda response: response.url.endswith('/api/snapshot')):
         await page.clock.fast_forward(60000)
@@ -210,3 +183,63 @@ async def test_resume_gap_survives_duplicate_snapshots_until_seed_fills_it(live_
     async with page.expect_response(lambda response: response.url.endswith('/api/live-series')):
         release_seed.set()
     await expect(page.locator('#live-chart path.series').first).to_have_attribute('d', re.compile(r'^M[^M]+$'))
+
+@pytest.mark.parametrize('width,theme', [(1440, 'light'), (1440, 'dark'), (390, 'light'), (390, 'dark')])
+async def test_dashboard_generation_ranges_legends_and_visuals(live_page, width, theme):
+    from playwright.async_api import expect
+
+    page, _, state = live_page
+    await page.set_viewport_size({'width': width, 'height': 1000 if width == 1440 else 844})
+    await page.locator('#language-select').select_option('zh')
+    await page.locator('#theme-select').select_option(theme)
+    await expect(page.locator('#live-heading')).to_have_text('看板')
+    for identifier in ['generation-power-chart', 'generation-irradiance-chart', 'generation-temperature-chart']:
+        await expect(page.locator('#' + identifier + ' svg')).to_be_attached()
+    await expect(page.locator('#generation-data')).not_to_contain_text('已结算功率')
+    await expect(page.locator('#generation-data')).not_to_contain_text('今天')
+    await expect(page.locator('#dashboard-energy-range [data-value="7d"]')).to_have_attribute('aria-pressed', 'true')
+    assert state['diagnostics'] == 0
+    artifacts = Path('artifacts/task-5-dashboard')
+    artifacts.mkdir(parents=True, exist_ok=True)
+    await page.screenshot(path=str(artifacts / f'dashboard-{width}-{theme}-top.png'))
+    await page.locator('#generation-data').scroll_into_view_if_needed()
+    await page.screenshot(path=str(artifacts / f'dashboard-{width}-{theme}-generation.png'))
+    legends = await page.locator('#live-page .legend').evaluate_all('''nodes => nodes.map(node => ({
+        alignment: getComputedStyle(node).justifyContent,
+        labels: [...node.querySelectorAll('span')].map(span => span.textContent)
+    }))''')
+    assert all(legend['alignment'] == 'flex-end' and all(legend['labels']) for legend in legends)
+    assert await page.evaluate('document.documentElement.scrollWidth <= innerWidth')
+    await page.locator('#dashboard-energy-range [data-value=custom]').click()
+    today = await page.locator('#dashboard-energy-range-end').get_attribute('max')
+    await page.locator('#dashboard-energy-range-start').fill(today)
+    await page.locator('#dashboard-energy-range-end').fill(today)
+    await page.screenshot(path=str(artifacts / f'dashboard-{width}-{theme}-custom.png'))
+    panel = await page.locator('#dashboard-energy-range-panel').bounding_box()
+    assert panel['x'] >= 0 and panel['x'] + panel['width'] <= width
+    async with page.expect_response(lambda response: '/api/history?period=custom&' in response.url) as pending:
+        await page.locator('#dashboard-energy-range-apply').click()
+    payload = await (await pending.value).json()
+    assert len(payload['days']) == 1
+    assert payload['days'][0]['day'] == today
+    await expect(page.locator('#dashboard-energy-range [data-value=custom]')).to_contain_text(today)
+    await page.locator('#history-tab').click()
+    await page.locator('#history-range [data-value="7d"]').click()
+    await expect(page.locator('#history-page .history-grid > article')).to_have_count(2)
+    await expect(page.locator('#daily-pr-chart svg')).to_be_visible()
+    assert await page.locator('#daily-pr-chart .reference-line').evaluate("""line =>
+        Number(line.getAttribute('x2')) > Number(line.getAttribute('x1')) &&
+        Number(line.getAttribute('y1')) > 0 && getComputedStyle(line).strokeDasharray !== 'none'""")
+    summary_gap = await page.locator('#history-page .energy-summary').evaluate("""node => {
+        const label = document.createRange(); label.selectNodeContents(node.firstChild);
+        return node.querySelector('strong').getBoundingClientRect().left - label.getBoundingClientRect().right;
+    }""")
+    assert summary_gap <= 8
+    await page.screenshot(path=str(artifacts / f'efficiency-{width}-{theme}-daily.png'))
+    await page.locator('#history-aggregation [data-value=settlement]').click()
+    await expect(page.locator('#pr-chart svg')).to_be_visible()
+    assert await page.locator('#pr-chart .reference-line').evaluate("""line =>
+        Number(line.getAttribute('x2')) > Number(line.getAttribute('x1')) &&
+        Number(line.getAttribute('y1')) > 0 && getComputedStyle(line).strokeDasharray !== 'none'""")
+    await expect(page.locator('#history-chart svg')).to_contain_text('W')
+    await page.screenshot(path=str(artifacts / f'efficiency-{width}-{theme}-settlement.png'))

@@ -86,9 +86,9 @@ async def test_data_and_settings_keep_header_and_content_width(layout_page, layo
         assert await page.locator('.app-header #connection-state').count() == 1
         assert await page.locator('#theme-mode, .context-bar').count() == 0
     (layout_artifacts / f'widths-{width}-{height}.json').write_text(json.dumps(measurements, indent=2), encoding='utf-8')
-    assert measurements[0]['content']['overflows'] is (height == 600)
+    assert measurements[0]['content']['overflows']
     assert measurements[1]['content']['overflows']
-    assert measurements[2]['content']['overflows'] is (height == 600)
+    assert measurements[2]['content']['overflows']
     for measurement in measurements:
         assert not measurement['root']['overflows']
         assert measurement['scrollWidth'] <= width
@@ -124,6 +124,7 @@ async def test_content_empty_gutter_matches_background_and_scrolled_header_stays
     page, _ = layout_page
     await page.set_viewport_size({'width': width, 'height': height})
     await page.locator('#theme-select').select_option(theme)
+    await page.locator('#forecast-tab').click()
     await expect(page.locator('#content-scroll')).to_have_count(1)
     empty = await page.locator('#content-scroll').evaluate('''node => {
         const {top, right, bottom} = node.getBoundingClientRect(), style = getComputedStyle(node);
@@ -151,7 +152,7 @@ async def test_content_empty_gutter_matches_background_and_scrolled_header_stays
     assert settings_style['color'].endswith('rgba(0, 0, 0, 0)')
     scrolled_height = min(height, 1000)
     await page.set_viewport_size({'width': width, 'height': scrolled_height})
-    await page.locator('#history-tab').click()
+    await page.locator('#live-tab').click()
     await expect(page.locator('#history-totals')).to_have_count(0)
     await page.locator('#content-scroll').evaluate('node => node.scrollTo(0, node.scrollHeight)')
     await page.wait_for_function("() => document.querySelector('#content-scroll').scrollTop > 0")
@@ -212,7 +213,6 @@ async def test_scrolled_navigation_reveals_destination_and_preserves_same_page_s
     await page.set_viewport_size({'width': width, 'height': 430})
     await page.emulate_media(reduced_motion='reduce')
     await page.locator('#language-select').select_option(language)
-    await page.locator('#source-diagnostics').evaluate('node => node.open = true')
     await expect(page.locator('#content-scroll')).to_have_count(1)
     await page.locator('#content-scroll').evaluate('node => node.scrollTo(0, 500)')
     await page.wait_for_function("() => document.querySelector('#content-scroll').scrollTop > 50")
@@ -304,7 +304,7 @@ async def test_shell_language_width_theme_matrix(layout_page, layout_artifacts, 
         await page.locator('#theme-select').select_option(theme)
         await page.locator('#settings-scroll').evaluate('node => node.scrollTo(0, node.scrollHeight)')
         await page.evaluate('() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))')
-        field = await page.locator('[name=forecast_noct_c]').bounding_box()
+        field = await page.locator('[name=forecast_pr_history_days]').bounding_box()
         dock = await page.locator('#settings-actions').bounding_box()
         assert field['y'] + field['height'] <= dock['y'], {'field': field, 'dock': dock}
         await page.locator('#history-tab').click()
@@ -356,10 +356,17 @@ async def test_short_mobile_settings_keeps_directory_and_actions_usable(layout_p
         evidence.append({'category': category, **geometry})
     await page.locator('#settings-scroll').evaluate('node => node.scrollTo(0, node.scrollHeight)')
     await page.evaluate('() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))')
-    field = await page.locator('[name=forecast_noct_c]').bounding_box()
+    field = await page.locator('[name=forecast_pr_history_days]').bounding_box()
     dock = await page.locator('#settings-actions').bounding_box()
     scroll = await page.locator('#settings-scroll').bounding_box()
-    assert scroll['y'] <= field['y'] and field['y'] + field['height'] < dock['y']
+    detail = await page.locator('#settings-scroll').evaluate("""node => ({
+        top: node.scrollTop, height: node.clientHeight, extent: node.scrollHeight,
+        bottomPadding: getComputedStyle(node).paddingBottom,
+        lastHelp: node.querySelector('[name=forecast_pr_history_days]').nextElementSibling.getBoundingClientRect().toJSON()
+    })""")
+    (layout_artifacts / 'short-mobile-last-field.json').write_text(json.dumps({'field': field, 'dock': dock, 'scroll': scroll, 'detail': detail}, indent=2), encoding='utf-8')
+    await page.screenshot(path=str(layout_artifacts / 'short-mobile-last-field.png'))
+    assert scroll['y'] <= field['y'] and field['y'] + field['height'] < dock['y'], {'field': field, 'dock': dock, 'scroll': scroll, 'detail': detail}
     evidence.append({'last_field': field, 'dock': dock, 'scroll': scroll})
     await page.screenshot(path=str(layout_artifacts / 'settings-short-390-430-de.png'))
     for theme in ['light', 'dark']:
@@ -455,21 +462,20 @@ async def test_history_summary_and_charts_share_range(layout_page, layout_artifa
         pass
     async with page.expect_response(lambda response: '/api/history?period=24h' in response.url) as response:
         await page.locator('#history-tab').click()
-        await page.locator('#history-range').select_option('24h')
+        await page.locator('#history-range [data-value="24h"]').click()
     payload = await (await response.value).json()
     assert len(payload['windows']) == 2
     assert payload['summary']['estimated_energy_kwh'] == pytest.approx(0.124)
     await expect(page.locator('#history-energy')).to_have_text('0.124')
     await expect(page.locator('#history-pr')).to_have_text('67.2')
-    await expect(page.locator('#history-data-completeness')).to_contain_text('100%')
+    await expect(page.locator('#history-data-completeness')).to_have_count(0)
     for selector in ['#history-chart', '#pr-chart']:
         await page.locator(selector + ' .chart-hit-area').focus()
         await page.keyboard.press('ArrowRight')
         await expect(page.locator(selector + ' .chart-tooltip')).to_contain_text('2,000 W')
         await page.keyboard.press('ArrowRight')
         await expect(page.locator(selector + ' .chart-tooltip')).to_contain_text('3,000 W')
-    await expect(page.locator('#history-boundaries')).to_contain_text('Settled periods')
-    await expect(page.locator('#history-boundaries')).not_to_contain_text('UTC')
+    await expect(page.locator('#history-range-caption')).not_to_be_empty()
     requests = []
     page.on('request', lambda request: requests.append(request.url) if '/api/history?' in request.url else None)
     await page.locator('#history-chart svg').evaluate("node => node.dataset.original = 'steady'")
@@ -497,8 +503,10 @@ async def test_history_summary_and_charts_share_range(layout_page, layout_artifa
     await expect(page.locator('#history-totals')).to_have_count(0)
     total = service.snapshot(now=now)['energy_totals']['estimated_energy_lifetime_kwh']
     async with page.expect_response(lambda response: '/api/history?' in response.url):
-        await page.locator('#history-range').select_option('7d')
+        await page.locator('#history-range [data-value="7d"]').click()
     await expect(page.locator('#history-energy')).to_have_text('0.186')
+    await expect(page.locator('#daily-energy-chart')).to_be_visible()
+    await page.locator('#history-aggregation [data-value=settlement]').click()
     await page.locator('#history-chart .chart-hit-area').focus()
     await page.keyboard.press('ArrowRight')
     await expect(page.locator('#history-chart .chart-tooltip')).to_contain_text('1,000 W')
@@ -509,47 +517,30 @@ async def test_history_summary_and_charts_share_range(layout_page, layout_artifa
     await expect(page.locator('#history-chart svg')).to_be_hidden()
 
 
-async def test_completeness_hints_follow_language(layout_page):
+async def test_dashboard_and_efficiency_remove_quality_copy_in_both_languages(layout_page):
     from playwright.async_api import expect
 
     page, _ = layout_page
-    hints = []
     for language in ['en', 'zh']:
         await page.locator('#language-select').select_option(language)
-        metric_hints = await page.locator('#live-data-completeness, #history-data-completeness').evaluate_all('nodes => nodes.map(node => node.title)')
-        assert len(metric_hints) == 2 and all(metric_hints)
-        assert metric_hints[0] == metric_hints[1]
-        assert metric_hints[0] not in await page.locator('.quality-panel').inner_text()
-        hints.append(metric_hints[0])
-    assert hints[0] != hints[1]
+        for destination in ['live', 'history']:
+            await page.locator(f'#{destination}-tab').click()
+            await expect(page.locator('#live-data-completeness, #history-data-completeness, #source-diagnostics')).to_have_count(0)
+            text = await page.locator(f'#{destination}-page').inner_text()
+            assert not any(term in text for term in ['Data completeness', 'Data quality', 'Included settled', '完整率', '数据质量', '纳入时段'])
 
 
-async def test_sensors_empty_data_empty_and_language_changes(layout_page, layout_artifacts):
+async def test_empty_generation_charts_and_language_changes(layout_page, layout_artifacts):
     from playwright.async_api import expect
-    from fake_ha import source_states
-    from pvyieldlens.home_assistant import HAState
 
-    page, service = layout_page
-    await page.locator('#source-diagnostics').evaluate('node => node.open = true')
-    table = page.locator('.quality-panel table')
-    empty = table.locator('tbody td[colspan="3"]')
-    await expect(empty).to_have_text('No sensor data yet')
-    await expect(empty).to_be_visible()
-    assert (await empty.bounding_box())['width'] == pytest.approx((await table.bounding_box())['width'], abs=1)
-    assert (await empty.bounding_box())['height'] >= 56
-    assert await empty.evaluate('cell => getComputedStyle(cell).textAlign') == 'center'
+    page, _ = layout_page
+    await expect(page.locator('#source-diagnostics')).to_have_count(0)
+    for selector in ['#generation-power-chart', '#generation-irradiance-chart', '#generation-temperature-chart']:
+        await expect(page.locator(selector + ' .chart-empty')).to_be_visible()
     await page.locator('#language-select').select_option('zh')
-    await expect(empty).to_have_text('暂无传感器数据')
-    await service.ingest([HAState.model_validate(state) for state in source_states()])
-    await expect(table.locator('tbody tr:visible')).to_have_count(3)
-    await expect(empty).to_be_hidden()
-    await expect(table.locator('tbody tr:visible').first.locator('td').first).to_have_text('sensor.power')
-    await expect(table.locator('tbody tr:visible').nth(1).locator('td').nth(1)).to_contain_text('45 °C')
-    await page.screenshot(path=str(layout_artifacts / 'sources-populated-zh.png'), full_page=True)
-    await service.configure(service.monitoring_settings.model_copy(update={'total_max_power_at_stc_w': 6000}))
-    await expect(empty).to_have_text('暂无传感器数据')
-    await expect(table.locator('tbody tr:visible')).to_have_count(1)
-
+    await expect(page.locator('#generation-data h2')).to_have_text('发电数据')
+    await page.locator('#generation-data').scroll_into_view_if_needed()
+    await page.screenshot(path=str(layout_artifacts / 'generation-empty-zh.png'))
 
 async def test_live_readings_keep_polling_while_configuring(layout_page, layout_artifacts):
     from playwright.async_api import expect
@@ -639,12 +630,12 @@ async def test_live_readings_keep_polling_while_configuring(layout_page, layout_
     assert light_colors['grid'] != dark_colors['grid']
     await expect(page.locator('#live-chart path.series').nth(1)).to_have_attribute('d', curve)
     await page.locator('#history-tab').click()
-    await page.locator('#history-range').select_option('7d')
+    await page.locator('#history-range [data-value="7d"]').click()
     await page.locator('#theme-select').select_option('light')
-    await expect(page.locator('#history-range')).to_have_value('7d')
+    await expect(page.locator('#history-range [data-value="7d"]')).to_have_attribute('aria-pressed', 'true')
     await page.locator('#settings-button').click()
     await page.locator('#history-tab').click()
-    await expect(page.locator('#history-range')).to_have_value('7d')
+    await expect(page.locator('#history-range [data-value="7d"]')).to_have_attribute('aria-pressed', 'true')
     await page.locator('#live-tab').click()
     await expect(page.locator('#live-chart path.series').nth(1)).to_have_attribute('d', curve)
 
@@ -697,7 +688,7 @@ async def test_settings_scrollspy_and_bottom_actions(layout_page, layout_artifac
             const {left, right, top, bottom} = document.querySelector(selector).getBoundingClientRect();
             return {left, right, top, bottom};
         };
-        return {actions: box('#settings-actions'), last: box('[name=forecast_noct_c]'),
+        return {actions: box('#settings-actions'), last: box('[name=forecast_pr_history_days]'),
             scroll: box('#settings-scroll'), width: innerWidth, height: innerHeight,
             documentWidth: document.documentElement.scrollWidth};
     }''')

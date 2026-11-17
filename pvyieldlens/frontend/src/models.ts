@@ -80,7 +80,15 @@ export interface HistoryResponse {
   summary: HistorySummary;
   requested_range: { start: number; end: number };
 }
-export type HistoryPeriod = 'today' | '24h' | '7d' | '30d';
+export type HistoryPeriod = 'today' | '24h' | '7d' | '30d' | 'custom';
+export type HistorySelection = { period: 'today' | '24h' | '7d' | '30d' }
+  | { period: 'custom'; start_date: string; end_date: string };
+export interface GenerationView {
+  windows: HistoryWindow[];
+  inputs: { start: number; end: number; irradiance_w_m2: number | null; module_temperature_c: number | null }[];
+  requested_range: { start: number; end: number };
+  home_timezone: string;
+}
 export interface HistoryDay {
   day: string;
   start: number;
@@ -90,6 +98,7 @@ export interface HistoryDay {
   boundary_unavailable: boolean;
 }
 export interface HistoryView extends HistoryResponse {
+  comparison: { summary: HistorySummary; requested_range: { start: number; end: number }; pr_change_pp: number | null } | null;
   period: HistoryPeriod;
   home_timezone: string;
   today: string;

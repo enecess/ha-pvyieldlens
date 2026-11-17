@@ -39,7 +39,7 @@ it('picks the nearest original singleton within six CSS pixels after SVG scaling
   expect(selected).toBe(points[1]);
   move(364);
   expect(handle.selectedAt()).toBeNull();
-  expect(host.querySelector('.chart-tooltip')?.textContent).toContain('unavailable');
+  expect(host.querySelector('.chart-tooltip')?.textContent).toContain('— W');
 });
 
 it('limits pixel tolerance to visible finite singleton glyphs and keeps keyboard records', () => {
@@ -52,7 +52,7 @@ it('limits pixel tolerance to visible finite singleton glyphs and keeps keyboard
   [0, 20.1, 40.1, 80.1].forEach(at => {
     inspect(host, at, 0, 100);
     expect(handle.selectedAt()).toBeNull();
-    expect(host.querySelector('.chart-tooltip')?.textContent).toContain('unavailable');
+    expect(host.querySelector('.chart-tooltip')?.textContent).toContain('— W');
   });
   const hit = host.querySelector('.chart-hit-area')!;
   hit.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowLeft' }));
@@ -118,7 +118,7 @@ it('reports unavailable between broken runs and outside point coverage', () => {
   ], { range: { start: 0, end: 120 }, tooltip });
   [0, 10, 60, 110, 120].forEach(at => {
     inspect(host, at, 0, 120);
-    expect(host.querySelector('.chart-tooltip')?.textContent).toContain('unavailable');
+    expect(host.querySelector('.chart-tooltip')?.textContent).toContain('— W');
     expect(host.querySelector('.chart-tooltip')?.textContent).toContain('— W');
     expect(host.querySelectorAll('.active-series-marker[visibility="visible"]')).toHaveLength(0);
     expect(handle.selectedAt()).toBeNull();
@@ -142,7 +142,7 @@ it('uses settlement coverage without rejecting valid interval edges or crossing 
   ], { range: { start: 0, end: 160 }, coverage: 'windows' });
   [0, 10, 70, 150, 160].forEach(at => {
     inspect(host, at, 0, 160);
-    expect(host.querySelector('.chart-tooltip')?.textContent).toContain('unavailable');
+    expect(host.querySelector('.chart-tooltip')?.textContent).toContain('— W');
   });
   [[20, 40], [40, 40], [41, 40], [60, 60], [80, 140], [100, 140], [140, 140]].forEach(([at, expected]) => {
     inspect(host, at, 0, 160);
@@ -319,4 +319,38 @@ it('distinguishes repeated local clock ticks when the plotted window spans a DST
     bounds.mockRestore();
     host.remove();
   }
+});
+
+it('draws the 100 percent reference without limiting PR or changing raw values', () => {
+  const points = [{ at: 10, pr: 125 }, { at: 20, pr: null }, { at: 30, pr: 80 }];
+  const { host } = chart(points, {}, [{ key: 'pr', label: 'PR', color: 'blue' }]);
+  expect(host.querySelectorAll('.reference-line')).toHaveLength(1);
+  expect(host.querySelector('path.series')!.getAttribute('d')!.match(/M/g)).toHaveLength(2);
+  host.querySelector('.chart-hit-area')!.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight' }));
+  expect(host.querySelector('.chart-tooltip')?.textContent).toContain('125 W');
+  expect(points[0].pr).toBe(125);
+});
+
+it('keeps input units and missing curves independent from power', () => {
+  const { host } = chart([{ at: 10, irradiance_w_m2: 0, module_temperature_c: null },
+    { at: 20, irradiance_w_m2: 800, module_temperature_c: 25 }], {}, [
+      { key: 'irradiance_w_m2', label: 'Irradiance', color: 'orange' }]);
+  expect(host.querySelectorAll('path.series')).toHaveLength(1);
+  host.querySelector('.chart-hit-area')!.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight' }));
+  expect(host.querySelector('.chart-tooltip')?.textContent).toContain('Irradiance0 W');
+  expect(host.querySelector('.chart-tooltip')?.textContent).not.toContain('data_quality');
+});
+it('keeps negative module temperatures inside the plotted domain and preserves null gaps', () => {
+  const points = [{ at: 10, module_temperature_c: -20 }, { at: 20, module_temperature_c: null },
+    { at: 30, module_temperature_c: -5 }];
+  const { host } = chart(points, {}, [{ key: 'module_temperature_c', label: 'Module temperature', color: 'teal' }]);
+  expect(host.textContent).toContain('-20');
+  expect(host.querySelector('path.series')!.getAttribute('d')!.match(/M/g)).toHaveLength(2);
+  [...host.querySelectorAll('.series-point')].forEach(point => {
+    expect(Number(point.getAttribute('cy'))).toBeGreaterThanOrEqual(16);
+    expect(Number(point.getAttribute('cy'))).toBeLessThanOrEqual(226);
+  });
+  host.querySelector('.chart-hit-area')!.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight' }));
+  expect(host.querySelector('.chart-tooltip')?.textContent).toContain('-20');
+  expect(points[0].module_temperature_c).toBe(-20);
 });

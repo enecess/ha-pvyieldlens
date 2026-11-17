@@ -24,8 +24,6 @@ const { preference, mode, source } = theme;
 const { configuration, snapshot, livePoints, liveRange, liveSeriesError, error, displayTimezone, acceptConfiguration, acceptSavedConfiguration } = useDashboard();
 const { languageChoice, language, t, setLanguage } = useI18n();
 const warnings = computed(() => [error.value, snapshot.value?.error,
-  snapshot.value?.history_available === false ? 'history_unavailable' : null,
-  snapshot.value?.energy_totals.today_allocation_complete === false ? 'daily_energy_incomplete' : null,
 ].filter((value): value is string => Boolean(value)));
 onUnmounted(theme.dispose);
 

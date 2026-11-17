@@ -41,3 +41,17 @@ it('provides equal keys and placeholders in all six catalogs', () => {
     });
   });
 });
+
+it('uses approved dashboard, efficiency and aggregation copy in all locales', () => {
+  expect(catalogs.zh.live_page).toBe('看板');
+  expect(catalogs.zh.history).toBe('能效');
+  expect(catalogs.zh.live_data).toBe('实时数据');
+  expect(catalogs.zh.generation_data).toBe('发电数据');
+  expect(catalogs.zh.daily_summary).toBe('每天汇总');
+  expect(translate(catalogs, 'zh', 'every_minutes', { minutes: 5 })).toBe('每 5 分钟');
+  languages.forEach(language => {
+    expect(catalogs[language].pr_reference).toContain('100');
+    expect(catalogs[language].generation_comparison).toBeTruthy();
+    expect(catalogs[language].custom_range_help).toContain('90');
+  });
+});
