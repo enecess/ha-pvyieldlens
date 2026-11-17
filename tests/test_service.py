@@ -392,7 +392,7 @@ async def test_history_unavailable_warning_clears_after_successful_recovery(tmp_
 async def test_http_location_bootstraps_forecast_before_websocket_ready(tmp_path, monkeypatch):
     import asyncio
     import httpx
-    from forecast_fixtures import hourly_payload
+    from forecast_fixtures import forecast_payload
     from pvyieldlens.forecast_service import ForecastController
     from pvyieldlens.home_assistant import HomeAssistantClient
     from pvyieldlens.open_meteo import OpenMeteoClient
@@ -413,7 +413,7 @@ async def test_http_location_bootstraps_forecast_before_websocket_ready(tmp_path
 
     def weather_response(request):
         received.set()
-        return httpx.Response(200, json=hourly_payload(0))
+        return httpx.Response(200, json=forecast_payload(0))
 
     monkeypatch.setattr('pvyieldlens.service.time.time', lambda: 180)
     store = Store(tmp_path / 'data.sqlite')
@@ -506,7 +506,7 @@ async def test_om_timeout_does_not_stop_monitoring(tmp_path, monkeypatch):
 async def test_ha_outage_uses_cached_location(tmp_path, monkeypatch):
     import asyncio
     import httpx
-    from forecast_fixtures import hourly_payload
+    from forecast_fixtures import forecast_payload
     from pvyieldlens.forecast_service import ForecastController
     from pvyieldlens.open_meteo import OpenMeteoClient
     from pvyieldlens.settings import ForecastSettings, HALocation
@@ -538,7 +538,7 @@ async def test_ha_outage_uses_cached_location(tmp_path, monkeypatch):
 
     def respond(request):
         received.set()
-        return httpx.Response(200, json=hourly_payload(0))
+        return httpx.Response(200, json=forecast_payload(0))
 
     monkeypatch.setattr('pvyieldlens.service.time.time', lambda: 180)
     async with httpx.AsyncClient(transport=httpx.MockTransport(respond)) as http:
@@ -574,7 +574,7 @@ async def test_unchanged_monitoring_configuration_keeps_live_and_sources(tmp_pat
 async def test_service_restart_recreates_separate_owned_weather_client(tmp_path, monkeypatch):
     import asyncio
     import httpx
-    from forecast_fixtures import hourly_payload
+    from forecast_fixtures import forecast_payload
     from pvyieldlens.settings import ForecastSettings, HALocation
 
     received = asyncio.Event()
@@ -584,7 +584,7 @@ async def test_service_restart_recreates_separate_owned_weather_client(tmp_path,
     def respond(request):
         requests.append(request)
         received.set()
-        return httpx.Response(200, json=hourly_payload(0))
+        return httpx.Response(200, json=forecast_payload(0))
 
     def weather_client(**kwargs):
         client = original_client(transport=httpx.MockTransport(respond), **kwargs)
@@ -615,7 +615,7 @@ async def test_service_restart_recreates_separate_owned_weather_client(tmp_path,
 async def test_successful_invalid_ha_location_clears_cached_site(tmp_path, monkeypatch):
     import asyncio
     import httpx
-    from forecast_fixtures import hourly_payload
+    from forecast_fixtures import forecast_payload
     from pvyieldlens.forecast_service import ForecastController
     from pvyieldlens.home_assistant import HomeAssistantClient
     from pvyieldlens.open_meteo import OpenMeteoClient
@@ -636,7 +636,7 @@ async def test_successful_invalid_ha_location_clears_cached_site(tmp_path, monke
     async with httpx.AsyncClient(transport=httpx.MockTransport(lambda request: httpx.Response(
         200, json={'time_zone': 'UTC', 'latitude': 95.0, 'longitude': 0.0},
     ))) as ha_http, httpx.AsyncClient(transport=httpx.MockTransport(lambda request: httpx.Response(
-        200, json=hourly_payload(0),
+        200, json=forecast_payload(0),
     ))) as weather_http:
         client = HomeAssistantClient(service.origin, 'secret', ha_http)
         monkeypatch.setattr(client, 'events', events)

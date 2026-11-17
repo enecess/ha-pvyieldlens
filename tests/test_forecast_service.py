@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 import httpx
 import pytest
 
-from forecast_fixtures import hourly_payload
+from forecast_fixtures import forecast_payload
 from pvyieldlens.open_meteo import OpenMeteoClient
 from pvyieldlens.settings import ForecastSettings, HALocation
 from pvyieldlens.storage import Store
@@ -33,7 +33,7 @@ async def test_cache_restart_preserves_fetched_at(tmp_path):
     store.save_monitoring_settings(settings(), 0, ORIGIN)
     store.settle(calculate(settings(), samples(), 0, 60), store.revision, 'UTC')
     async with httpx.AsyncClient(transport=httpx.MockTransport(
-        lambda request: httpx.Response(200, json=hourly_payload(0, weather_code=61)),
+        lambda request: httpx.Response(200, json=forecast_payload(0, weather_code=61)),
     )) as http:
         forecast = controller(store, http)
         await forecast.refresh(now=120)
@@ -45,6 +45,8 @@ async def test_cache_restart_preserves_fetched_at(tmp_path):
         assert restored.view(180).today.forecast_energy_kwh == pytest.approx(89.28)
         assert restored.view(180).days[0].weather.weather_code == 61
         assert len(restored.batch.weather_samples) == 217
+        assert len(restored.batch.intervals) == 864
+        assert restored.batch.inputs.model_version == 2
         assert store.revision == 1
         assert store.cursor == 60
         assert store.monitoring_settings() == settings()
@@ -89,7 +91,7 @@ async def test_manual_refresh_coalesces_with_running_request(tmp_path):
         requests.append(request)
         entered.set()
         await release.wait()
-        return httpx.Response(200, json=hourly_payload(0))
+        return httpx.Response(200, json=forecast_payload(0))
 
     store = Store(tmp_path / 'data.sqlite')
     async with httpx.AsyncClient(transport=httpx.MockTransport(respond)) as http:
@@ -123,7 +125,7 @@ async def test_changed_inputs_discard_old_inflight_result(tmp_path, field, value
     async def respond(request):
         entered.set()
         await release.wait()
-        return httpx.Response(200, json=hourly_payload(0))
+        return httpx.Response(200, json=forecast_payload(0))
 
     store = Store(tmp_path / 'data.sqlite')
     async with httpx.AsyncClient(transport=httpx.MockTransport(respond)) as http:
@@ -154,7 +156,7 @@ async def test_unchanged_configuration_does_not_restart_or_refetch(tmp_path):
     def respond(request):
         requests.append(request)
         received.set()
-        return httpx.Response(200, json=hourly_payload(0))
+        return httpx.Response(200, json=forecast_payload(0))
 
     store = Store(tmp_path / 'data.sqlite')
     async with httpx.AsyncClient(transport=httpx.MockTransport(respond)) as http:
@@ -196,7 +198,7 @@ async def test_success_failure_and_stale_deadlines(tmp_path, monkeypatch):
         if clock[0] >= 3600:
             raise httpx.ReadTimeout('weather timeout', request=request)
         clock[0] = 10.0
-        return httpx.Response(200, json=hourly_payload(0))
+        return httpx.Response(200, json=forecast_payload(0))
 
     monkeypatch.setattr(forecast_service, 'time', SimpleNamespace(time=lambda: clock[0]))
     monkeypatch.setattr(forecast_service.asyncio, 'timeout', timeout)
@@ -227,7 +229,7 @@ async def test_disabled_has_no_requests_and_keeps_parameters(tmp_path):
     requests = []
     store = Store(tmp_path / 'data.sqlite')
     async with httpx.AsyncClient(transport=httpx.MockTransport(
-        lambda request: requests.append(request) or httpx.Response(200, json=hourly_payload(0)),
+        lambda request: requests.append(request) or httpx.Response(200, json=forecast_payload(0)),
     )) as http:
         forecast = controller(store, http)
         disabled = ENABLED.model_copy(update={'enabled': False})
@@ -246,7 +248,7 @@ async def test_disabled_has_no_requests_and_keeps_parameters(tmp_path):
 async def test_midnight_reclips_cache_without_network_or_new_fetched_at(tmp_path):
     requests = []
     start = datetime(2026, 11, 13, tzinfo=timezone.utc).timestamp()
-    payload = hourly_payload(start, weather_code=0)
+    payload = forecast_payload(start, weather_code=0)
     payload['hourly']['weather_code'][24:48] = [61] * 24
     store = Store(tmp_path / 'data.sqlite')
     async with httpx.AsyncClient(transport=httpx.MockTransport(
@@ -271,7 +273,7 @@ async def test_location_name_updates_do_not_invalidate_physical_cache(tmp_path):
     requests = []
     store = Store(tmp_path / 'data.sqlite')
     async with httpx.AsyncClient(transport=httpx.MockTransport(
-        lambda request: requests.append(request) or httpx.Response(200, json=hourly_payload(0)),
+        lambda request: requests.append(request) or httpx.Response(200, json=forecast_payload(0)),
     )) as http:
         forecast = controller(store, http)
         await forecast.refresh(now=120)
@@ -291,7 +293,7 @@ async def test_changed_inputs_hide_persisted_cache_after_restart(tmp_path, chang
     store = Store(path)
     store.save_monitoring_settings(settings(), 0, ORIGIN)
     async with httpx.AsyncClient(transport=httpx.MockTransport(
-        lambda request: httpx.Response(200, json=hourly_payload(0)),
+        lambda request: httpx.Response(200, json=forecast_payload(0)),
     )) as http:
         forecast = controller(store, http)
         await forecast.refresh(now=120)
@@ -318,7 +320,7 @@ async def test_changed_running_inputs_refresh_after_old_result_is_discarded(tmp_
             await release.wait()
         else:
             received.set()
-        return httpx.Response(200, json=hourly_payload(0))
+        return httpx.Response(200, json=forecast_payload(0))
 
     store = Store(tmp_path / 'data.sqlite')
     async with httpx.AsyncClient(transport=httpx.MockTransport(respond)) as http:
@@ -376,7 +378,7 @@ async def test_direct_refresh_failure_reschedules_sleeping_worker(tmp_path, monk
     def respond(request):
         if failed:
             raise httpx.ReadTimeout('weather timeout', request=request)
-        return httpx.Response(200, json=hourly_payload(0))
+        return httpx.Response(200, json=forecast_payload(0))
 
     monkeypatch.setattr(forecast_service, 'asyncio', SimpleNamespace(
         Event=asyncio.Event, get_running_loop=asyncio.get_running_loop,
@@ -411,14 +413,14 @@ async def test_disabling_cancels_inflight_weather_and_retains_parameters(tmp_pat
         requests.append(request)
         if len(requests) > 1:
             second_received.set()
-            return httpx.Response(200, json=hourly_payload(0, irradiance_w_m2=400.0))
+            return httpx.Response(200, json=forecast_payload(0, irradiance_w_m2=400.0))
         entered.set()
         try:
             await release.wait()
         except asyncio.CancelledError:
             cancelled.set()
             raise
-        return httpx.Response(200, json=hourly_payload(0))
+        return httpx.Response(200, json=forecast_payload(0))
 
     store = Store(tmp_path / 'data.sqlite')
     async with httpx.AsyncClient(transport=httpx.MockTransport(respond)) as http:
@@ -464,10 +466,10 @@ async def test_reenabling_before_cancelled_fetch_unwinds_requests_new_weather(tm
         if len(requests) == 1:
             entered.set()
             await release.wait()
-            return httpx.Response(200, json=hourly_payload(0))
+            return httpx.Response(200, json=forecast_payload(0))
         second_entered.set()
         await second_release.wait()
-        return httpx.Response(200, json=hourly_payload(0, irradiance_w_m2=400.0))
+        return httpx.Response(200, json=forecast_payload(0, irradiance_w_m2=400.0))
 
     store = Store(tmp_path / 'data.sqlite')
     async with httpx.AsyncClient(transport=httpx.MockTransport(respond)) as http:
@@ -500,7 +502,7 @@ async def test_repeated_disabled_configuration_is_idempotent_during_cancellation
         requests.append(request)
         if len(requests) > 1:
             second_received.set()
-            return httpx.Response(200, json=hourly_payload(0, irradiance_w_m2=400.0))
+            return httpx.Response(200, json=forecast_payload(0, irradiance_w_m2=400.0))
         entered.set()
         try:
             await asyncio.Event().wait()
@@ -542,8 +544,8 @@ async def test_forecast_remaining_updates_without_new_weather(tmp_path):
     from pvyieldlens.service import Service
 
     requests = []
-    payload = hourly_payload(0)
-    payload['hourly']['global_tilted_irradiance'] = [800.0] * 15 + [0.0] * 202
+    payload = forecast_payload(0)
+    payload['minutely_15']['global_tilted_irradiance'] = [800.0] * 57 + [0.0] * 808
     store = Store(tmp_path / 'data.sqlite')
     service = Service(store)
     await service.configure(settings(), now=0, origin=ORIGIN)
@@ -567,4 +569,78 @@ async def test_forecast_remaining_updates_without_new_weather(tmp_path):
         assert after_payload['attributes']['calculated_at'] == 49200
         assert after['forecast']['today']['forecast_energy_kwh'] == before['forecast']['today']['forecast_energy_kwh'] == pytest.approx(52.08)
         assert len(requests) == 1
+    store.close()
+
+
+async def test_hourly_cache_is_ignored_without_losing_monitoring(tmp_path):
+    import json
+
+    from forecast_fixtures import constant_intervals, forecast_input
+    from pvyieldlens.engine import calculate
+    from pvyieldlens.forecast import ForecastBatch, WeatherSample
+    from pvyieldlens.forecast_service import ForecastController
+
+    path = tmp_path / 'data.sqlite'
+    store = Store(path)
+    store.save_monitoring_settings(settings(), 0, ORIGIN)
+    store.settle(calculate(settings(), samples(), 0, 60), store.revision, 'UTC')
+    store.save_forecast_settings(ENABLED)
+    store.set_meta('ha_location', LOCATION.model_dump_json())
+    cached = ForecastBatch(
+        inputs=forecast_input(), fetched_at=120, intervals=constant_intervals(0, 9 * 86400),
+        weather_samples=tuple(WeatherSample(at=index * 3600, irradiance_w_m2=800,
+            air_temperature_c=20, weather_code=61) for index in range(217)),
+    ).model_dump()
+    cached['inputs']['model_version'] = 1
+    persisted = json.dumps(cached)
+    store.set_meta('forecast_cache', persisted)
+    before_totals = store.totals(180, 'UTC')
+    before_days = list(map(tuple, store.db.execute('SELECT * FROM days')))
+    store.close()
+
+    store = Store(path)
+    async with httpx.AsyncClient(transport=httpx.MockTransport(
+        lambda request: httpx.Response(200, json=forecast_payload(0, weather_code=61)),
+    )) as http:
+        restored = ForecastController(store, OpenMeteoClient(http))
+        assert restored.batch is None
+        assert restored.view(180).status == 'loading'
+        assert restored.view(180).today.forecast_energy_kwh is None
+        assert restored.view(180).intervals == ()
+        assert store.get_meta('forecast_cache') == persisted
+        assert store.revision == 1
+        assert store.cursor == 60
+        assert store.monitoring_settings() == settings()
+        assert store.totals(180, 'UTC') == before_totals
+        assert list(map(tuple, store.db.execute('SELECT * FROM days'))) == before_days
+        await restored.refresh(now=180)
+        assert restored.batch.inputs.model_version == 2
+        assert len(restored.batch.intervals) == 864
+        assert restored.view(180).today.forecast_energy_kwh == pytest.approx(89.28)
+        assert store.totals(180, 'UTC') == before_totals
+        assert list(map(tuple, store.db.execute('SELECT * FROM days'))) == before_days
+        await restored.stop()
+    store.close()
+
+
+async def test_missing_minutely_interval_keeps_hourly_weather_summary(tmp_path):
+    payload = forecast_payload(0, weather_code=61)
+    payload['minutely_15']['global_tilted_irradiance'][49] = None
+    store = Store(tmp_path / 'data.sqlite')
+    async with httpx.AsyncClient(transport=httpx.MockTransport(
+        lambda request: httpx.Response(200, json=payload),
+    )) as http:
+        forecast = controller(store, http)
+        await forecast.refresh(now=120)
+        view = forecast.view(180)
+        assert view.today.forecast_energy_kwh is None
+        assert view.today.data_completeness_percent == pytest.approx(95 / 96 * 100)
+        assert (view.intervals[48].start, view.intervals[48].end) == (43200, 44100)
+        assert view.intervals[48].forecast_power_w is None
+        assert view.days[0].weather.model_dump() == {
+            'weather_code': 61, 'air_temperature_min_c': 20, 'air_temperature_max_c': 20,
+            'quality': 'complete',
+        }
+        assert view.tomorrow.forecast_energy_kwh == pytest.approx(89.28)
+        await forecast.stop()
     store.close()

@@ -119,7 +119,7 @@ async def test_forecast_outputs_republish_after_ha_reconnect_and_shutdown(tmp_pa
 
     import httpx
     from fastapi import FastAPI, WebSocket
-    from forecast_fixtures import hourly_payload
+    from forecast_fixtures import forecast_payload
     from pvyieldlens.forecast_service import ForecastController
     from pvyieldlens.open_meteo import OpenMeteoClient
     from pvyieldlens.settings import ForecastSettings, HALocation
@@ -150,7 +150,7 @@ async def test_forecast_outputs_republish_after_ha_reconnect_and_shutdown(tmp_pa
     requests = []
     today = datetime.now(ZoneInfo('Asia/Shanghai')).replace(hour=0, minute=0, second=0, microsecond=0).timestamp()
     async with fake_server(reconnecting_ha) as url, httpx.AsyncClient(transport=httpx.MockTransport(
-        lambda request: requests.append(request) or httpx.Response(200, json=hourly_payload(today)),
+        lambda request: requests.append(request) or httpx.Response(200, json=forecast_payload(today)),
     )) as weather_http:
         store = Store(tmp_path / 'data.sqlite')
         service = Service(store, HomeAssistantClient(url, 'simulation-token'))

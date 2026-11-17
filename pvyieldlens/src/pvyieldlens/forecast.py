@@ -20,7 +20,8 @@ class ForecastInput(_ForecastModel):
     tilt_deg: float = Field(ge=0, le=90)
     azimuth_deg: float = Field(ge=0, lt=360)
     noct_c: float = Field(gt=20, le=80)
-    model_version: Literal[1] = 1
+    # Decode hourly caches so normal input matching can discard them.
+    model_version: Literal[1, 2] = 2
 
 
 class WeatherSample(_ForecastModel):

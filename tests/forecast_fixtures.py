@@ -20,20 +20,27 @@ def forecast_input(*, home_timezone: str = 'UTC', origin: str = 'http://ha.test'
     )
 
 
-def constant_intervals(start: float, end: float, forecast_power_w: float = 3720.0) -> tuple[ForecastInterval, ...]:
+def constant_intervals(start: float, end: float, forecast_power_w: float = 3720.0,
+                       *, interval_seconds: int = 3600) -> tuple[ForecastInterval, ...]:
     return tuple(ForecastInterval(
-        start=left, end=min(left + 3600, end), irradiance_w_m2=800.0,
+        start=left, end=min(left + interval_seconds, end), irradiance_w_m2=800.0,
         air_temperature_c=20.0, cell_temperature_c=45.0, forecast_power_w=forecast_power_w,
-        forecast_energy_kwh=forecast_power_w * (min(left + 3600, end) - left) / 3_600_000,
+        forecast_energy_kwh=forecast_power_w * (min(left + interval_seconds, end) - left) / 3_600_000,
         quality='complete',
-    ) for left in (start + index * 3600 for index in range(ceil((end - start) / 3600))))
+    ) for left in (start + index * interval_seconds for index in range(ceil((end - start) / interval_seconds))))
 
 
-def hourly_payload(start: float, hours: int = 216, irradiance_w_m2: float | None = 800.0,
-                   air_temperature_c: float | None = 20.0, weather_code: int | None = None) -> dict[str, JsonValue]:
+def forecast_payload(start: float, hours: int = 216, irradiance_w_m2: float | None = 800.0,
+                     air_temperature_c: float | None = 20.0, weather_code: int | None = None) -> dict[str, JsonValue]:
     return {
         'latitude': 0.0, 'longitude': 0.0, 'generationtime_ms': 0.1,
         'utc_offset_seconds': 0, 'timezone': 'GMT', 'timezone_abbreviation': 'GMT', 'elevation': 0.0,
+        'minutely_15_units': {'time': 'unixtime', 'global_tilted_irradiance': 'W/m²', 'temperature_2m': '°C'},
+        'minutely_15': {
+            'time': [start + index * 900 for index in range(hours * 4 + 1)],
+            'global_tilted_irradiance': [irradiance_w_m2] * (hours * 4 + 1),
+            'temperature_2m': [air_temperature_c] * (hours * 4 + 1),
+        },
         'hourly_units': {'time': 'unixtime', 'global_tilted_irradiance': 'W/m²', 'temperature_2m': '°C',
                          **({'weather_code': 'wmo code'} if weather_code is not None else {})},
         'hourly': {

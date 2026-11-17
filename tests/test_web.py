@@ -341,7 +341,7 @@ async def test_connection_preview_does_not_replace_active_forecast_location(serv
 
 async def test_forecast_read_and_refresh_are_authenticated_and_nonblocking(service, monkeypatch):
     import asyncio
-    from forecast_fixtures import hourly_payload
+    from forecast_fixtures import forecast_payload
     from pvyieldlens.forecast_service import ForecastController
     from pvyieldlens.open_meteo import OpenMeteoClient
     from pvyieldlens.settings import ForecastSettings, HALocation
@@ -354,7 +354,7 @@ async def test_forecast_read_and_refresh_are_authenticated_and_nonblocking(servi
         requests.append(request)
         entered.set()
         await release.wait()
-        return httpx.Response(200, json=hourly_payload(0, weather_code=61))
+        return httpx.Response(200, json=forecast_payload(0, weather_code=61))
 
     await service.configure(settings(), now=0, origin='http://ha.test')
     async with httpx.AsyncClient(transport=httpx.MockTransport(weather_response)) as weather_http:
@@ -398,7 +398,7 @@ async def test_forecast_read_and_refresh_are_authenticated_and_nonblocking(servi
                 assert ready.json()['remaining_today']['forecast_energy_kwh'] == pytest.approx(89.094)
                 assert ready.json()['fetched_at'] == 180
                 assert ready.json()['calculated_at'] == 180
-                assert len(ready.json()['intervals']) == 168
+                assert len(ready.json()['intervals']) == 672
                 assert ready.json()['days'][0]['weather'] == {
                     'weather_code': 61, 'air_temperature_min_c': 20, 'air_temperature_max_c': 20, 'quality': 'complete',
                 }
