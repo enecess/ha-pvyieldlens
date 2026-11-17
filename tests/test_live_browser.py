@@ -23,7 +23,8 @@ async def live_page(browser_workspace):
     await service.tick(now)
     service.connected = True
     service._recovery_needed = False
-    state = {'now': now, 'seeds': 0, 'snapshots': 0, 'fail_seed': False}
+    state = {'now': now, 'seeds': 0, 'snapshots': 0, 'fail_seed': False,
+             'diagnostics': 0, 'reported_at': now - 10}
 
     async def seed(route):
         state['seeds'] += 1
@@ -39,8 +40,20 @@ async def live_page(browser_workspace):
                                'reported_at': now, 'valid': True}]
         await route.fulfill(json=payload)
 
+    async def diagnostics(route):
+        state['diagnostics'] += 1
+        await route.fulfill(json={'observed_at': state['now'], 'sources': [
+            {'entity_id': 'sensor.power', 'state': '3.348', 'unit': 'kW',
+             'reported_at': state['reported_at'], 'valid': True},
+            {'entity_id': 'sensor.temp', 'state': '40', 'unit': '°C',
+             'reported_at': state['reported_at'], 'valid': True},
+            {'entity_id': 'sensor.sun', 'state': 'unavailable', 'unit': None,
+             'reported_at': None, 'valid': False},
+        ]})
+
     await page.route('**/api/live-series', seed)
     await page.route('**/api/snapshot', snapshot)
+    await page.route('**/api/source-diagnostics', diagnostics)
     await page.clock.install(time=datetime.fromtimestamp(now, timezone.utc))
     await page.reload()
     await expect(page.locator('#live-actual')).to_have_text('3,348')
@@ -110,27 +123,52 @@ async def test_uncovered_live_range_inspects_unavailable_instead_of_distant_samp
         assert await chart.locator('.active-series-marker[visibility=visible]').count() == 0
 
 
-async def test_source_ages_tick_without_replacing_svg_and_settings_keeps_polling(live_page):
+async def test_source_reports_refresh_without_snapshots_and_stop_when_not_viewed(live_page):
     from playwright.async_api import expect
 
     page, _, state = live_page
-    await page.locator('#source-diagnostics').evaluate('node => node.open = true')
+    errors = []
+    page.on('console', lambda message: errors.append(message.text) if message.type == 'error' else None)
+    assert state['diagnostics'] == 0
+    await page.locator('#source-diagnostics summary').click()
     await page.locator('#live-chart svg').evaluate("node => node.dataset.original = 'age-clock'")
     age = page.locator('#source-rows td').nth(2)
-    await expect(age).to_have_text('Just now')
+    await expect(age).to_have_text('10 s')
+    await expect(page.locator('#source-rows td').nth(1)).to_have_text('3.35 kW')
+    await expect(page.locator('#source-rows tr').last.locator('td').nth(2)).to_have_text('—')
     requests = state['snapshots']
-    await page.clock.fast_forward(2000)
-    await expect(age).to_have_text('2 s')
+    state['now'] += 1
+    state['reported_at'] = state['now']
+    async with page.expect_response(lambda response: response.url.endswith('/api/source-diagnostics')):
+        await page.clock.fast_forward(1000)
+    await expect(age).to_have_text('Just now')
+    assert state['diagnostics'] == 2
+    state['now'] += 1
+    async with page.expect_response(lambda response: response.url.endswith('/api/source-diagnostics')):
+        await page.clock.fast_forward(1000)
+    await expect(age).to_have_text('1 s')
     await expect(page.locator('#live-chart svg')).to_have_attribute('data-original', 'age-clock')
     assert state['snapshots'] == requests
-    await page.screenshot(path='artifacts/task-4-live/source-age.png', full_page=True)
+    Path('.superpowers/task-2').mkdir(parents=True, exist_ok=True)
+    await page.locator('#source-diagnostics').scroll_into_view_if_needed()
+    await page.screenshot(path='.superpowers/task-2/source-age.png', full_page=True)
+    await page.locator('#source-diagnostics summary').click()
+    diagnostics_requests = state['diagnostics']
+    await page.clock.fast_forward(3000)
+    assert state['diagnostics'] == diagnostics_requests
+    async with page.expect_response(lambda response: response.url.endswith('/api/source-diagnostics')):
+        await page.locator('#source-diagnostics summary').click()
+    assert state['diagnostics'] == diagnostics_requests + 1
     await page.locator('#settings-button').click()
+    diagnostics_requests = state['diagnostics']
     await page.locator('[data-settings-category=modules]').click()
     await page.locator('[name=total_max_power_at_stc_w]').fill('6100')
     async with page.expect_response(lambda response: response.url.endswith('/api/snapshot')):
         await page.clock.fast_forward(60000)
     assert state['snapshots'] > requests
+    assert state['diagnostics'] == diagnostics_requests
     await expect(page.locator('[name=total_max_power_at_stc_w]')).to_have_value('6100')
+    assert errors == []
 
 
 async def test_seed_failure_is_chart_local_and_keeps_live_metrics(live_page):

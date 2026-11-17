@@ -1,4 +1,4 @@
-import type { Configuration, ConfigurationSaveResult, ConfigurationUpdate, ConnectionInput, ConnectionResult, ForecastRefreshResult, ForecastView, HistoryPeriod, HistoryResponse, HistoryView, LiveSeriesResponse, Snapshot } from './models';
+import type { Configuration, ConfigurationSaveResult, ConfigurationUpdate, ConnectionInput, ConnectionResult, ForecastRefreshResult, ForecastView, HistoryPeriod, HistoryResponse, HistoryView, LiveSeriesResponse, Snapshot, SourceDiagnostics } from './models';
 
 export class ApiError extends Error {
   constructor(public code: string, public fields: string[] = []) {
@@ -41,6 +41,9 @@ export const api = {
     return await request('connection', { method: 'POST', body: JSON.stringify(connection) }) as ConnectionResult;
   },
   async getSnapshot(): Promise<Snapshot> { return await request('snapshot') as Snapshot; },
+  async getSourceDiagnostics(signal?: AbortSignal): Promise<SourceDiagnostics> {
+    return await request('source-diagnostics', { signal }) as SourceDiagnostics;
+  },
   async getLiveSeries(): Promise<LiveSeriesResponse> { return await request('live-series') as LiveSeriesResponse; },
   async getForecast(): Promise<ForecastView> { return await request('forecast') as ForecastView; },
   async refreshForecast(): Promise<ForecastRefreshResult> {

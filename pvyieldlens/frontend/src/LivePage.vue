@@ -4,7 +4,8 @@ import { Radio, ArrowUpRight } from 'lucide-vue-next';
 import MetricCard from './MetricCard.vue';
 import PowerChart from './PowerChart.vue';
 import type { ChartPoint, ChartSeries, ChartTooltip } from './charts';
-import type { Configuration, Snapshot } from './models';
+import type { Configuration, Snapshot, SourceDiagnostics } from './models';
+import { api } from './api';
 import { useI18n, type Language } from './i18n';
 import type { ColorMode } from './theme';
 import { formatTimes } from './timezones';
@@ -18,23 +19,56 @@ defineEmits<{ 'open-settings': [] }>();
 const { t } = useI18n();
 const live = computed(() => props.snapshot?.live_window);
 const settings = computed(() => props.configuration?.monitoring_settings);
-const now = ref(Date.now() / 1000);
-let clock: ReturnType<typeof setInterval> | undefined;
-function updateClock() {
-  clearInterval(clock);
-  now.value = Date.now() / 1000;
-  if (props.active && !document.hidden) clock = setInterval(() => { now.value = Date.now() / 1000; }, 1000);
-}
-watch(() => [props.active, ...(props.snapshot?.sources.map(source => source.reported_at) ?? [])], updateClock, { immediate: true });
-document.addEventListener('visibilitychange', updateClock);
-onUnmounted(() => { clearInterval(clock); document.removeEventListener('visibilitychange', updateClock); });
+const diagnostics = ref<SourceDiagnostics | null>(null);
+const diagnosticsExpanded = ref(false);
+const diagnosticsError = ref(false);
+const visible = ref(!document.hidden);
+const now = ref(performance.now());
+let observedAtMonotonic = now.value;
+const sourceContext = computed(() => settings.value ? JSON.stringify([
+  settings.value.actual_power_entity, settings.value.module_temperature_entity, settings.value.irradiance_entity,
+]) : null);
+const updateVisibility = () => { visible.value = !document.hidden; };
+document.addEventListener('visibilitychange', updateVisibility);
+onUnmounted(() => { document.removeEventListener('visibilitychange', updateVisibility); });
+watch([sourceContext, diagnosticsExpanded, () => props.active, visible], ([sources, expanded, active, isVisible], previous, onCleanup) => {
+  if (sources !== previous?.[0]) {
+    diagnostics.value = null;
+    diagnosticsError.value = false;
+  }
+  if (!sources || !expanded || !active || !isVisible) return;
+  const controller = new AbortController();
+  let nextRead: ReturnType<typeof setTimeout> | undefined;
+  now.value = performance.now();
+  const clock = setInterval(() => { now.value = performance.now(); }, 1000);
+  onCleanup(() => { controller.abort(); clearTimeout(nextRead); clearInterval(clock); });
+  async function refresh() {
+    try {
+      const result = await api.getSourceDiagnostics(controller.signal);
+      if (controller.signal.aborted) return;
+      observedAtMonotonic = performance.now();
+      now.value = observedAtMonotonic;
+      diagnostics.value = result;
+      diagnosticsError.value = false;
+    } catch {
+      if (!controller.signal.aborted) diagnosticsError.value = true;
+    } finally {
+      if (!controller.signal.aborted) nextRead = setTimeout(refresh, 1000);
+    }
+  }
+  void refresh();
+}, { immediate: true });
 const powerSeries: ChartSeries[] = [
   { key: 'estimated_power_w', label: 'estimated_power', color: 'var(--pv-estimated)' },
   { key: 'actual_power_w', label: 'actual_power', color: 'var(--pv-actual)' },
 ];
 const number = (value: number | null | undefined, digits = 1) => value == null ? '—' :
   new Intl.NumberFormat(props.language, { maximumFractionDigits: digits }).format(value);
-const sourceAge = (reportedAt: number) => Math.max(0, now.value - reportedAt) < 1 ? t('just_now') : `${number(Math.floor(Math.max(0, now.value - reportedAt)), 0)} s`;
+const sourceAge = (reportedAt: number | null) => {
+  if (reportedAt === null || diagnostics.value?.observed_at == null) return '—';
+  const elapsed = Math.max(0, diagnostics.value.observed_at + (now.value - observedAtMonotonic) / 1000 - reportedAt);
+  return elapsed < 1 ? t('just_now') : `${number(Math.floor(elapsed), 0)} s`;
+};
 const updated = computed(() => props.snapshot?.calculated_at == null ? '—'
   : formatTimes([props.snapshot.calculated_at], props.language, props.displayTimezone, {
     hour: '2-digit', minute: '2-digit', second: '2-digit',
@@ -80,12 +114,13 @@ const tooltip = (point: ChartPoint): ChartTooltip => ({ title: pointLabels.value
       <div class="live-status muted"><span id="live-quality"><span class="status-dot" :class="{ good: live?.quality === 'complete' }"></span>{{ t(live?.quality ?? 'waiting') }}</span>
         <span><span id="live-data-completeness" :title="t('monitoring_data_completeness_help')">{{ t('data_completeness') }} {{ number(live?.data_completeness_percent) }}%</span></span></div>
     </article>
-    <details id="source-diagnostics" class="panel quality-panel">
+    <details id="source-diagnostics" class="panel quality-panel" @toggle="diagnosticsExpanded = ($event.target as HTMLDetailsElement).open">
       <summary><Radio :size="16" aria-hidden="true" />{{ t('diagnostics') }}</summary>
       <div class="panel-heading"><h2>{{ t('sensors') }}</h2></div>
+      <p v-if="diagnosticsError" id="source-diagnostics-error" class="muted" role="status">{{ t('ha_connection_failed') }}</p>
       <div class="table-scroll"><table><thead><tr><th>{{ t('source') }}</th><th>{{ t('value') }}</th><th>{{ t('time_since_last_report') }}</th></tr></thead>
-        <tbody id="source-rows"><tr v-for="source in snapshot?.sources ?? []" :key="source.entity_id"><td>{{ source.entity_id }}</td><td>{{ source.valid ? `${number(Number(source.state), 2)} ${source.unit ?? ''}` : t('unavailable') }}</td><td>{{ sourceAge(source.reported_at) }}</td></tr></tbody>
-        <tbody v-show="!snapshot?.sources.length" id="source-empty"><tr><td colspan="3" class="source-empty muted">{{ t('no_sensor_data') }}</td></tr></tbody>
+        <tbody id="source-rows"><tr v-for="source in diagnostics?.sources ?? []" :key="source.entity_id"><td>{{ source.entity_id }}</td><td>{{ source.valid ? `${number(Number(source.state), 2)} ${source.unit ?? ''}` : t('unavailable') }}</td><td>{{ sourceAge(source.reported_at) }}</td></tr></tbody>
+        <tbody v-show="!diagnostics?.sources.length" id="source-empty"><tr><td colspan="3" class="source-empty muted">{{ t('no_sensor_data') }}</td></tr></tbody>
       </table></div>
     </details>
   </section>

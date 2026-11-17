@@ -146,6 +146,11 @@ export interface ForecastView {
 export type ForecastSummary = Omit<ForecastView, 'days' | 'intervals'>;
 export interface ForecastRefreshResult { scheduled: boolean; status: ForecastView['status'] }
 
+export interface SourceDiagnostics {
+  observed_at: number | null;
+  sources: { entity_id: string; state: string; unit: string | null; reported_at: number | null; valid: boolean }[];
+}
+
 export interface Snapshot {
   configured: boolean;
   connected: boolean;
