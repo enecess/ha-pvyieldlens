@@ -103,6 +103,7 @@ export function plot(host: HTMLElement, data: ChartPoint[], series: ChartSeries[
   add('rect', { x: left, y: top, width: width - left - right, height: height - top - bottom }, undefined, clip);
   const drawing = add('g', { 'clip-path': `url(#${clipId})` });
   const stride = Math.max(1, Math.ceil(data.length / 600));
+  const singletonTargets: { point: ChartPoint; x: number }[] = [];
   series.forEach(item => {
     const runs: { at: number; value: number; point: ChartPoint }[][] = [];
     let run: typeof runs[number] = [];
@@ -129,7 +130,13 @@ export function plot(host: HTMLElement, data: ChartPoint[], series: ChartSeries[
         }
       }
       const vertices = sampled.map(point => ({ x: x(point.at), y: y(point.value) }));
-      if (vertices.length === 1) add('circle', { cx: vertices[0].x, cy: vertices[0].y, r: 3, fill: item.color, class: 'series-point' }, undefined, drawing);
+      if (vertices.length === 1) {
+        const vertex = vertices[0];
+        add('circle', { cx: vertex.x, cy: vertex.y, r: 3, fill: item.color, class: 'series-point' }, undefined, drawing);
+        if (vertex.x >= left && vertex.x <= width - right && vertex.y >= top && vertex.y <= height - bottom) {
+          singletonTargets.push({ point: points[0].point, x: vertex.x });
+        }
+      }
       const slopes = vertices.slice(1).map((point, index) => (point.y - vertices[index].y) / (point.x - vertices[index].x));
       const tangents = vertices.map((point, index) => {
         if (index === 0) return slopes[0];
@@ -229,14 +236,27 @@ export function plot(host: HTMLElement, data: ChartPoint[], series: ChartSeries[
   }, []);
   const inspect = (event: PointerEvent) => {
     const bounds = svg.getBoundingClientRect();
-    const at = start + Math.max(0, Math.min(1, ((event.clientX - bounds.left) * width / (bounds.width || width) - left) / (width - left - right))) * (end - start);
+    const scale = width / (bounds.width || width);
+    const pointerX = (event.clientX - bounds.left) * scale;
+    const at = start + Math.max(0, Math.min(1, (pointerX - left) / (width - left - right))) * (end - start);
     if (selection === 'interval') {
       show(data.find(point => point.interval && point.interval.start <= at && (at < point.interval.end || at === end && point.interval.end === end)), at);
       return;
     }
     const run = inspectionRuns.find(points => at >= (coverage === 'windows' ? points[0].window!.start : points[0].at) &&
       at <= (coverage === 'windows' ? points.at(-1)!.window!.end : points.at(-1)!.at));
-    show(run?.reduce((nearest, point) => Math.abs(point.at - at) < Math.abs(nearest.at - at) ? point : nearest), at);
+    const point = run?.reduce((nearest, point) => Math.abs(point.at - at) < Math.abs(nearest.at - at) ? point : nearest);
+    if (point && point.at >= start && point.at <= end && series.some(item => Number.isFinite(point[item.key]))) {
+      show(point);
+      return;
+    }
+    const tolerance = (event.pointerType === 'touch' ? 12 : 6) * scale;
+    const targets = singletonTargets.filter(target => Math.abs(target.x - pointerX) <= tolerance);
+    if (targets.length) {
+      show(targets.reduce((nearest, target) => Math.abs(target.x - pointerX) < Math.abs(nearest.x - pointerX) ? target : nearest).point);
+      return;
+    }
+    show(point, at);
   };
   const listeners = new AbortController();
   const events = { signal: listeners.signal };

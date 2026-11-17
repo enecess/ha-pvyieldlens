@@ -91,7 +91,7 @@ async def test_large_history_gzip_preserves_response_authentication_and_ingress(
     assert all('segments' not in row for row in plain.json()['windows'])
     assert plain.json()['requested_range'] == {'start': 0, 'end': 6000}
     assert plain.json()['summary'] == pytest.approx({'start': 0, 'end': 6000, 'estimated_energy_kwh': 6.2,
-                                                  'pr': 90, 'coverage_percent': 100, 'valid_seconds': 6000})
+                                                  'actual_energy_kwh': 5.58, 'pr': 90, 'coverage_percent': 100, 'valid_seconds': 6000})
     assert 'private-token' not in plain.text
     async with httpx.AsyncClient(transport=httpx.ASGITransport(app=ingress, client=('10.0.0.5', 123)), base_url='http://app') as client:
         assert (await client.get(path, headers={'Accept-Encoding': 'gzip'})).status_code == 403
@@ -479,7 +479,7 @@ async def test_history_summary_uses_committed_revisions_without_changing_monitor
         complete_body = complete.json()
         assert complete_body['requested_range'] == {'start': 0, 'end': 180.25}
         assert complete_body['summary'] == pytest.approx({'start': 0, 'end': 180,
-            'estimated_energy_kwh': 0.31, 'pr': 54, 'coverage_percent': 100, 'valid_seconds': 180})
+            'estimated_energy_kwh': 0.31, 'actual_energy_kwh': 0.1674, 'pr': 54, 'coverage_percent': 100, 'valid_seconds': 180})
         assert [row['revision'] for row in complete_body['windows']] == [1, 2, 2]
         assert [row['estimated_energy_wh'] for row in complete_body['windows']] == pytest.approx([62, 124, 124])
         partial = await client.get('/api/history?start=30.5&end=150.5', auth=auth)
@@ -488,11 +488,11 @@ async def test_history_summary_uses_committed_revisions_without_changing_monitor
         assert partial_body['requested_range'] == {'start': 30.5, 'end': 150.5}
         assert partial_body['windows'] == complete_body['windows']
         assert partial_body['summary'] == pytest.approx({'start': 60, 'end': 120,
-            'estimated_energy_kwh': 0.124, 'pr': 45, 'coverage_percent': 100, 'valid_seconds': 60})
+            'estimated_energy_kwh': 0.124, 'actual_energy_kwh': 0.0558, 'pr': 45, 'coverage_percent': 100, 'valid_seconds': 60})
         empty = await client.get('/api/history?start=30.5&end=50.5', auth=auth)
         assert len(empty.json()['windows']) == 1
         assert empty.json()['summary'] == {'start': None, 'end': None, 'estimated_energy_kwh': None,
-                                         'pr': None, 'coverage_percent': None, 'valid_seconds': 0}
+                                         'actual_energy_kwh': None, 'pr': None, 'coverage_percent': None, 'valid_seconds': 0}
         assert (await client.get('/api/history?start=60&end=60', auth=auth)).status_code == 422
         assert (await client.get('/api/history?start=nan&end=180', auth=auth)).status_code == 422
         assert (await client.get('/api/history?start=0&end=inf', auth=auth)).status_code == 422
@@ -503,6 +503,65 @@ async def test_history_summary_uses_committed_revisions_without_changing_monitor
     assert {name: after_payloads['sensor.pvyieldlens_' + name] for name in original_ids} == original_payloads
     assert after['energy']['total_kwh'] == pytest.approx(0.31)
     assert after['statistics']['pr'] == pytest.approx(45)
+
+
+@pytest.mark.parametrize('period,count', [('today', 0), ('24h', 0), ('7d', 7), ('30d', 30)])
+async def test_history_presets_use_service_timezone_and_consistent_settlement(service, monkeypatch, period, count):
+    from test_history import settle_cross_midnight
+
+    start, midnight, end = settle_cross_midnight(service.store)
+    service.config = settings(timezone='Asia/Shanghai')
+    monkeypatch.setattr('pvyieldlens.web.time.time', lambda: end)
+    before = service.snapshot(end)
+    original = service.store.history(start, end)
+    app = create_app(service, Runtime(web_password='test-pass'), run_background=False)
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url='http://app') as client:
+        assert (await client.get('/api/history?period=' + period)).status_code == 401
+        response = await client.get('/api/history?period=' + period, auth=('admin', 'test-pass'))
+        assert response.status_code == 200
+        body = response.json()
+        assert body['period'] == period
+        assert body['timezone'] == 'Asia/Shanghai'
+        assert body['today'] == '2026-11-11'
+        assert body['requested_range']['end'] == end
+        assert body['boundary_unavailable'] is False
+        assert len(body['days']) == count
+        assert body['summary']['actual_energy_kwh'] == pytest.approx(0.06 if period == 'today' else 0.07)
+        if period == 'today':
+            assert body['requested_range']['start'] == midnight
+            assert body['windows'][0]['source_start'] == start
+    assert service.store.history(start, end) == original
+    assert service.snapshot(end) == before
+
+
+@pytest.mark.parametrize('query', [
+    '', 'period=week', 'period=', 'period=today&start=0&end=60', 'period=7d&start=0', 'period=30d&end=60',
+    'start=0', 'end=60', 'start=-1&end=60', 'start=60&end=60', 'start=70&end=60',
+    'start=nan&end=60', 'start=0&end=inf', 'start=0&end=7776001', 'start=oops&end=60',
+])
+async def test_history_rejects_mixed_missing_or_invalid_parameters(service, query):
+    app = create_app(service, Runtime(web_password='test-pass'), run_background=False)
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url='http://app',
+                                 auth=('admin', 'test-pass')) as client:
+        assert (await client.get('/api/history?' + query)).status_code == 422
+
+
+async def test_numeric_history_and_snapshot_hide_internal_cross_day_allocations(service):
+    from test_history import settle_cross_midnight
+
+    start, midnight, end = settle_cross_midnight(service.store)
+    app = create_app(service, Runtime(web_password='test-pass'), run_background=False)
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url='http://app',
+                                 auth=('admin', 'test-pass')) as client:
+        response = await client.get(f'/api/history?start={midnight}&end={end}')
+        body = response.json()
+        assert set(body) == {'windows', 'summary', 'requested_range'}
+        assert body['windows'][0]['start'] == start
+        assert body['summary']['actual_energy_kwh'] is None
+        assert 'day_allocations' not in response.text
+        assert 'source_start' not in response.text
+        assert 'day_allocations' not in service.snapshot(end)['statistics']
+        assert service.store.latest_window() == body['windows'][0]
 
 
 async def test_snapshot_refreshes_active_location_with_forecast_disabled(service):

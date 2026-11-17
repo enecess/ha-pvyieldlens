@@ -64,11 +64,12 @@ export interface WindowResult {
   reason: string | null;
 }
 
-export interface HistoryWindow extends WindowResult { revision: number }
+export interface HistoryWindow extends WindowResult { revision: number; source_start?: number; source_end?: number }
 export interface HistorySummary {
   start: number | null;
   end: number | null;
   estimated_energy_kwh: number | null;
+  actual_energy_kwh: number | null;
   pr: number | null;
   coverage_percent: number | null;
   valid_seconds: number;
@@ -77,6 +78,22 @@ export interface HistoryResponse {
   windows: HistoryWindow[];
   summary: HistorySummary;
   requested_range: { start: number; end: number };
+}
+export type HistoryPeriod = 'today' | '24h' | '7d' | '30d';
+export interface HistoryDay {
+  day: string;
+  start: number;
+  end: number;
+  summary: HistorySummary;
+  in_progress: boolean;
+  boundary_unavailable: boolean;
+}
+export interface HistoryView extends HistoryResponse {
+  period: HistoryPeriod;
+  timezone: string;
+  today: string;
+  boundary_unavailable: boolean;
+  days: HistoryDay[];
 }
 
 export interface LiveHistoryResponse {

@@ -1,11 +1,166 @@
+import json
 import os
 import re
+import time
+from datetime import datetime, timezone
 from pathlib import Path
 
 import pytest
+from urllib.parse import parse_qs, urlsplit
+from history_fixtures import history_payload
 from test_browser import browser_workspace
+from test_forecast_browser import forecast_page
 
 pytestmark = pytest.mark.skipif(os.getenv('PVYL_BROWSER_TESTS') != '1', reason='Set PVYL_BROWSER_TESTS=1')
+
+
+@pytest.mark.parametrize('scenario,chart_id,zero', [
+    ('history-single', 'history-chart', False), ('history-single', 'pr-chart', True),
+    ('history-isolated', 'history-chart', True), ('history-isolated', 'pr-chart', False),
+    ('live-single', 'live-chart', False), ('live-isolated', 'live-chart', True),
+])
+@pytest.mark.parametrize('touch', [False, True], ids=['mouse', 'touch'])
+async def test_singleton_glyph_pixel_picking(browser_workspace, scenario, chart_id, zero, touch):
+    from playwright.async_api import expect
+
+    page, service, _ = browser_workspace
+    await page.set_viewport_size({'width': 1440, 'height': 1000})
+    now = int(time.time())
+    endpoint = now - 180
+    await service.configure(service.config.model_copy(update={'update_seconds': 60}))
+    record = {'start': endpoint - 60, 'end': endpoint, 'valid_seconds': 60,
+              'estimated_power': 4400, 'actual_power': 0 if zero else 3885.2,
+              'pr': 0 if zero else 88.3, 'optimizable_power': 4400 if zero else 514.8,
+              'coverage_percent': 100, 'estimated_energy_wh': 4400 / 60,
+              'actual_energy_wh': 0 if zero else 3885.2 / 60,
+              'quality': 'complete', 'reason': None, 'revision': service.store.revision}
+    records = [record]
+    if scenario.endswith('isolated'):
+        records = [{**record, 'start': endpoint - 420, 'end': endpoint - 360},
+                   {**record, 'start': endpoint - 360, 'end': endpoint - 300}, record,
+                   {**record, 'start': endpoint + 120, 'end': endpoint + 180}]
+
+    async def snapshot(route):
+        result = service.snapshot(now=now)
+        result.update(connected=True, calculated_at=endpoint, realtime=record, statistics=record)
+        await route.fulfill(json=result)
+
+    async def history(route):
+        await route.fulfill(json=history_payload(records, {'start': records[0]['start'], 'end': records[-1]['end'],
+                        'actual_energy_kwh': record['actual_energy_wh'] / 1000,
+                        'estimated_energy_kwh': record['estimated_energy_wh'] / 1000,
+                        'pr': record['pr'], 'coverage_percent': 100, 'valid_seconds': 60},
+            {'start': now - 86400, 'end': now}, parse_qs(urlsplit(route.request.url).query).get('period', ['today'])[0]))
+
+    async def live(route):
+        await route.fulfill(json={
+            'configured': True, 'recovering': False, 'range': {'start': now - 600, 'end': now},
+            'step_seconds': 60, 'context': {'revision': service.store.revision,
+                                          'settings': service.config.model_dump()},
+            'points': [{'at': point['end'], **point} for point in records],
+        })
+
+    url = page.url
+    touch_context = None
+    if touch:
+        touch_context = await page.context.browser.new_context(has_touch=True, viewport={'width': 1440, 'height': 1000},
+            http_credentials={'username': 'admin', 'password': 'browser-test'})
+        page = await touch_context.new_page()
+    await page.route('**/api/snapshot', snapshot)
+    await page.route('**/api/history?*', history)
+    await page.route('**/api/live-history', live)
+    await page.clock.set_fixed_time(datetime.fromtimestamp(now, timezone.utc))
+    await page.goto(url)
+    if chart_id != 'live-chart':
+        await page.locator('#history-tab').click()
+    chart = page.locator(f'#{chart_id}')
+    hit = chart.locator('.chart-hit-area')
+    await expect(chart.locator('.series-point').first).to_be_visible()
+    await chart.scroll_into_view_if_needed()
+    box = await hit.bounding_box()
+    start = float(await hit.get_attribute('aria-valuemin'))
+    end = float(await hit.get_attribute('aria-valuemax'))
+    target = box['x'] + (endpoint - start) / (end - start) * box['width']
+    dots = await chart.locator('.series-point').evaluate_all('''nodes => nodes.map(node => {
+        const box = node.getBoundingClientRect();
+        return {x: box.x + box.width / 2, y: box.y + box.height / 2};
+    })''')
+    dot = min(dots, key=lambda point: abs(point['x'] - target))
+    reads = []
+    tip = chart.locator('.chart-tooltip')
+    pointer_y = min(box['y'] + box['height'] - 1, max(box['y'] + 1, dot['y']))
+
+    async def inspect(offset):
+        if touch:
+            await page.touchscreen.tap(target + offset, pointer_y)
+        else:
+            await page.mouse.move(0, 0)
+            await page.mouse.move(target + offset, pointer_y)
+        await expect(tip).to_be_visible()
+        reads.append({'offset_css_px': offset, 'text': await tip.inner_text(),
+                      'at': float(await hit.get_attribute('aria-valuenow')),
+                      'markers': await chart.locator('.active-series-marker[visibility=visible]').count()})
+
+    # The explicit settlement range puts a single History point on the right edge.
+    edge_single = scenario == 'history-single'
+    offsets = ([-1, -11] if touch else [-1, -5]) if edge_single else ([1, 11] if touch else [1, 5])
+    if not edge_single and target - 1 > box['x']:
+        offsets.insert(0, -1)
+    for offset in offsets:
+        await inspect(offset)
+    if not edge_single:
+        await inspect(13 if touch else 7)
+    await hit.focus()
+    await page.keyboard.press('ArrowLeft')
+    keyboard = await tip.inner_text()
+    keyboard_at = float(await hit.get_attribute('aria-valuenow'))
+    await page.keyboard.press('ArrowLeft')
+    evidence = Path('artifacts/history-daily-singleton')
+    evidence.mkdir(parents=True, exist_ok=True)
+    stem = f'{scenario}-{chart_id}-{"touch" if touch else "mouse"}'
+    report = {'target': dot, 'axis': [start, end], 'reads': reads, 'keyboard': keyboard, 'keyboard_at': keyboard_at,
+              'previous_keyboard_at': float(await hit.get_attribute('aria-valuenow'))}
+    (evidence / f'{stem}.json').write_text(json.dumps(report, indent=2), encoding='utf-8')
+    await page.screenshot(path=str(evidence / f'{stem}.png'))
+    print(stem, json.dumps(report))
+    if touch_context:
+        await touch_context.close()
+    for read in (reads if edge_single else reads[:-1]):
+        assert read['at'] == endpoint, read
+        assert read['markers'] == (1 if chart_id == 'pr-chart' else 2), read
+        assert ('0 W' if zero else '3,885.2 W') in read['text'], read
+        assert ('0 %' if zero else '88.3 %') in read['text'], read
+    if not edge_single:
+        assert reads[-1]['markers'] == 0, reads[-1]
+        assert 'Unavailable' in reads[-1]['text'], reads[-1]
+    assert ('0 W' if zero else '3,885.2 W') in keyboard
+    assert keyboard_at == (endpoint if len(records) == 1 else endpoint + 180)
+    assert report['previous_keyboard_at'] == endpoint
+
+
+async def test_single_forecast_row_keeps_hourly_interval_selection(forecast_page):
+    from playwright.async_api import expect
+
+    page, state, _ = forecast_page
+    row = state['view']['intervals'][12]
+    state['view']['intervals'] = [row]
+    state['view']['days'] = state['view']['days'][:1]
+    await page.locator('#forecast-tab').click()
+    chart = page.locator('#forecast-chart')
+    hit = chart.locator('.chart-hit-area')
+    await expect(hit).to_be_visible()
+    await chart.scroll_into_view_if_needed()
+    box = await hit.bounding_box()
+    start = float(await hit.get_attribute('aria-valuemin'))
+    end = float(await hit.get_attribute('aria-valuemax'))
+    reads = []
+    for at in [row['start'] + 60, row['end'] - 60, row['end'] + 60]:
+        await page.mouse.move(box['x'] + (at - start) / (end - start) * box['width'], box['y'] + 3)
+        reads.append({'at': at, 'text': await chart.locator('.chart-tooltip').inner_text(),
+                      'markers': await chart.locator('.active-series-marker[visibility=visible]').count()})
+    print('forecast-single-interval', json.dumps(reads))
+    assert all(read['markers'] == 1 and '3,720 W' in read['text'] for read in reads[:2])
+    assert reads[-1]['markers'] == 0 and 'Unavailable' in reads[-1]['text']
 
 
 @pytest.fixture
@@ -25,14 +180,56 @@ async def chart_page(browser_workspace):
                     'coverage_percent': 100 if value is not None else 0,
                     'quality': 'complete' if value is not None else 'unavailable', 'reason': None, 'revision': 1}
                    for index, (end, value) in enumerate(zip(ends, state['values']))]
-        await route.fulfill(json={'windows': windows, 'requested_range': {'start': 0, 'end': ends[-1]},
-                                 'summary': {'start': 0, 'end': ends[-1], 'estimated_energy_kwh': 0.005,
-                                             'pr': 125, 'coverage_percent': 100, 'valid_seconds': 900}})
+        await route.fulfill(json=history_payload(windows,
+            {'start': 0, 'end': ends[-1], 'estimated_energy_kwh': 0.005, 'actual_energy_kwh': 0.005,
+             'pr': 125, 'coverage_percent': 100, 'valid_seconds': 900},
+            {'start': 0, 'end': ends[-1]}, parse_qs(urlsplit(route.request.url).query).get('period', ['today'])[0]))
 
     await page.route('**/api/history?*', history)
     await page.locator('#history-tab').click()
     await expect(page.locator('#history-chart svg')).to_be_visible()
     return page, state
+
+
+@pytest.mark.parametrize('touch', [False, True], ids=['mouse', 'touch'])
+async def test_covered_continuous_run_precedes_overlapping_singleton(chart_page, touch):
+    from playwright.async_api import expect
+
+    page, state = chart_page
+    await page.set_viewport_size({'width': 1200, 'height': 1000})
+    state.update(ends=[40, 45, 46, 1040], starts=[0, 44, 45, 1000], values=[10, 20, 30, None])
+    await page.locator('#history-range').select_option('24h')
+    await expect(page.locator('#history-chart .chart-hit-area')).to_have_attribute('aria-valuemax', '1040')
+    touch_context = None
+    if touch:
+        payload = await page.evaluate("fetch('api/history?start=0&end=2000').then(response => response.json())")
+        touch_context = await page.context.browser.new_context(has_touch=True, viewport={'width': 1200, 'height': 1000},
+            http_credentials={'username': 'admin', 'password': 'browser-test'})
+        viewer = await touch_context.new_page()
+        await viewer.route('**/api/history?*', lambda route: route.fulfill(json=payload))
+        await viewer.goto(page.url)
+        page = viewer
+        await page.locator('#history-tab').click()
+    chart = page.locator('#history-chart')
+    hit = chart.locator('.chart-hit-area')
+    await expect(hit).to_have_attribute('aria-valuemax', '1040')
+    await chart.scroll_into_view_if_needed()
+    box = await hit.bounding_box()
+    pointer_x = box['x'] + 45.1 / 1040 * box['width']
+    if touch:
+        await page.touchscreen.tap(pointer_x, box['y'] + 3)
+    else:
+        await page.mouse.move(pointer_x, box['y'] + 3)
+    tip = chart.locator('.chart-tooltip')
+    await expect(tip).to_be_visible()
+    result = {'singleton_distance_css_px': pointer_x - (box['x'] + 40 / 1040 * box['width']),
+              'at': float(await hit.get_attribute('aria-valuenow')), 'text': await tip.inner_text()}
+    print('covered-run-overlap', 'touch' if touch else 'mouse', json.dumps(result))
+    if touch_context:
+        await touch_context.close()
+    assert result['singleton_distance_css_px'] < 6
+    assert result['at'] == 45, result
+    assert '20 W' in result['text'], result
 
 
 async def test_curve_is_bounded_between_samples(chart_page):
@@ -42,7 +239,7 @@ async def test_curve_is_bounded_between_samples(chart_page):
     geometry = await page.locator('#history-chart').evaluate('''host => {
         const path = host.querySelector('path.series');
         const points = [0, 80, 100, 20, 0].map((value, index) => ({
-            x: 48 + ([60,180,360,660,900][index] - 60) / 840 * (host.clientWidth - 60),
+            x: 48 + [60,180,360,660,900][index] / 900 * (host.clientWidth - 60),
             y: 16 + (110 - value) / 110 * (host.clientHeight - 50)
         }));
         const samples = Array.from({length: 2001}, (_, index) => {
@@ -59,11 +256,11 @@ async def test_curve_is_bounded_between_samples(chart_page):
         assert any(min(left['y'], right['y']) - 0.05 <= sample['y'] <= max(left['y'], right['y']) + 0.05
                    for left, right in pairs), sample
     state['values'][2] = None
-    await page.locator('#history-range').select_option('7')
+    await page.locator('#history-range').select_option('24h')
     await expect(page.locator('#history-chart path.series').first).not_to_have_attribute('d', geometry['curve'])
     gap = await page.locator('#history-chart').evaluate('''host => {
         const path = host.querySelector('path.series');
-        const x = at => 48 + (at - 60) / 840 * (host.clientWidth - 60);
+        const x = at => 48 + at / 900 * (host.clientWidth - 60);
         return {start: x(180), end: x(660), samples: Array.from({length: 1001}, (_, i) =>
             path.getPointAtLength(path.getTotalLength() * i / 1000).x)};
     }''')
@@ -78,17 +275,17 @@ async def test_tooltip_works_away_from_the_line(chart_page):
     area = chart.locator('.chart-hit-area')
     await expect(area).to_be_visible()
     box = await area.bounding_box()
-    await page.mouse.move(box['x'] + box['width'] * 120 / 840, box['y'] + 3)
+    await page.mouse.move(box['x'] + box['width'] * 180 / 900, box['y'] + 3)
     tooltip = chart.locator('.chart-tooltip')
     await expect(tooltip).to_contain_text('80 W')
     await expect(tooltip).to_contain_text('125 %')
     await expect(chart.locator('.active-series-marker')).to_have_count(2)
     svg = await chart.locator('svg').evaluate("node => node.dataset.original = 'inspect'")
     state['values'][2] = None
-    await page.locator('#history-range').select_option('7')
+    await page.locator('#history-range').select_option('24h')
     await expect(chart.locator('svg')).not_to_have_attribute('data-original', svg)
     box = await area.bounding_box()
-    await page.mouse.move(box['x'] + box['width'] * 300 / 840, box['y'] + box['height'] - 3)
+    await page.mouse.move(box['x'] + box['width'] * 360 / 900, box['y'] + box['height'] - 3)
     await expect(tooltip).to_contain_text('Unavailable')
     await expect(tooltip).to_contain_text('— W')
     assert await chart.locator('.active-series-marker:visible').count() == 0
@@ -103,18 +300,18 @@ async def test_missing_settlement_gap_is_unavailable_but_valid_edges_remain_insp
 
     page, state = chart_page
     state['starts'] = [0, 60, 300, 600, 660]
-    await page.locator('#history-range').select_option('7')
+    await page.locator('#history-range').select_option('24h')
     chart = page.locator('#history-chart')
     await expect(chart.locator('path.series').first).to_have_attribute('d', re.compile(r'^M[^M]+M[^M]+M[^M]+$'))
     box = await chart.locator('.chart-hit-area').bounding_box()
     tooltip = chart.locator('.chart-tooltip')
-    await page.mouse.move(box['x'] + (240 - 60) / 840 * box['width'], box['y'] + 3)
+    await page.mouse.move(box['x'] + 240 / 900 * box['width'], box['y'] + 3)
     await expect(tooltip).to_contain_text('Unavailable')
     await expect(tooltip).to_contain_text('— W')
     assert await chart.locator('.active-series-marker[visibility=visible]').count() == 0
     # Mouse coordinates round to subpixels; exact interval boundaries are unit-tested.
     for at, value in [(179.9, '80 W'), (300.1, '100 W'), (359.9, '100 W'), (600.1, '20 W')]:
-        await page.mouse.move(box['x'] + (at - 60) / 840 * box['width'], box['y'] + 3)
+        await page.mouse.move(box['x'] + at / 900 * box['width'], box['y'] + 3)
         await expect(tooltip).to_contain_text(value)
         await expect(tooltip).to_contain_text('Data complete')
 
@@ -125,21 +322,21 @@ async def test_inspection_reads_original_thinned_record(chart_page):
     page, state = chart_page
     state['ends'] = list(range(1, 1202))
     state['values'] = [index if index != 502 else 0 for index in range(1201)]
-    await page.locator('#history-range').select_option('7')
+    await page.locator('#history-range').select_option('24h')
     chart = page.locator('#history-chart')
     await expect(chart.locator('.chart-hit-area')).to_be_visible()
     # The zero at index 502 is omitted from the displayed sample. Geometry there
     # follows its neighboring retained values, while inspection must still return zero.
     await page.wait_for_function("document.querySelector('#history-chart .chart-hit-area').getAttribute('aria-valuemax') === '1201'")
     displayed_power = await chart.evaluate('''host => {
-        const path = host.querySelector('path.series'), target = 48 + 502 / 1200 * (host.clientWidth - 60);
+        const path = host.querySelector('path.series'), target = 48 + 503 / 1201 * (host.clientWidth - 60);
         const samples = Array.from({length: 10001}, (_, index) => path.getPointAtLength(path.getTotalLength() * index / 10000));
         const point = samples.reduce((nearest, point) => Math.abs(point.x - target) < Math.abs(nearest.x - target) ? point : nearest);
         return 1320 - (point.y - 16) / (host.clientHeight - 50) * 1320;
     }''')
     assert displayed_power > 400
     box = await chart.locator('.chart-hit-area').bounding_box()
-    await page.mouse.move(box['x'] + 502 / 1200 * box['width'], box['y'] + 3)
+    await page.mouse.move(box['x'] + 503 / 1201 * box['width'], box['y'] + 3)
     await expect(chart.locator('.chart-tooltip')).to_contain_text('0 W')
 
 

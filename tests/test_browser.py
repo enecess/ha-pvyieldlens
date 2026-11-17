@@ -37,7 +37,7 @@ async def test_settings_leave_cancel_and_discard(browser_workspace):
 
     page, service, _ = browser_workspace
     await page.locator('#history-tab').click()
-    await page.locator('#history-range').select_option('7')
+    await page.locator('#history-range').select_option('7d')
     await page.locator('#settings-button').click()
     await page.locator('button[data-settings-category=panels]').click()
     await page.locator('[name=rated_power_w]').fill('6100')
@@ -61,7 +61,7 @@ async def test_settings_leave_cancel_and_discard(browser_workspace):
     await page.locator('#history-tab').click()
     await page.locator('#discard-changes').click()
     await expect(page.locator('#history-page')).to_be_visible()
-    await expect(page.locator('#history-range')).to_have_value('7')
+    await expect(page.locator('#history-range')).to_have_value('7d')
     assert service.config.rated_power_w == 5000
     await page.locator('#settings-button').click()
     await expect(page.locator('[name=rated_power_w]')).to_have_value('5000')
@@ -129,7 +129,7 @@ async def test_data_pages_and_gear_settings_preserve_context(browser_workspace):
     await expect(page.locator('#forecast-page')).to_be_hidden()
     assert history_requests == []
     await page.locator('#history-tab').click()
-    await page.locator('#history-range').select_option('7')
+    await page.locator('#history-range').select_option('7d')
     await page.locator('#settings-button').click()
     await expect(page.locator('#settings-page')).to_be_visible()
     await expect(page.locator('#data-navigation')).to_be_visible()
@@ -148,7 +148,7 @@ async def test_data_pages_and_gear_settings_preserve_context(browser_workspace):
     await expect(page.locator('#ha-token')).to_have_value('')
     await expect(page.locator('#save-button')).to_be_disabled()
     await page.locator('#history-tab').click()
-    await expect(page.locator('#history-range')).to_have_value('7')
+    await expect(page.locator('#history-range')).to_have_value('7d')
     await page.locator('#forecast-tab').click()
     await expect(page.locator('#forecast-page')).to_be_visible()
     await expect(page.locator('#live-page')).to_be_hidden()
@@ -163,7 +163,7 @@ async def test_french_tablet_settings_returns_to_selected_history_range(browser_
     await page.set_viewport_size({'width': width, 'height': 844})
     await page.locator('#language-select').select_option('fr')
     await page.locator('#history-tab').click()
-    await page.locator('#history-range').select_option('7')
+    await page.locator('#history-range').select_option('7d')
     await page.locator('#settings-button').click()
     await expect(page.locator('#settings-page')).to_be_visible()
     await expect(page.locator('#data-navigation')).to_be_visible()
@@ -174,7 +174,7 @@ async def test_french_tablet_settings_returns_to_selected_history_range(browser_
     await expect(page.locator('#save-button')).to_be_disabled()
     await page.locator('#history-tab').click()
     await expect(page.locator('#history-page')).to_be_visible()
-    await expect(page.locator('#history-range')).to_have_value('7')
+    await expect(page.locator('#history-range')).to_have_value('7d')
     assert await page.evaluate('scrollX') == 0
 
 
@@ -867,7 +867,10 @@ async def test_settings_forecast_geometry_bounds_and_numeric_equivalence(browser
 
 
 @pytest.mark.parametrize('superseded_result', ['success', 'error'])
-async def test_history_rejects_superseded_range_responses(browser_workspace, superseded_result):
+async def test_history_rejects_superseded_range_responses(browser_workspace, superseded_result, monkeypatch):
+    from types import SimpleNamespace
+    import pvyieldlens.web as web_module
+    import pvyieldlens.service as service_module
     from urllib.parse import parse_qs, urlsplit
     from playwright.async_api import expect
     from test_engine import samples
@@ -879,11 +882,14 @@ async def test_history_rejects_superseded_range_responses(browser_workspace, sup
     for start, end, power in [(first, first+60, 2000), (first+60, recent, None), (recent, recent+60, 1000)]:
         service.store.settle(calculate(service.config, samples(power=power, at=start) if power is not None else [],
                                       start, end), 1, 'UTC')
+    clock = SimpleNamespace(time=lambda: recent+120)
+    monkeypatch.setattr(web_module, 'time', clock)
+    monkeypatch.setattr(service_module, 'time', clock)
     await page.evaluate('now => Date.now = () => now', (recent+120)*1000)
     await expect(page.locator('#last-settled')).not_to_contain_text('—')
     await page.locator('#history-tab').click()
     await expect(page.locator('#history-energy')).to_have_text('0.062')
-    await page.locator('#history-range').select_option('7')
+    await page.locator('#history-range').select_option('7d')
     await expect(page.locator('#history-energy')).to_have_text('0.124')
 
     older_requested = asyncio.Event()
@@ -892,9 +898,9 @@ async def test_history_rejects_superseded_range_responses(browser_workspace, sup
 
     async def history(route):
         query = parse_qs(urlsplit(route.request.url).query)
-        days = round((float(query['end'][0]) - float(query['start'][0])) / 86400)
+        period = query['period'][0]
         response = await route.fetch()
-        if days == 30:
+        if period == '30d':
             older_requested.set()
             await release_older.wait()
             if superseded_result == 'error':
@@ -906,14 +912,14 @@ async def test_history_rejects_superseded_range_responses(browser_workspace, sup
             await route.fulfill(response=response)
 
     await page.route('**/api/history?*', history)
-    await page.locator('#history-range').select_option('30')
+    await page.locator('#history-range').select_option('30d')
     await asyncio.wait_for(older_requested.wait(), timeout=5)
-    await page.locator('#history-range').select_option('1')
+    await page.locator('#history-range').select_option('24h')
     await expect(page.locator('#history-energy')).to_have_text('0.062')
     release_older.set()
     await asyncio.wait_for(older_completed.wait(), timeout=5)
     await page.evaluate('() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))')
-    assert await page.locator('#history-range').input_value() == '1'
+    assert await page.locator('#history-range').input_value() == '24h'
     assert await page.locator('#history-energy').inner_text() == '0.062'
     assert await page.locator('#history-page .banner').count() == 0
     await page.locator('#history-chart .chart-hit-area').focus()
@@ -923,7 +929,10 @@ async def test_history_rejects_superseded_range_responses(browser_workspace, sup
     await expect(page.locator('#history-chart .chart-tooltip')).to_contain_text('1,000 W')
 
 
-async def test_rolling_history_refreshes_only_when_complete_window_membership_changes(tmp_path):
+async def test_rolling_history_refreshes_only_when_complete_window_membership_changes(tmp_path, monkeypatch):
+    from types import SimpleNamespace
+    import pvyieldlens.web as web_module
+    import pvyieldlens.service as service_module
     from playwright.async_api import async_playwright, expect
     from test_engine import samples, settings
     from test_integration import fake_server
@@ -934,6 +943,9 @@ async def test_rolling_history_refreshes_only_when_complete_window_membership_ch
 
     service = Service(Store(tmp_path / 'data.sqlite'))
     now = int(time.time())
+    clock = SimpleNamespace(time=lambda: now)
+    monkeypatch.setattr(web_module, 'time', clock)
+    monkeypatch.setattr(service_module, 'time', clock)
     start = now - 86400
     config = settings(interval_minutes=1, update_seconds=1)
     await service.configure(config, now=start)
@@ -952,6 +964,7 @@ async def test_rolling_history_refreshes_only_when_complete_window_membership_ch
         page.on('pageerror', lambda error: errors.append(str(error)))
 
         async def advance_clock(seconds):
+            clock.time = lambda: now+seconds
             await page.evaluate('now => { window.testNow = now; }', (now+seconds)*1000)
             async with page.expect_response(lambda response: response.url.endswith('/api/snapshot')):
                 pass
@@ -964,6 +977,7 @@ async def test_rolling_history_refreshes_only_when_complete_window_membership_ch
         # Wait for the initial snapshot to seed the history statistics key.
         await expect(page.locator('#last-settled')).not_to_contain_text('—')
         await page.locator('#history-tab').click()
+        await page.locator('#history-range').select_option('24h')
         await expect(page.locator('#history-chart svg')).to_be_visible()
         charts = page.locator('#history-chart svg, #pr-chart svg')
         await charts.evaluate_all("charts => charts.forEach(chart => chart.dataset.original = 'initial')")
@@ -1001,11 +1015,11 @@ async def test_rolling_history_refreshes_only_when_complete_window_membership_ch
         assert len(history_requests) == initial_requests + 2
 
         async with page.expect_response(lambda response: '/api/history?' in response.url):
-            await page.locator('#history-range').select_option('7')
+            await page.locator('#history-range').select_option('7d')
         await expect(charts).to_have_count(2)
         await charts.evaluate_all("charts => charts.forEach(chart => chart.dataset.original = 'hidden')")
         await page.locator('#settings-button').click()
-        await advance_clock(6*86400+180)
+        await advance_clock(7*86400+180)
         assert len(history_requests) == initial_requests+3
         assert await charts.evaluate_all('charts => charts.map(chart => chart.dataset.original)') == ['hidden', 'hidden']
         async with page.expect_response(lambda response: '/api/history?' in response.url):

@@ -152,7 +152,7 @@ async def test_content_empty_gutter_matches_background_and_scrolled_header_stays
     scrolled_height = min(height, 1000)
     await page.set_viewport_size({'width': width, 'height': scrolled_height})
     await page.locator('#history-tab').click()
-    await page.locator('#history-totals').evaluate('node => node.open = true')
+    await expect(page.locator('#history-totals')).to_have_count(0)
     await page.locator('#content-scroll').evaluate('node => node.scrollTo(0, node.scrollHeight)')
     await page.wait_for_function("document.querySelector('#content-scroll').scrollTop > 0")
     scrolled = await page.evaluate('''() => {
@@ -433,7 +433,10 @@ async def test_settings_mobile_categories_and_long_locale_fit(layout_page, layou
     await page.screenshot(path=str(layout_artifacts / f'history-{width}-{language}.png'))
 
 
-async def test_history_summary_and_charts_share_range(layout_page, layout_artifacts):
+async def test_history_summary_and_charts_share_range(layout_page, layout_artifacts, monkeypatch):
+    from types import SimpleNamespace
+    import pvyieldlens.web as web_module
+    import pvyieldlens.service as service_module
     from playwright.async_api import expect
     from test_engine import samples
     from pvyieldlens.engine import calculate
@@ -444,13 +447,17 @@ async def test_history_summary_and_charts_share_range(layout_page, layout_artifa
     for offset, power in [(0, 1000), (60, 2000), (120, 3000)]:
         service.store.settle(calculate(service.config, samples(power=power, at=start+offset),
                                       start+offset, start+offset+60), 1, 'UTC')
+    clock = SimpleNamespace(time=lambda: now)
+    monkeypatch.setattr(web_module, 'time', clock)
+    monkeypatch.setattr(service_module, 'time', clock)
     await page.evaluate('now => Date.now = () => now', now * 1000)
     async with page.expect_response(lambda response: response.url.endswith('/api/snapshot')):
         pass
-    async with page.expect_response(lambda response: '/api/history?' in response.url) as response:
+    async with page.expect_response(lambda response: '/api/history?period=24h' in response.url) as response:
         await page.locator('#history-tab').click()
+        await page.locator('#history-range').select_option('24h')
     payload = await (await response.value).json()
-    assert len(payload['windows']) == 3
+    assert len(payload['windows']) == 2
     assert payload['summary']['estimated_energy_kwh'] == pytest.approx(0.124)
     await expect(page.locator('#history-energy')).to_have_text('0.124')
     await expect(page.locator('#history-pr')).to_have_text('67.2')
@@ -487,16 +494,16 @@ async def test_history_summary_and_charts_share_range(layout_page, layout_artifa
     await page.locator('#history-tab').click()
     await expect(page.locator('#history-chart svg')).not_to_have_attribute('data-original', 'hidden')
     await page.locator('#language-select').select_option('en')
-    await page.locator('#history-totals').evaluate('node => node.open = true')
-    total = await page.locator('#total-energy').inner_text()
+    await expect(page.locator('#history-totals')).to_have_count(0)
+    total = service.snapshot(now=now)['energy']['total_kwh']
     async with page.expect_response(lambda response: '/api/history?' in response.url):
-        await page.locator('#history-range').select_option('7')
+        await page.locator('#history-range').select_option('7d')
     await expect(page.locator('#history-energy')).to_have_text('0.186')
     await page.locator('#history-chart .chart-hit-area').focus()
     await page.keyboard.press('ArrowRight')
     await expect(page.locator('#history-chart .chart-tooltip')).to_contain_text('1,000 W')
     assert await page.locator('#history-chart path.series').first.evaluate('path => path.getTotalLength()') > 0
-    await expect(page.locator('#total-energy')).to_have_text(total)
+    assert service.snapshot(now=now)['energy']['total_kwh'] == total
     await page.screenshot(path=str(layout_artifacts / 'history-populated-desktop.png'), full_page=True)
     await page.locator('#live-tab').click()
     await expect(page.locator('#history-chart svg')).to_be_hidden()
@@ -632,12 +639,12 @@ async def test_live_readings_keep_polling_while_configuring(layout_page, layout_
     assert light_colors['grid'] != dark_colors['grid']
     await expect(page.locator('#live-chart path.series').nth(1)).to_have_attribute('d', curve)
     await page.locator('#history-tab').click()
-    await page.locator('#history-range').select_option('7')
+    await page.locator('#history-range').select_option('7d')
     await page.locator('#theme-select').select_option('light')
-    await expect(page.locator('#history-range')).to_have_value('7')
+    await expect(page.locator('#history-range')).to_have_value('7d')
     await page.locator('#settings-button').click()
     await page.locator('#history-tab').click()
-    await expect(page.locator('#history-range')).to_have_value('7')
+    await expect(page.locator('#history-range')).to_have_value('7d')
     await page.locator('#live-tab').click()
     await expect(page.locator('#live-chart path.series').nth(1)).to_have_attribute('d', curve)
 

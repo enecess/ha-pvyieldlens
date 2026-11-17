@@ -21,6 +21,95 @@ function inspect(host: HTMLElement, at: number, start: number, end: number) {
   }));
 }
 
+it('picks the nearest original singleton within six CSS pixels after SVG scaling', () => {
+  const points = [{ at: 40, actual_power: 0 }, { at: 41, actual_power: 17.3, breakBefore: true }];
+  let selected: ChartPoint | undefined;
+  const { host, handle } = chart(points, { range: { start: 0, end: 100 }, tooltip: point => {
+    selected = point;
+    return { title: String(point.at), rows: [{ label: 'Power', value: String(point.actual_power) }] };
+  } });
+  vi.spyOn(host.querySelector('svg')!, 'getBoundingClientRect').mockReturnValue(new DOMRect(100, 0, 600, 130));
+  const move = (clientX: number) => host.querySelector('.chart-hit-area')!.dispatchEvent(new MouseEvent('pointermove', { clientX }));
+  // x(40) = 504 SVG units = 352 CSS px including the 100px offset.
+  move(346);
+  expect(handle.selectedAt()).toBe(40);
+  expect(selected).toBe(points[0]);
+  expect(host.querySelector('.chart-tooltip')?.textContent).toContain('Power0');
+  move(355);
+  expect(selected).toBe(points[1]);
+  move(364);
+  expect(handle.selectedAt()).toBeNull();
+  expect(host.querySelector('.chart-tooltip')?.textContent).toContain('unavailable');
+});
+
+it('limits pixel tolerance to visible finite singleton glyphs and keeps keyboard records', () => {
+  const { host, handle } = chart([
+    { at: -0.1, actual_power: 10 },
+    { at: 20, actual_power: null, breakBefore: true },
+    { at: 40, actual_power: Number.NaN, breakBefore: true },
+    { at: 60, actual_power: 10, breakBefore: true }, { at: 80, actual_power: 20 },
+  ], { range: { start: 0, end: 100 } });
+  [0, 20.1, 40.1, 80.1].forEach(at => {
+    inspect(host, at, 0, 100);
+    expect(handle.selectedAt()).toBeNull();
+    expect(host.querySelector('.chart-tooltip')?.textContent).toContain('unavailable');
+  });
+  const hit = host.querySelector('.chart-hit-area')!;
+  hit.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowLeft' }));
+  expect(handle.selectedAt()).toBe(80);
+  hit.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowLeft' }));
+  expect(handle.selectedAt()).toBe(60);
+});
+
+it.each(['mouse', 'touch'])('keeps a covered continuous run authoritative over a nearby singleton for %s', pointerType => {
+  const points = [{ at: 40, actual_power: 10 }, { at: 45, actual_power: 20, breakBefore: true }, { at: 46, actual_power: 30 }];
+  const { host, handle } = chart(points, { range: { start: 0, end: 1000 } });
+  const hit = host.querySelector('.chart-hit-area')!;
+  const clientX = 48 + 45.1 / 1000 * 1140;
+  (pointerType === 'touch' ? ['pointerdown', 'pointerup'] : ['pointermove']).forEach(type => {
+    const event = new MouseEvent(type, { clientX, clientY: 20 });
+    Object.defineProperty(event, 'pointerType', { value: pointerType });
+    hit.dispatchEvent(event);
+  });
+  expect(handle.selectedAt()).toBe(45);
+  expect(host.querySelector('.chart-tooltip')?.textContent).toContain('20 W');
+});
+
+it.each(['mouse', 'touch'])('retains null-split singleton picking before an unavailable record for %s', pointerType => {
+  const { host, handle } = chart([{ at: 40, actual_power: 0 }, { at: 41, actual_power: null }, { at: 80, actual_power: null }],
+    { range: { start: 0, end: 1000 } });
+  const hit = host.querySelector('.chart-hit-area')!;
+  (pointerType === 'touch' ? ['pointerdown', 'pointerup'] : ['pointermove']).forEach(type => {
+    const event = new MouseEvent(type, { clientX: 48 + 40 / 1000 * 1140 + 1, clientY: 20 });
+    Object.defineProperty(event, 'pointerType', { value: pointerType });
+    hit.dispatchEvent(event);
+  });
+  expect(handle.selectedAt()).toBe(40);
+  expect(host.querySelector('.chart-tooltip')?.textContent).toContain('0 W');
+});
+
+it.each([
+  { edge: 'left', at: 0.4, expectedAt: 3, points: [
+    { at: -1, actual_power: 10 }, { at: 2, actual_power: null }, { at: 3, actual_power: 20 }, { at: 80, actual_power: null },
+  ] },
+  { edge: 'right', at: 999.6, expectedAt: 997, points: [
+    { at: 920, actual_power: null }, { at: 997, actual_power: 20 }, { at: 998, actual_power: null }, { at: 1001, actual_power: 10 },
+  ] },
+].flatMap(test => ['mouse', 'touch'].map(pointerType => ({ ...test, pointerType }))))(
+  'keeps a visible singleton when covered nearest is outside the $edge range edge for $pointerType',
+  ({ at, expectedAt, points, pointerType }) => {
+    const { host, handle } = chart(points, { range: { start: 0, end: 1000 } });
+    const hit = host.querySelector('.chart-hit-area')!;
+    (pointerType === 'touch' ? ['pointerdown', 'pointerup'] : ['pointermove']).forEach(type => {
+      const event = new MouseEvent(type, { clientX: 48 + at / 1000 * 1140, clientY: 20 });
+      Object.defineProperty(event, 'pointerType', { value: pointerType });
+      hit.dispatchEvent(event);
+    });
+    expect(handle.selectedAt()).toBe(expectedAt);
+    expect(host.querySelector('.chart-tooltip')?.textContent).toContain('20 W');
+  },
+);
+
 it('reports unavailable between broken runs and outside point coverage', () => {
   const tooltip = vi.fn((point: ChartPoint) => ({ title: String(point.at), rows: [{ label: 'Power', value: String(point.actual_power) }] }));
   const { host, handle } = chart([

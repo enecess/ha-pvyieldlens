@@ -296,7 +296,10 @@ async def test_forecast_refresh_and_rollover_keep_valid_selected_day(forecast_pa
     await expect(page.locator('#forecast-chart svg')).not_to_have_attribute('data-original', 'hidden')
 
 
-async def test_forecast_and_monitoring_layout_evidence(forecast_page, browser_workspace):
+async def test_forecast_and_monitoring_layout_evidence(forecast_page, browser_workspace, monkeypatch):
+    from types import SimpleNamespace
+    import pvyieldlens.web as web_module
+    import pvyieldlens.service as service_module
     from playwright.async_api import expect
     from test_engine import samples
     from pvyieldlens.engine import calculate
@@ -307,6 +310,9 @@ async def test_forecast_and_monitoring_layout_evidence(forecast_page, browser_wo
     _, service, _ = browser_workspace
     start = service.store.cursor
     now = start + 1800
+    clock = SimpleNamespace(time=lambda: now)
+    monkeypatch.setattr(web_module, 'time', clock)
+    monkeypatch.setattr(service_module, 'time', clock)
     await page.evaluate('now => Date.now = () => now', now*1000)
     inputs = forecast_input()
     midnight = datetime.fromtimestamp(now, ZoneInfo('UTC')).replace(hour=0, minute=0, second=0, microsecond=0).timestamp()

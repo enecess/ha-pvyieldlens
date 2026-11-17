@@ -79,7 +79,7 @@ p { margin: 8px 0; }
 .section-heading .muted { margin: 6px 0 0; }
 .metrics { display: grid; gap: 16px; margin-bottom: 20px; }
 .live-metrics { grid-template-columns: repeat(4, minmax(0, 1fr)); }
-.history-metrics { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.history-metrics { grid-template-columns: repeat(4, minmax(0, 1fr)); }
 .metric { min-width: 0; padding: 22px; border: 1px solid var(--pv-line); border-radius: 13px; background: var(--pv-surface); box-shadow: 0 2px 6px var(--pv-shadow); }
 .metric-primary { background: var(--pv-soft); border-color: color-mix(in srgb, var(--pv-accent) 24%, var(--pv-line)); }
 .metric-label { color: var(--pv-muted); font-size: 12px; }
@@ -112,6 +112,10 @@ p { margin: 8px 0; }
 .chart-tooltip > div { display: flex; justify-content: space-between; gap: 12px; margin-top: 4px; }
 .chart-tooltip > div span:first-child { min-width: 0; overflow-wrap: anywhere; }
 .chart-tooltip > div span:last-child { flex-shrink: 0; font-variant-numeric: tabular-nums; }
+#history-page .chart-tooltip > div span:last-child { flex-shrink: 1; min-width: 0; text-align: right; overflow-wrap: anywhere; }
+.daily-span { overflow-wrap: anywhere; }
+.daily-cutoff { position: absolute; right: 0; bottom: -22px; margin: 0; font-size: 10px; }
+.daily-history-chart { margin-bottom: 22px; }
 .chart-empty { display: grid; place-items: center; height: 100%; color: var(--pv-muted); font-size: 12px; }
 .live-status { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px; margin-top: 15px; padding-top: 15px; border-top: 1px solid var(--pv-line); font-size: 11px; }
 .status-dot { display: inline-block; width: 6px; height: 6px; margin-right: 7px; border-radius: 50%; background: var(--pv-amber); }
@@ -131,11 +135,6 @@ td:first-child { overflow-wrap: anywhere; }
 #history-range { padding: 8px 12px; border: 1px solid var(--pv-line); border-radius: 8px; background: var(--pv-surface); font-size: 12px; }
 #history-boundaries { margin-bottom: 18px; }
 .inline-notes { display: flex; flex-wrap: wrap; gap: 10px 24px; margin: 16px 0; font-size: 11px; }
-.fixed-totals { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px; }
-.fixed-totals > div { display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px; }
-.fixed-totals > div > span:first-child { width: 100%; color: var(--pv-muted); font-size: 12px; }
-.fixed-totals strong { font-size: 23px; font-weight: 600; }
-.totals-fold p { margin-top: 16px; }
 .banner { padding: 12px 16px; margin-bottom: 20px; border: 1px solid var(--pv-line); border-radius: 8px; background: var(--pv-soft); font-size: 12px; }
 .setup-empty { margin-bottom: 24px; }
 .primary { display: inline-flex; align-items: center; gap: 8px; padding: 9px 14px; margin-top: 10px; border: 0; border-radius: 7px; background: var(--pv-button); color: var(--pv-on-button); font-size: 12px; }
@@ -234,6 +233,7 @@ button:disabled { cursor: default; opacity: .5; }
   #data-navigation { order: 3; width: 100%; }
   #data-navigation button { flex: 1; }
   .live-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .history-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .settings-body { grid-template-columns: 145px minmax(0, 1fr); gap: 18px; }
   .form-grid.three { grid-template-columns: 1fr; }
   .sensor-field { grid-template-columns: 1fr; gap: 7px; }
@@ -256,7 +256,6 @@ button:disabled { cursor: default; opacity: .5; }
   .history-metrics .metric { padding: 18px; }
   .panel { padding: 16px; }
   .chart { height: 230px; }
-  .fixed-totals { grid-template-columns: 1fr; }
   #forecast-days { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 4px; }
   #forecast-days button { padding: 9px 2px; font-size: 11px; }
   .day-bar-track { height: 55px; width: 22px; }

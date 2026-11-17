@@ -11,11 +11,21 @@
 
 ## Views and settings
 
-Use **Live** for current averages and sensor diagnostics, **History** for settled periods and the selected range's energy/PR, and **Forecast** for weather-based generation estimates. Today's settled and lifetime totals remain separate from the history range. The separate gear-and-text **Settings** entry sits at the top right while all three data tabs remain available. Its category directory scrolls one continuous form: Home Assistant connection, Solar panels, Sensors, Monitoring and Forecast.
+Use **Live** for current averages and sensor diagnostics, **History** for settled periods and the selected range's energy/PR, and **Forecast** for weather-based generation estimates. The History page shows actual energy, theoretical energy, PR and completeness for the selected range. The separate gear-and-text **Settings** entry sits at the top right while all three data tabs remain available. Its category directory scrolls one continuous form: Home Assistant connection, Solar panels, Sensors, Monitoring and Forecast.
 
 **Save** keeps Settings open. **Cancel** reloads the saved configuration from the server and replaces edits; a failed reload retains your draft for retry. Leaving with unsaved changes asks you to keep editing or discard them. Reentering Settings loads the saved configuration again.
 
 **Theme mode** offers Auto, Light and Dark. Auto follows Home Assistant's Theme mode inside its interface and falls back to the system preference outside a usable HA context. Light and Dark are local overrides; Auto resumes following the host. Language and theme changes preserve the settings draft. All frontend assets are served locally.
+
+## History ranges and daily results
+
+History opens on **Today**, from midnight in the Home Assistant household time zone to now. **24 hours** is a rolling range of complete settlements. **7 days** and **30 days** are household calendar dates including today, with 7 or 30 fixed date slots; daylight-saving dates can have 23 or 25 hours. The selected range survives navigation between views.
+
+The four cards show actual energy first, theoretical energy, energy-weighted PR and completeness. The settled start and end below the cards show the data actually included. The 7/30-day views add separate daily energy bars and daily PR above the retained power and PR detail charts. Hover, touch or use arrow keys to inspect a date, including a measured zero. Missing dates remain empty; PR is unavailable when theoretical energy is zero. Today is marked with the latest included settlement time in household time. Ordinary partial coverage retains known energy and shows its completeness.
+
+Exact cross-midnight settlements can contribute a boundary fragment; its tooltip shows both the included span and the original settlement. Older records or records from a different household time zone may lack an exact daily allocation. Such an outer boundary is excluded and flagged. At an internal midnight, the original settlement remains in range cards and details, while the affected daily values are unavailable. No daily values are guessed from duration.
+
+The former Today and lifetime totals fold is removed from History. Stored cumulative records and Home Assistant energy entities continue unchanged.
 
 ## Updates
 

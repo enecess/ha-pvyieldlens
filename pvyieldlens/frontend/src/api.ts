@@ -1,4 +1,4 @@
-import type { Configuration, ConfigurationSaveResult, ConfigurationUpdate, ConnectionInput, ConnectionResult, ForecastRefreshResult, ForecastView, HistoryResponse, LiveHistoryResponse, Snapshot } from './models';
+import type { Configuration, ConfigurationSaveResult, ConfigurationUpdate, ConnectionInput, ConnectionResult, ForecastRefreshResult, ForecastView, HistoryPeriod, HistoryResponse, HistoryView, LiveHistoryResponse, Snapshot } from './models';
 
 export class ApiError extends Error {
   constructor(public code: string, public fields: string[] = []) {
@@ -48,5 +48,8 @@ export const api = {
   },
   async getHistory(start: number, end: number): Promise<HistoryResponse> {
     return await request(`history?${new URLSearchParams({ start: String(start), end: String(end) })}`) as HistoryResponse;
+  },
+  async getHistoryPeriod(period: HistoryPeriod): Promise<HistoryView> {
+    return await request(`history?${new URLSearchParams({ period })}`) as HistoryView;
   },
 };

@@ -8,7 +8,10 @@ pytestmark = pytest.mark.skipif(os.getenv('PVYL_BROWSER_TESTS') != '1', reason='
 
 
 @pytest.fixture
-async def timezone_page(tmp_path):
+async def timezone_page(tmp_path, monkeypatch):
+    from types import SimpleNamespace
+    import pvyieldlens.web as web_module
+    import pvyieldlens.service as service_module
     from fastapi import FastAPI
     from fastapi.responses import HTMLResponse
     from playwright.async_api import async_playwright, expect
@@ -21,6 +24,9 @@ async def timezone_page(tmp_path):
     from test_integration import fake_server
 
     instant = datetime(2026, 11, 16, 5, tzinfo=timezone.utc)
+    clock = SimpleNamespace(time=lambda: instant.timestamp())
+    monkeypatch.setattr(web_module, 'time', clock)
+    monkeypatch.setattr(service_module, 'time', clock)
     service = Service(Store(tmp_path / 'data.sqlite'))
     await service.configure(settings(timezone='Asia/Shanghai', update_seconds=1), now=instant.timestamp() - 60)
     result = calculate(service.config, samples(at=instant.timestamp() - 60), instant.timestamp() - 60, instant.timestamp())
@@ -99,13 +105,14 @@ async def test_viewer_timezone_keeps_household_forecast_day(timezone_page):
     await page.locator('#app').evaluate("node => { node.style.width = 'calc(100vw - 32px)'; node.style.height = '1800px'; }")
     monitoring_clock = re.search(r'\d{2}:\d{2}', await app.locator('#updated').inner_text()).group()
     assert monitoring_clock == '21:00'
-    totals_before = [await app.locator(selector).inner_text() for selector in ('#daily-energy', '#total-energy')]
+
     await app.locator('#history-tab').click()
-    await app.locator('#history-range').select_option('7')
+    await app.locator('#history-range').select_option('7d')
     await expect(app.locator('#history-boundaries')).to_contain_text('Nov 15, 2026, 21:00')
     await expect(app.locator('#last-settled')).to_contain_text('21:00')
-    await expect(app.locator('#history-totals')).to_contain_text('Home daily theoretical energy')
-    await expect(app.locator('#history-totals')).to_contain_text('Nov 16')
+    await expect(app.locator('#history-home-timezone')).to_contain_text('Asia/Shanghai')
+    await expect(app.locator('#daily-energy-chart [aria-current=date]')).to_have_attribute('data-day', '2026-11-16')
+    totals_before = [await app.locator(selector).inner_text() for selector in ('#history-actual-energy', '#history-energy')]
     await app.locator('#forecast-tab').click()
     await expect(app.locator('#forecast-days button')).to_have_count(7)
     forecast_selected_day = await app.locator('#forecast-days [aria-pressed=true]').get_attribute('data-day')
@@ -143,9 +150,9 @@ async def test_viewer_timezone_keeps_household_forecast_day(timezone_page):
     await expect(app.locator('#last-settled')).to_contain_text('13:00')
     await expect(app.locator('#forecast-home-time-note')).to_have_count(0)
     await expect(app.locator('[name=rated_power_w]')).to_have_value('6100')
-    await expect(app.locator('#history-range')).to_have_value('7')
+    await expect(app.locator('#history-range')).to_have_value('7d')
     await expect(app.locator('[data-day="2026-11-18"]')).to_have_attribute('aria-pressed', 'true')
-    totals_after = [await app.locator(selector).inner_text() for selector in ('#daily-energy', '#total-energy')]
+    totals_after = [await app.locator(selector).inner_text() for selector in ('#history-actual-energy', '#history-energy')]
     forecast_fetch_count_after = state['forecast']
     assert totals_after == totals_before
     assert forecast_fetch_count_after == forecast_fetch_count_before

@@ -18,6 +18,7 @@ from pydantic import BaseModel, ConfigDict, SecretStr, ValidationError, field_va
 from starlette.middleware.gzip import GZipMiddleware
 
 from .home_assistant import HomeAssistantClient
+from .history import HistoryPeriod, history_view
 from .service import NETWORK_ERRORS, Service
 from .settings import ForecastSettings, Settings
 from .storage import Store, summarize_history
@@ -210,11 +211,21 @@ def create_app(service: Service, runtime: Runtime, run_background=True) -> FastA
         return JSONResponse({'scheduled': scheduled, 'status': forecast.view(time.time()).status}, status_code=202)
 
     @app.get('/api/history')
-    async def history(start: float = Query(ge=0, allow_inf_nan=False), end: float = Query(ge=0, allow_inf_nan=False)):
-        if end <= start or end - start > 90 * 86400:
+    async def history(period: HistoryPeriod | None = None,
+                      start: float | None = Query(default=None, ge=0, allow_inf_nan=False),
+                      end: float | None = Query(default=None, ge=0, allow_inf_nan=False)):
+        if period is not None:
+            if start is not None or end is not None:
+                return JSONResponse({'error': 'invalid_time_range'}, status_code=422)
+            async with service.lock:
+                store = service.store
+                timezone = service.config.timezone if service.config else 'UTC'
+                return history_view(store, period, time.time(), timezone).model_dump(mode='json')
+        if start is None or end is None or end <= start or end - start > 90 * 86400:
             return JSONResponse({'error': 'invalid_time_range'}, status_code=422)
         async with service.lock:
-            rows = service.store.history(start, end)
+            store = service.store
+            rows = store.history(start, end)
         # Preserve outages by returning complete windows; the browser aggregates for display.
         return {'windows': rows, 'summary': summarize_history(rows, start, end).model_dump(mode='json'),
                 'requested_range': {'start': start, 'end': end}}

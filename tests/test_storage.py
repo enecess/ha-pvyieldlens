@@ -132,6 +132,7 @@ def test_history_summary_uses_energy_ratio_not_mean_pr(tmp_path):
     assert [row['revision'] for row in windows] == [1, 2]
     summary = summarize_history(windows, 0, 1200)
     assert summary.estimated_energy_kwh == pytest.approx(1.0)
+    assert summary.actual_energy_kwh == pytest.approx(0.95)
     assert summary.pr == pytest.approx(95.0)
     assert summary.coverage_percent == pytest.approx(100.0)
     assert summary.valid_seconds == 1200
@@ -165,36 +166,36 @@ def test_partial_boundary_windows_are_excluded_without_proration(tmp_path):
 
 
 @pytest.mark.parametrize('windows,start,end,expected', [
-    pytest.param([], 0, 86400, (None, None, None, None, None, 0), id='no-windows'),
+    pytest.param([], 0, 86400, (None, None, None, None, None, None, 0), id='no-windows'),
     pytest.param([{**calculate(settings(), samples(), 0, 60).public(), 'revision': 1}],
-                 30, 45, (None, None, None, None, None, 0), id='no-full-window'),
+                 30, 45, (None, None, None, None, None, None, 0), id='no-full-window'),
     pytest.param([{**calculate(settings(), [], 0, 60).public(), 'revision': 1}],
-                 0, 86400, (0, 60, None, None, 0, 0), id='missing'),
+                 0, 86400, (0, 60, None, None, None, 0, 0), id='missing'),
     pytest.param([{**calculate(settings(), samples(power=0, sun=0), 0, 60).public(), 'revision': 1}],
-                 0, 86400, (0, 60, 0, None, 100, 60), id='valid-night'),
+                 0, 86400, (0, 60, 0, 0, None, 100, 60), id='valid-night'),
     pytest.param([{**calculate(settings(), samples(at=3600), 3600, 3660).public(), 'revision': 1}],
-                 0, 86400, (3600, 3660, 0.062, 90, 100, 60), id='short-installation'),
+                 0, 86400, (3600, 3660, 0.062, 0.0558, 90, 100, 60), id='short-installation'),
     pytest.param([{**calculate(settings(power_max_age_seconds=30), samples(), 0, 60).public(), 'revision': 1},
                   {**calculate(settings(), [], 60, 120).public(), 'revision': 1},
                   {**calculate(settings(), samples(at=120), 120, 180).public(), 'revision': 2}],
-                 0, 86400, (0, 180, 0.093, 90, 50, 90), id='partial-and-missing'),
+                 0, 86400, (0, 180, 0.093, 0.0837, 90, 50, 90), id='partial-and-missing'),
 ])
 def test_history_summary_no_windows_missing_night_and_short_installation(windows, start, end, expected):
     from pvyieldlens.storage import summarize_history
 
     summary = summarize_history(windows, start, end)
     assert summary.model_dump() == pytest.approx(dict(zip(
-        ('start', 'end', 'estimated_energy_kwh', 'pr', 'coverage_percent', 'valid_seconds'), expected)))
+        ('start', 'end', 'estimated_energy_kwh', 'actual_energy_kwh', 'pr', 'coverage_percent', 'valid_seconds'), expected)))
 
 
 @pytest.mark.parametrize('changes', [
     {'valid_seconds': '60'}, {'estimated_energy_kwh': float('nan')},
-    {'pr': float('inf')}, {'extra': 1},
+    {'pr': float('inf')}, {'actual_energy_kwh': float('inf')}, {'extra': 1},
 ])
 def test_history_summary_rejects_non_strict_or_non_finite_values(changes):
     from pydantic import ValidationError
     from pvyieldlens.storage import HistorySummary
 
     with pytest.raises(ValidationError):
-        HistorySummary(**{'start': 0.0, 'end': 60.0, 'estimated_energy_kwh': 0.062,
+        HistorySummary(**{'start': 0.0, 'end': 60.0, 'estimated_energy_kwh': 0.062, 'actual_energy_kwh': 0.0558,
                           'pr': 90.0, 'coverage_percent': 100.0, 'valid_seconds': 60.0, **changes})

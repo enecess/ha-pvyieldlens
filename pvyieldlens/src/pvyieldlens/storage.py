@@ -3,13 +3,26 @@ import sqlite3
 from dataclasses import dataclass
 from datetime import datetime, time, timedelta
 from pathlib import Path
-from typing import TypedDict
+from typing import NotRequired, TypedDict
 from zoneinfo import ZoneInfo
 
 from pydantic import BaseModel, ConfigDict
 
 from .engine import Observation, WindowResult
 from .settings import ForecastSettings, Settings
+
+
+class DayAllocation(TypedDict):
+    start: float
+    end: float
+    valid_seconds: float
+    estimated_energy_wh: float
+    actual_energy_wh: float
+
+
+class DayAllocations(TypedDict):
+    timezone: str
+    parts: list[DayAllocation]
 
 
 class HistoryWindow(TypedDict):
@@ -26,6 +39,9 @@ class HistoryWindow(TypedDict):
     coverage_percent: float
     quality: str
     reason: str | None
+    source_start: NotRequired[float]
+    source_end: NotRequired[float]
+    day_allocations: NotRequired[DayAllocations]
 
 
 class HistorySummary(BaseModel):
@@ -34,6 +50,7 @@ class HistorySummary(BaseModel):
     start: float | None
     end: float | None
     estimated_energy_kwh: float | None
+    actual_energy_kwh: float | None
     pr: float | None
     coverage_percent: float | None
     valid_seconds: float
@@ -42,7 +59,7 @@ class HistorySummary(BaseModel):
 def summarize_history(windows: list[HistoryWindow], start: float, end: float) -> HistorySummary:
     included = [row for row in windows if row['start'] >= start and row['end'] <= end]
     if not included:
-        return HistorySummary(start=None, end=None, estimated_energy_kwh=None, pr=None,
+        return HistorySummary(start=None, end=None, estimated_energy_kwh=None, actual_energy_kwh=None, pr=None,
                               coverage_percent=None, valid_seconds=0)
     first = min(row['start'] for row in included)
     last = max(row['end'] for row in included)
@@ -50,6 +67,7 @@ def summarize_history(windows: list[HistoryWindow], start: float, end: float) ->
     estimated = sum(row['estimated_energy_wh'] for row in included)
     return HistorySummary(
         start=first, end=last, estimated_energy_kwh=estimated / 1000 if valid else None,
+        actual_energy_kwh=sum(row['actual_energy_wh'] for row in included) / 1000 if valid else None,
         pr=sum(row['actual_energy_wh'] for row in included) / estimated * 100 if valid and estimated else None,
         coverage_percent=valid / (last - first) * 100, valid_seconds=valid,
     )
@@ -172,6 +190,26 @@ class Store:
             raise ValueError("non_contiguous_settlement")
         zone = ZoneInfo(timezone)
         public = {**result.public(), 'revision': revision}
+        stored = public.copy()
+        midnight = datetime.combine(datetime.fromtimestamp(result.start, zone).date() + timedelta(days=1),
+                                    time(), zone).timestamp()
+        if midnight < result.end:
+            parts: list[DayAllocation] = []
+            left = result.start
+            while left < result.end:
+                right = min(result.end, midnight)
+                intersections = [(segment, max(0, min(segment.end, right) - max(segment.start, left)))
+                                 for segment in result.segments]
+                parts.append({'start': left, 'end': right,
+                              'valid_seconds': sum(duration for _, duration in intersections),
+                              'estimated_energy_wh': sum(segment.estimated_power * duration / 3600
+                                                         for segment, duration in intersections),
+                              'actual_energy_wh': sum(segment.actual_power * duration / 3600
+                                                      for segment, duration in intersections)})
+                left = right
+                midnight = datetime.combine(datetime.fromtimestamp(left, zone).date() + timedelta(days=1),
+                                            time(), zone).timestamp()
+            stored['day_allocations'] = {'timezone': timezone, 'parts': parts}
         detail = []
         for segment in result.segments:
             if detail and detail[-1][1] == segment.start and detail[-1][2] == segment.estimated_power:
@@ -180,7 +218,7 @@ class Store:
                 detail.append([segment.start, segment.end, segment.estimated_power])
         with self.db:
             self.db.execute("INSERT INTO windows VALUES (?,?,?,?)",
-                            (revision, result.start, result.end, json.dumps(public)))
+                            (revision, result.start, result.end, json.dumps(stored)))
             self.db.execute('INSERT INTO window_segments VALUES (?,?,?,?)',
                             (revision, result.start, result.end, json.dumps(detail, separators=(',', ':'))))
             for left, end, power in detail:
@@ -237,9 +275,13 @@ class Store:
         value = self.get_meta("latest_window")
         return json.loads(value) if value else None
 
-    def history(self, start: float, end: float) -> list[HistoryWindow]:
-        return [{**json.loads(row['result']), 'revision': row['revision']}
-                for row in self.db.execute("SELECT revision,result FROM windows WHERE end>? AND start<? ORDER BY start", (start, end))]
+    def history(self, start: float, end: float, *, include_day_allocations=False) -> list[HistoryWindow]:
+        windows = [{**json.loads(row['result']), 'revision': row['revision']}
+                   for row in self.db.execute("SELECT revision,result FROM windows WHERE end>? AND start<? ORDER BY start", (start, end))]
+        if not include_day_allocations:
+            for window in windows:
+                window.pop('day_allocations', None)
+        return windows
 
     def prune(self, now: float):
         with self.db:
