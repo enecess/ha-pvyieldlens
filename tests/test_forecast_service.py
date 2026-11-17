@@ -644,3 +644,72 @@ async def test_missing_minutely_interval_keeps_hourly_weather_summary(tmp_path):
         assert view.tomorrow.forecast_energy_kwh == pytest.approx(89.28)
         await forecast.stop()
     store.close()
+
+
+async def test_correction_cache_reuses_snapshots_and_refreshes_date_context_and_n(tmp_path, monkeypatch):
+    from pvyieldlens import forecast_service
+    from pvyieldlens.service import Service
+    from test_correction import NOW, TODAY, committed_days
+
+    calls = []
+    real_correction = forecast_service.correction_view
+
+    def counted(*args):
+        calls.append(args)
+        return real_correction(*args)
+
+    monkeypatch.setattr(forecast_service, 'correction_view', counted)
+    store = Store(tmp_path / 'data.sqlite')
+    config = committed_days(store, [(1000, 500), *[(0, 0)] * 5, (1000, 800), (1000, 900)])
+    service = Service(store)
+    requests = []
+    async with httpx.AsyncClient(transport=httpx.MockTransport(
+        lambda request: requests.append(request) or httpx.Response(200, json=forecast_payload(TODAY)),
+    )) as http:
+        forecast = forecast_service.ForecastController(store, OpenMeteoClient(http))
+        service.forecast = forecast
+        forecast.configure(config, ENABLED, ORIGIN, LOCATION)
+        await forecast.refresh(now=NOW)
+        before = service.snapshot(NOW)
+        service.snapshot(NOW + 10)
+        assert len(calls) == 1
+        raw_batch = forecast.batch.model_dump_json()
+        revision, live = store.revision, service.live_window
+        forecast.configure(config, ENABLED.model_copy(update={'pr_history_days': 30}), ORIGIN, LOCATION)
+        after = service.snapshot(NOW + 20)
+        assert len(calls) == 2
+        assert before['forecast']['correction']['pr'] != after['forecast']['correction']['pr']
+        assert after['forecast']['fetched_at'] == before['forecast']['fetched_at'] == NOW
+        assert forecast.batch.model_dump_json() == raw_batch
+        assert (store.revision, service.live_window) == (revision, live)
+        assert len(requests) == 1
+        assert forecast._next_refresh > asyncio.get_running_loop().time()
+        forecast.view(TODAY + 86400 + 1)
+        assert len(calls) == 3
+        forecast.invalidate_correction()
+        forecast.view(TODAY + 86400 + 2)
+        assert len(calls) == 4
+        changed = config.model_copy(update={'actual_power_entity': 'sensor.changed'})
+        store.save_monitoring_settings(changed, NOW + 30, ORIGIN)
+        forecast.configure(changed, forecast.settings, ORIGIN, LOCATION)
+        assert forecast.view(TODAY + 86400 + 3).correction.pr is None
+        assert len(calls) == 5
+    store.close()
+
+
+def test_correction_cache_discards_old_epoch_after_context_changes_back_without_a_view(tmp_path):
+    from pvyieldlens.forecast_service import ForecastController
+    from test_correction import NOW, ORIGIN, committed_days
+
+    store = Store(tmp_path / 'data.sqlite')
+    config = committed_days(store, [(1000, 900)] * 3)
+    forecast = ForecastController(store)
+    forecast.configure(config, ENABLED, ORIGIN, LOCATION)
+    assert forecast.view(NOW).correction.pr == pytest.approx(90)
+    changed = config.model_copy(update={'actual_power_entity': 'sensor.changed'})
+    store.save_monitoring_settings(changed, NOW + 1, ORIGIN)
+    forecast.configure(changed, ENABLED, ORIGIN, LOCATION)
+    store.save_monitoring_settings(config, NOW + 2, ORIGIN)
+    forecast.configure(config, ENABLED, ORIGIN, LOCATION)
+    assert forecast.view(NOW + 3).correction.pr is None
+    store.close()

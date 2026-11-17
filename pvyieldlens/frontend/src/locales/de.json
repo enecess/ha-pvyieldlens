@@ -120,6 +120,8 @@
   "forecast_direction": "Modulausrichtung",
   "forecast_azimuth": "Benutzerdefinierter Kompassazimut",
   "forecast_noct": "Nominale Zellbetriebstemperatur (NOCT)",
+  "forecast_pr_history_days": "PR-Verlauf in Tagen",
+  "pr_history_days_help": "Abgeschlossene Kalendertage am Wohnort für die Korrektur (3–90). Standard: 14.",
   "azimuth_help": "Im Uhrzeigersinn ab Norden: 0° bis unter 360°.",
   "noct_help": "Datenblattwert: über 20°C bis 80°C. Referenzstandard: 45°C.",
   "location_help": "Standort und Zeitzone stammen aus der gespeicherten Home-Assistant-Verbindung. Änderungen erfolgen in HA.",

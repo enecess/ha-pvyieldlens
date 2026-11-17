@@ -305,3 +305,50 @@ def test_missing_weather_field_does_not_erase_other_field_or_power(missing, code
     assert view.days[0].weather.model_dump() == dict(weather_code=code, air_temperature_min_c=minimum,
         air_temperature_max_c=maximum, quality=quality)
     assert view.days[1].weather is None
+
+
+@pytest.mark.parametrize('value', [3, 90])
+def test_pr_history_days_roundtrip(value):
+    assert ForecastSettings.model_validate_json(ForecastSettings(pr_history_days=value).model_dump_json()).pr_history_days == value
+    assert ForecastSettings.model_validate_json('{}').pr_history_days == 14
+
+
+@pytest.mark.parametrize('value', [2, 91, 3.5, True])
+def test_pr_history_days_rejects_noninteger_or_outside_bounds(value):
+    with pytest.raises(ValidationError):
+        ForecastSettings(pr_history_days=value)
+
+
+@pytest.mark.parametrize('pr', [0, 80, 110, None])
+def test_correction_scales_raw_quarter_hours_and_clipped_totals_once(pr):
+    from pvyieldlens.correction import ForecastCorrection
+
+    inputs = forecast_input(home_timezone='Asia/Kathmandu')
+    batch = ForecastBatch(inputs=inputs, fetched_at=10,
+        intervals=constant_intervals(-86400, 8 * 86400, interval_seconds=900), weather_samples=())
+    correction = ForecastCorrection(pr=pr, history_days=14, start=-14 * 86400, end=0)
+    view = forecast_view(batch, inputs, ForecastSettings(enabled=True, tilt_deg=25, azimuth_deg=180), 123,
+                         correction=correction)
+    assert view.correction == correction
+    for row in view.intervals:
+        assert row.corrected_forecast_power_w == (pytest.approx(row.forecast_power_w * pr / 100) if pr is not None else None)
+        assert row.corrected_forecast_energy_kwh == (pytest.approx(row.forecast_energy_kwh * pr / 100) if pr is not None else None)
+    for total in (view.today, view.remaining_today, view.tomorrow, view.seven_days, *view.days):
+        assert total.corrected_forecast_energy_kwh == (pytest.approx(total.forecast_energy_kwh * pr / 100) if pr is not None else None)
+    assert batch.intervals[0].forecast_power_w == 3720
+    assert 'correction' not in batch.model_dump()
+
+
+def test_correction_preserves_missing_forecast_even_with_zero_factor():
+    from pvyieldlens.correction import ForecastCorrection
+
+    inputs = forecast_input()
+    rows = constant_intervals(0, 8 * 86400, interval_seconds=900)
+    missing = rows[0].model_copy(update={'forecast_power_w': None, 'forecast_energy_kwh': None, 'quality': 'unavailable'})
+    batch = ForecastBatch(inputs=inputs, fetched_at=10, intervals=(missing, *rows[1:]), weather_samples=())
+    view = forecast_view(batch, inputs, ForecastSettings(enabled=True, tilt_deg=25, azimuth_deg=180), 120,
+        correction=ForecastCorrection(pr=0, history_days=14, start=-14 * 86400, end=0))
+    assert view.intervals[0].corrected_forecast_power_w is None
+    assert view.intervals[0].corrected_forecast_energy_kwh is None
+    assert view.today.corrected_forecast_energy_kwh is None
+    assert view.tomorrow.corrected_forecast_energy_kwh == 0

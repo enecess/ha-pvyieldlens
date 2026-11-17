@@ -2,6 +2,8 @@ import asyncio
 import logging
 import time
 from contextlib import suppress
+from datetime import datetime, time as day_time
+from zoneinfo import ZoneInfo
 
 import httpx
 from websockets.exceptions import WebSocketException
@@ -54,10 +56,11 @@ class Service:
             self.sources = []
             self.live_window = None
             self._recovery_needed = True
-        self.forecast.configure(monitoring_settings, self.forecast.settings, origin, self.forecast.location)
+            self.forecast.configure(monitoring_settings, self.forecast.settings, origin, self.forecast.location)
 
     async def _settle(self, now: float):
         cursor = self.store.cursor
+        first = cursor
         periods = self.store.configuration_history(cursor, now)
         for index, period in enumerate(periods):
             limit = periods[index+1].effective_at if index+1 < len(periods) else now
@@ -71,6 +74,10 @@ class Service:
                 self.store.settle(result, period.revision, self.monitoring_settings.home_timezone)
                 cursor = end
                 await asyncio.sleep(0)
+        zone = ZoneInfo(self.monitoring_settings.home_timezone)
+        midnight = datetime.combine(datetime.fromtimestamp(now, zone).date(), day_time(), zone).timestamp()
+        if cursor > first and first < midnight:
+            self.forecast.invalidate_correction()
 
     async def tick(self, now: float | None = None):
         now = time.time() if now is None else now
@@ -206,7 +213,8 @@ class Service:
                         continue
                     if self.monitoring_settings.home_timezone != ha_config.time_zone:
                         await self.configure(MonitoringSettings.model_validate({**self.monitoring_settings.model_dump(), 'home_timezone': ha_config.time_zone}))
-                    self.forecast.configure(self.monitoring_settings, self.forecast.settings, origin, ha_config.location)
+                    async with self.lock:
+                        self.forecast.configure(self.monitoring_settings, self.forecast.settings, origin, ha_config.location)
                     await self.subscribed.wait()
                     if self._recovery_needed:
                         await self.recover()
@@ -218,7 +226,9 @@ class Service:
                     self.error = None
                 await self.tick()
                 if self.client and self.monitoring_settings:
-                    await self.client.publish(entity_payloads(self.snapshot()))
+                    async with self.lock:
+                        payloads = entity_payloads(self.snapshot())
+                    await self.client.publish(payloads)
                 if started - last_prune >= 3600:
                     async with self.lock:
                         self.store.prune(started)
@@ -248,7 +258,8 @@ class Service:
         await self.forecast.stop()
         if self.client:
             with suppress(httpx.HTTPError, OSError):
-                payloads = entity_payloads(self.snapshot())
+                async with self.lock:
+                    payloads = entity_payloads(self.snapshot())
                 for payload in payloads.values():
                     payload['state'] = 'unavailable'
                 await self.client.publish(payloads)

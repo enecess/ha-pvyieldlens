@@ -10,7 +10,7 @@ const configuration = {
     actual_power_entity: 'sensor.power', module_temperature_entity: 'sensor.temp', irradiance_entity: 'sensor.sun',
     settlement_interval_minutes: 1, live_window_seconds: 60, update_interval_seconds: 1,
     actual_power_max_age_seconds: 300, module_temperature_max_age_seconds: 900, irradiance_max_age_seconds: 300, home_timezone: 'UTC' },
-  forecast_settings: { enabled: false, tilt_deg: null, azimuth_deg: null, noct_c: 45 },
+  forecast_settings: { enabled: false, tilt_deg: null, azimuth_deg: null, noct_c: 45, pr_history_days: 14 },
   location: null, mode: 'docker', connection: { url: 'http://ha', token_set: false },
 };
 let app: ReturnType<typeof createApp>;

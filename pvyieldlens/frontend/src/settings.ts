@@ -4,7 +4,7 @@ export type SettingsSection = 'connection' | 'modules' | 'sources' | 'monitoring
 export interface SettingsDraft {
   monitoring: { [Key in Exclude<keyof MonitoringSettings, 'home_timezone'>]: string };
   connection: { url: string; token: string };
-  forecast: { enabled: boolean; tilt_deg: string; azimuth_deg: string; noct_c: string };
+  forecast: { enabled: boolean; tilt_deg: string; azimuth_deg: string; noct_c: string; pr_history_days: string };
 }
 
 export function draftFromConfiguration(value: Configuration): SettingsDraft {
@@ -26,6 +26,7 @@ export function draftFromConfiguration(value: Configuration): SettingsDraft {
       tilt_deg: value.forecast_settings.tilt_deg === null ? '' : String(value.forecast_settings.tilt_deg),
       azimuth_deg: value.forecast_settings.azimuth_deg === null ? '' : String(value.forecast_settings.azimuth_deg),
       noct_c: String(value.forecast_settings.noct_c),
+      pr_history_days: String(value.forecast_settings.pr_history_days),
     },
   };
 }
@@ -39,7 +40,7 @@ export function hasSettingsChanges(draft: SettingsDraft, baseline: SettingsDraft
     || urlValue(draft.connection.url) !== urlValue(baseline.connection.url)
     || draft.connection.token !== baseline.connection.token
     || draft.forecast.enabled !== baseline.forecast.enabled
-    || (['tilt_deg', 'azimuth_deg', 'noct_c'] as const).some(key => numericValue(draft.forecast[key]) !== numericValue(baseline.forecast[key]));
+    || (['tilt_deg', 'azimuth_deg', 'noct_c', 'pr_history_days'] as const).some(key => numericValue(draft.forecast[key]) !== numericValue(baseline.forecast[key]));
 }
 
 export function configurationUpdateFromDraft(draft: SettingsDraft, context: { mode: 'app' | 'docker'; home_timezone: string }): ConfigurationUpdate {
@@ -61,6 +62,7 @@ export function configurationUpdateFromDraft(draft: SettingsDraft, context: { mo
       tilt_deg: draft.forecast.tilt_deg === '' ? null : Number(draft.forecast.tilt_deg),
       azimuth_deg: draft.forecast.azimuth_deg === '' ? null : Number(draft.forecast.azimuth_deg),
       noct_c: Number(draft.forecast.noct_c),
+      pr_history_days: Number(draft.forecast.pr_history_days),
     },
   };
 }

@@ -120,6 +120,8 @@
   "forecast_direction": "组件朝向",
   "forecast_azimuth": "自定义指南针方位角",
   "forecast_noct": "标称电池片工作温度（NOCT）",
+  "forecast_pr_history_days": "历史 PR 天数",
+  "pr_history_days_help": "用于修正的已结束家庭自然日数（3–90 天），默认 14 天。",
   "azimuth_help": "从正北顺时针计角：0° 至小于 360°。",
   "noct_help": "规格书值：大于 20°C 且不超过 80°C；参考默认值 45°C。",
   "location_help": "位置和时区读取已保存的 Home Assistant 连接，请在 HA 中修改。",

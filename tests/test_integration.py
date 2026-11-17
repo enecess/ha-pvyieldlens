@@ -185,3 +185,26 @@ async def test_forecast_outputs_republish_after_ha_reconnect_and_shutdown(tmp_pa
         assert service.tasks == []
         assert service.forecast._task is None
         store.close()
+
+
+def test_corrected_forecast_keeps_thirteen_original_ha_outputs(tmp_path):
+    from forecast_fixtures import constant_intervals, forecast_input
+    from pvyieldlens.forecast import ForecastBatch
+    from pvyieldlens.home_assistant import entity_payloads
+    from pvyieldlens.settings import ForecastSettings
+    from test_correction import NOW, ORIGIN, TODAY, committed_days
+
+    store = Store(tmp_path / 'data.sqlite')
+    config = committed_days(store, [(1000, 500)] * 3)
+    service = Service(store)
+    inputs = forecast_input(total_max_power_at_stc_w=1000)
+    service.forecast.configure(config, ForecastSettings(enabled=True, tilt_deg=25, azimuth_deg=180), ORIGIN, inputs.location)
+    service.forecast.batch = ForecastBatch(inputs=inputs, fetched_at=NOW,
+        intervals=constant_intervals(TODAY, TODAY + 8 * 86400, interval_seconds=900), weather_samples=())
+    snapshot = service.snapshot(NOW)
+    raw = snapshot['forecast']['today']['forecast_energy_kwh']
+    assert snapshot['forecast']['today']['corrected_forecast_energy_kwh'] == pytest.approx(raw * .5)
+    payloads = entity_payloads(snapshot)
+    assert len(payloads) == 13
+    assert float(payloads['sensor.pvyieldlens_forecast_energy_today']['state']) == pytest.approx(raw, abs=.001)
+    store.close()

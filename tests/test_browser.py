@@ -233,7 +233,7 @@ async def test_forecast_settings_round_trip_and_server_error_category(browser_wo
     await page.locator('[name=forecast_noct_c]').fill('46')
     await page.locator('#save-button').click()
     await expect(page.locator('#save-result')).to_have_text('Configuration saved')
-    assert service.forecast.settings.model_dump() == {'enabled': True, 'tilt_deg': 25, 'azimuth_deg': 123.5, 'noct_c': 46}
+    assert service.forecast.settings.model_dump() == {'enabled': True, 'tilt_deg': 25, 'azimuth_deg': 123.5, 'noct_c': 46, 'pr_history_days': 14}
     await page.reload()
     await page.locator('#settings-button').click()
     await page.locator('button[data-settings-category=forecast]').click()
@@ -1326,3 +1326,43 @@ async def test_live_curve_save_resets_only_for_monitoring_changes(browser_worksp
         # Re-authenticating the same HA origin reloads its compatible stored observations.
         assert len(seeds) == 1
         await expect(page.locator('#live-chart path.series').first).to_have_attribute('d', re.compile('C'))
+
+
+async def test_settings_pr_history_days_preserves_draft_and_reveals_validation(browser_workspace):
+    from playwright.async_api import expect
+
+    page, service, _ = browser_workspace
+    response = await page.request.get(page.url + 'api/config')
+    connection = (await response.json())['connection']
+    await service.configure(service.monitoring_settings.model_copy(update={'home_timezone': 'Asia/Shanghai'}),
+                            origin=connection['url'])
+    await page.reload()
+    await page.locator('#settings-button').click()
+    await page.locator('button[data-settings-category=forecast]').click()
+    control = page.locator('[name=forecast_pr_history_days]')
+    await expect(control).to_have_value('14')
+    for value in ('', '2', '91', '3.5'):
+        await control.fill(value)
+        await page.locator('button[data-settings-category=modules]').click()
+        await page.locator('#save-button').click()
+        await expect(control).to_be_focused()
+        await expect(control).to_have_value(value)
+        assert service.forecast.settings.pr_history_days == 14
+    revision, live = service.store.revision, service.live_window
+    await control.fill('30')
+    await page.locator('#save-button').click()
+    await expect(page.locator('#save-result')).to_have_text('Configuration saved')
+    assert service.forecast.settings.pr_history_days == 30
+    assert (service.store.revision, service.live_window) == (revision, live)
+    await page.reload()
+    await page.locator('#settings-button').click()
+    await page.locator('button[data-settings-category=forecast]').click()
+    await expect(control).to_have_value('30')
+    await page.route('**/api/config', lambda route: route.fulfill(status=422, json={
+        'error': 'invalid_configuration', 'fields': ['forecast_settings.pr_history_days']}))
+    await control.fill('31')
+    await page.locator('button[data-settings-category=modules]').click()
+    await page.locator('#save-button').click()
+    await expect(control).to_be_focused()
+    await expect(control).to_have_attribute('aria-invalid', 'true')
+    await expect(control).to_have_value('31')

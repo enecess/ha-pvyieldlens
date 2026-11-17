@@ -272,7 +272,8 @@ async def test_forecast_update_requires_effective_credentials_before_writes(serv
     assert service.store.db.total_changes == before
 
 
-async def test_forecast_only_put_keeps_running_monitoring(service, monkeypatch):
+@pytest.mark.parametrize('forecast_changes', [{'noct_c': 47.0}, {'pr_history_days': 30}])
+async def test_forecast_only_put_keeps_running_monitoring(service, monkeypatch, forecast_changes):
     import asyncio
     from pvyieldlens.settings import ForecastSettings, HALocation
     from test_integration import fake_server
@@ -297,7 +298,7 @@ async def test_forecast_only_put_keeps_running_monitoring(service, monkeypatch):
             days = list(map(tuple, service.store.db.execute('SELECT * FROM days')))
             response = await client.put('/api/config', json={'monitoring_settings': config.model_dump(),
                 'connection': {'url': url + '/', 'token': ''},
-                'forecast_settings': {'enabled': False, 'tilt_deg': 25.0, 'azimuth_deg': 180.0, 'noct_c': 47.0}})
+                'forecast_settings': {'enabled': False, 'tilt_deg': 25.0, 'azimuth_deg': 180.0, 'noct_c': 45.0, 'pr_history_days': 14, **forecast_changes}})
             assert response.status_code == 200
             assert tuple(service.tasks) == tasks
             assert all(not task.done() for task in tasks)
@@ -311,7 +312,9 @@ async def test_forecast_only_put_keeps_running_monitoring(service, monkeypatch):
             assert list(map(tuple, service.store.db.execute('SELECT * FROM days'))) == days
             assert service.store.observations(120, 180, config.entities, url) == observations
             assert response.json()['location'] == location.model_dump()
-            assert response.json()['forecast_settings']['noct_c'] == 47.0
+            assert response.json()['monitoring_changed'] is False
+            for name, value in forecast_changes.items():
+                assert response.json()['forecast_settings'][name] == value
 
 
 async def test_connection_preview_does_not_replace_active_forecast_location(service):
@@ -372,9 +375,22 @@ async def test_forecast_read_and_refresh_are_authenticated_and_nonblocking(servi
                 assert trigger.status_code == 202
                 assert trigger.json() == {'scheduled': True, 'status': 'loading'}
                 await asyncio.wait_for(entered.wait(), 1)
+                acquiring = asyncio.Event()
+                acquire = service.lock.acquire
+
+                async def tracked_acquire():
+                    acquiring.set()
+                    return await acquire()
+
                 async with service.lock:
-                    forecast = await asyncio.wait_for(client.get('/api/forecast', auth=auth), 0.5)
-                    repeated = await asyncio.wait_for(client.post('/api/forecast/refresh', auth=auth), 0.5)
+                    monkeypatch.setattr(service.lock, 'acquire', tracked_acquire)
+                    pending = asyncio.create_task(client.get('/api/forecast', auth=auth))
+                    await asyncio.wait_for(acquiring.wait(), 1)
+                    assert not pending.done()
+                forecast = await asyncio.wait_for(pending, 0.5)
+                monkeypatch.setattr(service.lock, 'acquire', acquire)
+                assert not release.is_set()
+                repeated = await asyncio.wait_for(client.post('/api/forecast/refresh', auth=auth), 0.5)
                 assert forecast.status_code == 200
                 assert forecast.json()['status'] == 'loading'
                 assert forecast.json()['refreshing'] is True
@@ -415,7 +431,7 @@ async def test_forecast_refresh_reports_disabled_and_location_required(service):
     app = create_app(service, Runtime(web_password='test-pass'), run_background=False)
     async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url='http://app', auth=('admin', 'test-pass')) as client:
         config = await client.get('/api/config')
-        assert config.json()['forecast_settings'] == {'enabled': False, 'tilt_deg': None, 'azimuth_deg': None, 'noct_c': 45.0}
+        assert config.json()['forecast_settings'] == {'enabled': False, 'tilt_deg': None, 'azimuth_deg': None, 'noct_c': 45.0, 'pr_history_days': 14}
         assert config.json()['location'] is None
         disabled = await client.post('/api/forecast/refresh')
         assert disabled.status_code == 409
@@ -874,3 +890,33 @@ async def test_generation_data_reads_committed_day_under_lock_without_ha_or_writ
     assert [tuple(row) for row in service.store.db.execute('SELECT * FROM metadata ORDER BY key')] == metadata
     assert service.store.db.total_changes == changes
     assert service.snapshot(end + 30) == before
+
+
+@pytest.mark.parametrize('value', [2, 91, 3.5, True])
+async def test_pr_history_configuration_validation_reports_field(service, value):
+    app = create_app(service, Runtime(web_password='test-pass'), run_background=False)
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url='http://app', auth=('admin', 'test-pass')) as client:
+        response = await client.put('/api/config', json={'monitoring_settings': settings().model_dump(),
+            'forecast_settings': {'pr_history_days': value}, 'connection': {'url': 'http://ha.test', 'token': 'token'}})
+    assert response.status_code == 422
+    assert 'forecast_settings.pr_history_days' in response.json()['fields']
+
+
+async def test_correction_forecast_routes_read_under_service_lock(service, monkeypatch):
+    from pvyieldlens.settings import ForecastSettings, HALocation
+
+    await service.configure(settings(), now=0, origin='http://ha.test')
+    service.forecast.configure(service.monitoring_settings, ForecastSettings(enabled=True, tilt_deg=25, azimuth_deg=180),
+        service.origin, HALocation(origin=service.origin, latitude=0, longitude=0, home_timezone='UTC'))
+    real_view = service.forecast.view
+
+    def locked_view(now):
+        assert service.lock.locked()
+        return real_view(now)
+
+    monkeypatch.setattr(service.forecast, 'view', locked_view)
+    monkeypatch.setattr(service.forecast, 'request_refresh', lambda: True)
+    app = create_app(service, Runtime(web_password='test-pass'), run_background=False)
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url='http://app', auth=('admin', 'test-pass')) as client:
+        assert (await client.get('/api/forecast')).status_code == 200
+        assert (await client.post('/api/forecast/refresh')).status_code == 202

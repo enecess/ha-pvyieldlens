@@ -1,9 +1,12 @@
 import asyncio
 import time
 from contextlib import suppress
+from datetime import datetime
+from zoneinfo import ZoneInfo
 
 import httpx
 
+from .correction import ForecastCorrection, correction_view, physical_context
 from .forecast import ForecastBatch, ForecastInput, ForecastView, forecast_view
 from .open_meteo import OpenMeteoClient
 from .settings import ForecastSettings, HALocation, MonitoringSettings
@@ -21,6 +24,10 @@ class ForecastController:
         cache = store.get_meta('forecast_cache')
         self.batch = ForecastBatch.model_validate_json(cache) if cache else None
         self.inputs: ForecastInput | None = None
+        self.monitoring_settings: MonitoringSettings | None = None
+        self.origin = ''
+        self._correction: ForecastCorrection | None = None
+        self._correction_key = None
         self.last_error: str | None = None
         self._task: asyncio.Task[None] | None = None
         self._request_task: asyncio.Task[None] | None = None
@@ -44,6 +51,11 @@ class ForecastController:
             tilt_deg=settings.tilt_deg, azimuth_deg=settings.azimuth_deg, noct_c=settings.noct_c,
         ) if monitoring_settings and location and settings.tilt_deg is not None and settings.azimuth_deg is not None else None
         changed = inputs != self.inputs or settings.enabled != self.settings.enabled
+        if (monitoring_settings != self.monitoring_settings or origin != self.origin
+                or settings.pr_history_days != self.settings.pr_history_days):
+            self.invalidate_correction()
+        self.monitoring_settings = monitoring_settings
+        self.origin = origin
         self.settings = settings
         if not settings.enabled and self._request_scope is not None and self._request_scope.when() is None:
             self._request_scope.reschedule(asyncio.get_running_loop().time())
@@ -56,9 +68,21 @@ class ForecastController:
             self._next_refresh = 0.0
             self._wake.set()
 
+    def invalidate_correction(self) -> None:
+        self._correction_key = None
+
     def view(self, now: float) -> ForecastView:
+        correction = None
+        if self.settings.enabled and self.monitoring_settings is not None:
+            config = self.monitoring_settings
+            key = (datetime.fromtimestamp(now, ZoneInfo(config.home_timezone)).date(), config.home_timezone,
+                   self.settings.pr_history_days, physical_context(config, self.origin))
+            if key != self._correction_key:
+                self._correction = correction_view(self.store, config, self.origin, now, self.settings.pr_history_days)
+                self._correction_key = key
+            correction = self._correction
         return forecast_view(self.batch, self.inputs, self.settings, now,
-                             refreshing=self.settings.enabled and self._inflight is not None, last_error=self.last_error)
+                             correction=correction, refreshing=self.settings.enabled and self._inflight is not None, last_error=self.last_error)
 
     def request_refresh(self) -> bool:
         if not self.settings.enabled or self.inputs is None:

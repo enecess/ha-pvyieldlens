@@ -5,6 +5,7 @@ from zoneinfo import ZoneInfo
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from .correction import ForecastCorrection
 from .engine import estimated_power
 from .settings import ForecastSettings, HALocation
 
@@ -42,6 +43,11 @@ class ForecastInterval(_ForecastModel):
     quality: Literal['complete', 'unavailable']
 
 
+class CorrectedForecastInterval(ForecastInterval):
+    corrected_forecast_power_w: float | None
+    corrected_forecast_energy_kwh: float | None
+
+
 class ForecastData(_ForecastModel):
     intervals: tuple[ForecastInterval, ...]
     weather_samples: tuple[WeatherSample, ...]
@@ -76,6 +82,7 @@ class EnergyForecast(_ForecastModel):
     start: float
     end: float
     forecast_energy_kwh: float | None
+    corrected_forecast_energy_kwh: float | None
     data_completeness_percent: float
     quality: Literal['complete', 'partial', 'unavailable']
 
@@ -104,18 +111,20 @@ class ForecastView(_ForecastModel):
     tomorrow: EnergyForecast | None
     seven_days: EnergyForecast | None
     days: tuple[ForecastDay, ...]
-    intervals: tuple[ForecastInterval, ...]
+    intervals: tuple[CorrectedForecastInterval, ...]
+    correction: ForecastCorrection | None
 
 
 def forecast_view(batch: ForecastBatch | None, inputs: ForecastInput | None, settings: ForecastSettings,
-                  now: float, *, refreshing: bool = False, last_error: str | None = None) -> ForecastView:
+                  now: float, *, correction: ForecastCorrection | None = None, refreshing: bool = False, last_error: str | None = None) -> ForecastView:
     if inputs is None:
         return ForecastView(
             status='location_unavailable' if settings.enabled else 'disabled',
             refreshing=refreshing, fetched_at=None, calculated_at=now, last_error=last_error,
             home_timezone=None, today=None, remaining_today=None, tomorrow=None, seven_days=None,
-            days=(), intervals=(),
+            days=(), intervals=(), correction=correction,
         )
+    ratio = correction.pr / 100 if correction is not None and correction.pr is not None else None
     zone = ZoneInfo(inputs.location.home_timezone)
     today = datetime.fromtimestamp(now, zone).date()
     boundaries = tuple(datetime.combine(today + timedelta(days=offset), time.min, zone).timestamp()
@@ -127,14 +136,21 @@ def forecast_view(batch: ForecastBatch | None, inputs: ForecastInput | None, set
         if row.forecast_power_w is not None else None,
     }) for row in usable.intervals if row.end > boundaries[0] and row.start < boundaries[-1]) if usable else ()
 
+    intervals = tuple(CorrectedForecastInterval(**row.model_dump(),
+        corrected_forecast_power_w=row.forecast_power_w * ratio if row.forecast_power_w is not None and ratio is not None else None,
+        corrected_forecast_energy_kwh=row.forecast_energy_kwh * ratio if row.forecast_energy_kwh is not None and ratio is not None else None,
+    ) for row in intervals)
+
     def total(start: float, end: float) -> EnergyForecast:
         parts = tuple((row.forecast_power_w, min(row.end, end) - max(row.start, start))
                       for row in intervals if row.forecast_power_w is not None and row.end > start and row.start < end)
         covered_seconds = sum(seconds for _, seconds in parts)
         complete = abs(covered_seconds - (end - start)) < 1e-6
+        energy = sum(power * seconds for power, seconds in parts) / 3_600_000 if complete else None
         return EnergyForecast(
             start=start, end=end,
-            forecast_energy_kwh=sum(power * seconds for power, seconds in parts) / 3_600_000 if complete else None,
+            forecast_energy_kwh=energy,
+            corrected_forecast_energy_kwh=energy * ratio if energy is not None and ratio is not None else None,
             data_completeness_percent=covered_seconds / (end - start) * 100,
             quality='complete' if complete else 'partial' if covered_seconds else 'unavailable',
         )
@@ -171,5 +187,5 @@ def forecast_view(batch: ForecastBatch | None, inputs: ForecastInput | None, set
         today=EnergyForecast(**days[0].model_dump(exclude={'day', 'weather'})),
         remaining_today=total(now, boundaries[1]),
         tomorrow=EnergyForecast(**days[1].model_dump(exclude={'day', 'weather'})),
-        seven_days=seven_days, days=tuple(days), intervals=intervals,
+        seven_days=seven_days, days=tuple(days), intervals=intervals, correction=correction,
     )

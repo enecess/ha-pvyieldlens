@@ -675,3 +675,54 @@ async def test_shared_monitoring_inputs_update_forecast_and_new_origin_drops_sit
     assert service.forecast.location is None
     assert service.forecast.view(60).status == 'location_unavailable'
     store.close()
+
+
+async def test_correction_invalidates_once_for_recovered_closed_day_settlement_batch(tmp_path, monkeypatch):
+    from datetime import datetime, timezone
+
+    from pvyieldlens.engine import calculate
+    from pvyieldlens.home_assistant import HAState
+    from pvyieldlens.settings import ForecastSettings, HALocation
+    from test_correction import ORIGIN, TODAY, committed_days
+
+    stamp = datetime.fromtimestamp(TODAY - 180, timezone.utc)
+    recovered = [HAState(entity_id=entity, state=str(value), attributes={'unit_of_measurement': unit},
+                         last_updated=stamp, last_changed=stamp)
+                 for entity, value, unit in [('sensor.power', 10800, 'W'), ('sensor.temp', 25, '°C'),
+                                             ('sensor.sun', 12000, 'W/m²')]]
+
+    class HistoryClient:
+        async def history(self, entities, start, end):
+            return recovered
+
+        async def states(self, entities):
+            return []
+
+    store = Store(tmp_path / 'data.sqlite')
+    config = committed_days(store, [(1000, 900)] * 2, first_age=3,
+                            config=settings(total_max_power_at_stc_w=1000, settlement_interval_minutes=1))
+    store.settle(calculate(config, [], store.cursor, TODAY - 180), store.revision, 'UTC')
+    service = Service(store, HistoryClient())
+    service.forecast.configure(config, ForecastSettings(enabled=True, tilt_deg=25, azimuth_deg=180),
+        ORIGIN, HALocation(origin=ORIGIN, latitude=0, longitude=0, home_timezone='UTC'))
+    calls = []
+    invalidate = service.forecast.invalidate_correction
+
+    def counted():
+        calls.append(store.cursor)
+        invalidate()
+
+    monkeypatch.setattr(service.forecast, 'invalidate_correction', counted)
+    monkeypatch.setattr('pvyieldlens.service.time.time', lambda: TODAY + 60)
+    before = service.forecast.view(TODAY + 60).correction
+    assert before.pr is None
+    await service.recover()
+    assert calls == []
+    await service.tick(TODAY + 60)
+    assert calls == [TODAY + 60]
+    after = service.forecast.view(TODAY + 60).correction
+    assert after.pr == pytest.approx(90)
+    await service.tick(TODAY + 120)
+    assert calls == [TODAY + 60]
+    assert service.forecast.view(TODAY + 120).correction is after
+    store.close()

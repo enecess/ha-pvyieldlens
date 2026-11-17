@@ -120,6 +120,8 @@
   "forecast_direction": "Orientamento dei moduli",
   "forecast_azimuth": "Azimut personalizzato della bussola",
   "forecast_noct": "Temperatura nominale di funzionamento della cella (NOCT)",
+  "forecast_pr_history_days": "Giorni di storico PR",
+  "pr_history_days_help": "Giorni di calendario conclusi nel fuso di casa usati per la correzione (3–90). Predefinito: 14.",
   "azimuth_help": "In senso orario da nord: da 0° a meno di 360°.",
   "noct_help": "Valore da scheda tecnica: oltre 20°C fino a 80°C. Riferimento predefinito: 45°C.",
   "location_help": "Posizione e fuso orario provengono dalla connessione Home Assistant salvata. Modificali in HA.",

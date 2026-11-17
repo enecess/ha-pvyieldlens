@@ -7,7 +7,7 @@ const configuration: Configuration = {
     actual_power_entity: 'sensor.power', module_temperature_entity: 'sensor.temp', irradiance_entity: 'sensor.sun',
     settlement_interval_minutes: 1, live_window_seconds: 60, update_interval_seconds: 1,
     actual_power_max_age_seconds: 300, module_temperature_max_age_seconds: 900, irradiance_max_age_seconds: 300, home_timezone: 'UTC' },
-  forecast_settings: { enabled: true, tilt_deg: 25, azimuth_deg: 180, noct_c: 45 },
+  forecast_settings: { enabled: true, tilt_deg: 25, azimuth_deg: 180, noct_c: 45, pr_history_days: 14 },
   location: null, mode: 'docker', connection: { url: 'http://ha', token_set: true },
 };
 
@@ -23,7 +23,7 @@ describe('settings drafts', () => {
     const draft = draftFromConfiguration(configuration);
     expect(draft.monitoring.total_max_power_at_stc_w).toBe('5000');
     expect(draft.monitoring.pmax_temperature_coefficient_pct_per_c).toBe('-0.35');
-    expect(draft.forecast).toEqual({ enabled: true, tilt_deg: '25', azimuth_deg: '180', noct_c: '45' });
+    expect(draft.forecast).toEqual({ enabled: true, tilt_deg: '25', azimuth_deg: '180', noct_c: '45', pr_history_days: '14' });
     expect(draft.connection).toEqual({ url: 'http://ha', token: '' });
     expect(Object.values(draft.monitoring).every(value => typeof value === 'string')).toBe(true);
     expect(draft.monitoring).not.toHaveProperty('home_timezone');
@@ -84,18 +84,18 @@ describe('settings drafts', () => {
 
   it('preserves null optional geometry without turning blanks into zero', () => {
     const draft = draftFromConfiguration({ ...configuration,
-      forecast_settings: { enabled: false, tilt_deg: null, azimuth_deg: null, noct_c: 45 } });
+      forecast_settings: { enabled: false, tilt_deg: null, azimuth_deg: null, noct_c: 45, pr_history_days: 14 } });
     expect(draft.forecast.tilt_deg).toBe('');
     expect(draft.forecast.azimuth_deg).toBe('');
     expect(configurationUpdateFromDraft(draft, { mode: 'docker', home_timezone: 'Asia/Shanghai' })).toEqual({
       monitoring_settings: { ...configuration.monitoring_settings, home_timezone: 'Asia/Shanghai' },
       connection: { url: 'http://ha', token: '' },
-      forecast_settings: { enabled: false, tilt_deg: null, azimuth_deg: null, noct_c: 45 },
+      forecast_settings: { enabled: false, tilt_deg: null, azimuth_deg: null, noct_c: 45, pr_history_days: 14 },
     });
     draft.forecast.tilt_deg = '0';
     draft.forecast.azimuth_deg = '0';
     expect(hasSettingsChanges(draft, draftFromConfiguration({ ...configuration,
-      forecast_settings: { enabled: false, tilt_deg: null, azimuth_deg: null, noct_c: 45 } }))).toBe(true);
+      forecast_settings: { enabled: false, tilt_deg: null, azimuth_deg: null, noct_c: 45, pr_history_days: 14 } }))).toBe(true);
   });
 
   it('converts only a valid payload and omits external credentials in App mode', () => {
@@ -104,7 +104,20 @@ describe('settings drafts', () => {
     draft.forecast.azimuth_deg = '359.9';
     expect(configurationUpdateFromDraft(draft, { mode: 'app', home_timezone: 'UTC' })).toEqual({
       monitoring_settings: configuration.monitoring_settings,
-      forecast_settings: { enabled: true, tilt_deg: 90, azimuth_deg: 359.9, noct_c: 45 },
+      forecast_settings: { enabled: true, tilt_deg: 90, azimuth_deg: 359.9, noct_c: 45, pr_history_days: 14 },
     });
   });
+});
+
+it('preserves the history-day draft through blanks, edits and serialization', () => {
+  const baseline = draftFromConfiguration(configuration);
+  expect(baseline.forecast.pr_history_days).toBe('14');
+  const draft = structuredClone(baseline);
+  draft.forecast.pr_history_days = '';
+  expect(hasSettingsChanges(draft, baseline)).toBe(true);
+  expect(draft.forecast.pr_history_days).toBe('');
+  draft.forecast.pr_history_days = '30';
+  expect(configurationUpdateFromDraft(draft, { mode: 'app', home_timezone: 'UTC' }).forecast_settings.pr_history_days).toBe(30);
+  draft.forecast.pr_history_days = '14.0';
+  expect(hasSettingsChanges(draft, baseline)).toBe(false);
 });

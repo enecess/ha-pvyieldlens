@@ -120,6 +120,8 @@
   "forecast_direction": "Module direction",
   "forecast_azimuth": "Custom compass azimuth",
   "forecast_noct": "Nominal operating cell temperature (NOCT)",
+  "forecast_pr_history_days": "Historical PR days",
+  "pr_history_days_help": "Completed home calendar days used for correction (3–90). Default: 14.",
   "azimuth_help": "Clockwise from north: 0° to less than 360°.",
   "noct_help": "Module datasheet value: above 20°C, up to 80°C. Default reference: 45°C.",
   "location_help": "Location and time zone come from the saved Home Assistant connection. Change them in HA.",

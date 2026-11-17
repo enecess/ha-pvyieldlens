@@ -64,6 +64,7 @@ class ForecastSettings(BaseModel):
     tilt_deg: float | None = Field(default=None, ge=0, le=90)
     azimuth_deg: float | None = Field(default=None, ge=0, lt=360)
     noct_c: float = Field(default=45.0, gt=20, le=80)
+    pr_history_days: int = Field(default=14, ge=3, le=90)
 
     @model_validator(mode="after")
     def require_enabled_geometry(self) -> Self:

@@ -18,6 +18,7 @@ export interface ForecastSettings {
   tilt_deg: number | null;
   azimuth_deg: number | null;
   noct_c: number;
+  pr_history_days: number;
 }
 
 export interface HALocation {
@@ -112,13 +113,16 @@ export interface ForecastInterval {
   air_temperature_c: number | null;
   cell_temperature_c: number | null;
   forecast_power_w: number | null;
+  corrected_forecast_power_w: number | null;
   forecast_energy_kwh: number | null;
+  corrected_forecast_energy_kwh: number | null;
   quality: 'complete' | 'unavailable';
 }
 export interface EnergyForecast {
   start: number;
   end: number;
   forecast_energy_kwh: number | null;
+  corrected_forecast_energy_kwh: number | null;
   data_completeness_percent: number;
   quality: 'complete' | 'partial' | 'unavailable';
 }
@@ -129,7 +133,14 @@ export interface DailyWeather {
   quality: 'complete' | 'partial' | 'unavailable';
 }
 export interface ForecastDay extends EnergyForecast { day: string; weather: DailyWeather | null }
+export interface ForecastCorrection {
+  pr: number | null;
+  history_days: number;
+  start: number;
+  end: number;
+}
 export interface ForecastView {
+  correction: ForecastCorrection | null;
   status: 'disabled' | 'location_unavailable' | 'loading' | 'ready' | 'partial' | 'stale' | 'unavailable';
   refreshing: boolean;
   fetched_at: number | null;

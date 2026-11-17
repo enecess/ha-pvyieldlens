@@ -120,6 +120,8 @@
   "forecast_direction": "Kierunek modułów",
   "forecast_azimuth": "Własny azymut kompasowy",
   "forecast_noct": "Nominalna temperatura pracy ogniwa (NOCT)",
+  "forecast_pr_history_days": "Liczba dni historii PR",
+  "pr_history_days_help": "Zakończone dni kalendarzowe domu używane do korekty (3–90). Domyślnie: 14.",
   "azimuth_help": "Zgodnie z ruchem wskazówek zegara od północy: od 0° do poniżej 360°.",
   "noct_help": "Wartość z karty modułu: powyżej 20°C do 80°C. Domyślnie: 45°C.",
   "location_help": "Lokalizacja i strefa czasowa pochodzą z zapisanej konfiguracji Home Assistant. Zmień je w HA.",

@@ -158,8 +158,9 @@ def create_app(service: Service, runtime: Runtime, run_background=True) -> FastA
             await service.configure(update.monitoring_settings, origin=connection.url)
             if not runtime.supervisor_token:
                 service.store.set_meta('connection', json.dumps({'url': connection.url, 'token': connection.token.get_secret_value()}))
-        forecast = service.forecast
-        forecast.configure(service.monitoring_settings, update.forecast_settings, service.origin, forecast.location)
+        async with service.lock:
+            forecast = service.forecast
+            forecast.configure(service.monitoring_settings, update.forecast_settings, service.origin, forecast.location)
         if monitoring_changed or service.client is None:
             service.client = HomeAssistantClient(connection.url, connection.token.get_secret_value())
         if monitoring_changed and run_background:
@@ -214,18 +215,20 @@ def create_app(service: Service, runtime: Runtime, run_background=True) -> FastA
 
     @app.get('/api/forecast')
     async def get_forecast():
-        forecast = service.forecast
-        return forecast.view(time.time()).model_dump(mode='json')
+        async with service.lock:
+            forecast = service.forecast
+            return forecast.view(time.time()).model_dump(mode='json')
 
     @app.post('/api/forecast/refresh')
     async def refresh_forecast():
-        forecast = service.forecast
-        if not forecast.settings.enabled:
-            return JSONResponse({'error': 'forecast_disabled'}, status_code=409)
-        if forecast.inputs is None:
-            return JSONResponse({'error': 'forecast_location_required'}, status_code=422)
-        scheduled = forecast.request_refresh()
-        return JSONResponse({'scheduled': scheduled, 'status': forecast.view(time.time()).status}, status_code=202)
+        async with service.lock:
+            forecast = service.forecast
+            if not forecast.settings.enabled:
+                return JSONResponse({'error': 'forecast_disabled'}, status_code=409)
+            if forecast.inputs is None:
+                return JSONResponse({'error': 'forecast_location_required'}, status_code=422)
+            scheduled = forecast.request_refresh()
+            return JSONResponse({'scheduled': scheduled, 'status': forecast.view(time.time()).status}, status_code=202)
 
     @app.get('/api/generation-data')
     async def generation_data():

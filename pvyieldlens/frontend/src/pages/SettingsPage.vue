@@ -15,7 +15,7 @@ const emit = defineEmits<{
 const { t, language } = useI18n();
 const configuration = shallowRef<Configuration | null>(null);
 const baseline = shallowRef(draftFromConfiguration({ monitoring_settings: null, forecast_settings: {
-  enabled: false, tilt_deg: null, azimuth_deg: null, noct_c: 45,
+  enabled: false, tilt_deg: null, azimuth_deg: null, noct_c: 45, pr_history_days: 14,
 }, location: null, mode: 'docker', connection: { url: '', token_set: false } }));
 const draft = ref(structuredClone(baseline.value));
 const form = ref<HTMLFormElement>();
@@ -261,6 +261,7 @@ async function save() {
                   <label><span>{{ t('forecast_direction') }}</span><select id="forecast-direction" v-model="direction" @change="direction === 'custom' || (draft.forecast.azimuth_deg = direction)"><option value="">{{ t('direction_unset') }}</option><option value="0">{{ t('north') }}</option><option value="90">{{ t('east') }}</option><option value="180">{{ t('south') }}</option><option value="270">{{ t('west') }}</option><option value="custom">{{ t('custom') }}</option></select></label>
                   <label v-show="direction === 'custom'" id="forecast-azimuth-row"><span>{{ t('forecast_azimuth') }}</span><div class="input-unit"><input name="forecast_azimuth_deg" type="number" min="0" step="any" :required="draft.forecast.enabled" :value="draft.forecast.azimuth_deg" @input="draft.forecast.azimuth_deg = inputValue($event)"><span>°</span></div><small>{{ t('azimuth_help') }}</small></label>
                   <label><span>{{ t('forecast_noct') }}</span><div class="input-unit"><input name="forecast_noct_c" type="number" min="20" max="80" step="any" required :value="draft.forecast.noct_c" @input="draft.forecast.noct_c = inputValue($event)"><span>°C</span></div><small>{{ t('noct_help') }}</small></label>
+                  <label><span>{{ t('forecast_pr_history_days') }}</span><input name="forecast_pr_history_days" type="number" min="3" max="90" step="1" required :value="draft.forecast.pr_history_days" @input="draft.forecast.pr_history_days = inputValue($event)"><small>{{ t('pr_history_days_help') }}</small></label>
                 </div>
               </section>
             </fieldset>
