@@ -50,7 +50,7 @@ async def test_singleton_glyph_pixel_picking(browser_workspace, scenario, chart_
                         'actual_energy_kwh': record['actual_energy_wh'] / 1000,
                         'estimated_energy_kwh': record['estimated_energy_wh'] / 1000,
                         'pr': record['pr'], 'data_completeness_percent': 100, 'valid_seconds': 60},
-            {'start': now - 86400, 'end': now}, parse_qs(urlsplit(route.request.url).query).get('period', ['today'])[0]))
+            {'start': records[0]['start'], 'end': records[-1]['end']}, parse_qs(urlsplit(route.request.url).query).get('period', ['today'])[0]))
 
     async def live(route):
         await route.fulfill(json={
@@ -106,10 +106,12 @@ async def test_singleton_glyph_pixel_picking(browser_workspace, scenario, chart_
     offsets = ([-1, -11] if touch else [-1, -5]) if edge_single else ([1, 11] if touch else [1, 5])
     if not edge_single and target - 1 > box['x']:
         offsets.insert(0, -1)
+    if not edge_single:
+        offsets.append(13 if touch else 7)
+    assert all(box['x'] <= target + offset <= box['x'] + box['width'] for offset in offsets), {
+        'target': target, 'plot': box, 'offsets': offsets}
     for offset in offsets:
         await inspect(offset)
-    if not edge_single:
-        await inspect(13 if touch else 7)
     await hit.focus()
     await page.keyboard.press('ArrowLeft')
     keyboard = await tip.inner_text()
@@ -132,13 +134,14 @@ async def test_singleton_glyph_pixel_picking(browser_workspace, scenario, chart_
         assert ('0 %' if zero else '88.3 %') in read['text'], read
     if not edge_single:
         assert reads[-1]['markers'] == 0, reads[-1]
-        assert 'Unavailable' in reads[-1]['text'], reads[-1]
+        assert reads[-1]['text'].count('— %' if chart_id == 'pr-chart' else '— W') == (1 if chart_id == 'pr-chart' else 2), reads[-1]
+        assert 'Unavailable' not in reads[-1]['text'], reads[-1]
     assert ('0 W' if zero else '3,885.2 W') in keyboard
     assert keyboard_at == (endpoint if len(records) == 1 else endpoint + 180)
     assert report['previous_keyboard_at'] == endpoint
 
 
-async def test_single_forecast_row_keeps_hourly_interval_selection(forecast_page):
+async def test_single_forecast_row_keeps_quarter_hour_interval_selection(forecast_page):
     from playwright.async_api import expect
 
     page, state, _ = forecast_page
@@ -159,8 +162,8 @@ async def test_single_forecast_row_keeps_hourly_interval_selection(forecast_page
         reads.append({'at': at, 'text': await chart.locator('.chart-tooltip').inner_text(),
                       'markers': await chart.locator('.active-series-marker[visibility=visible]').count()})
     print('forecast-single-interval', json.dumps(reads))
-    assert all(read['markers'] == 1 and '3,720 W' in read['text'] for read in reads[:2])
-    assert reads[-1]['markers'] == 0 and 'Unavailable' in reads[-1]['text']
+    assert all(read['markers'] == 2 and '3,720 W' in read['text'] and '3,348 W' in read['text'] for read in reads[:2])
+    assert reads[-1]['markers'] == 0 and reads[-1]['text'].count('— W') == 2
 
 
 @pytest.fixture
@@ -186,8 +189,11 @@ async def chart_page(browser_workspace):
             {'start': 0, 'end': ends[-1]}, parse_qs(urlsplit(route.request.url).query).get('period', ['today'])[0]))
 
     await page.route('**/api/history?*', history)
+    # Keep the fixture's early-epoch windows inside the rolling query range.
+    await page.clock.set_fixed_time(datetime.fromtimestamp(2000, timezone.utc))
     await page.locator('#history-tab').click()
     await expect(page.locator('#history-chart svg')).to_be_visible()
+    await page.locator('#history-chart').scroll_into_view_if_needed()
     return page, state
 
 
@@ -198,7 +204,8 @@ async def test_covered_continuous_run_precedes_overlapping_singleton(chart_page,
     page, state = chart_page
     await page.set_viewport_size({'width': 1200, 'height': 1000})
     state.update(ends=[40, 45, 46, 1040], starts=[0, 44, 45, 1000], values=[10, 20, 30, None])
-    await page.locator('#history-range').select_option('24h')
+    await page.locator('#history-range [data-value="24h"]').click()
+    await page.locator('#history-chart').scroll_into_view_if_needed()
     await expect(page.locator('#history-chart .chart-hit-area')).to_have_attribute('aria-valuemax', '1040')
     touch_context = None
     if touch:
@@ -256,7 +263,8 @@ async def test_curve_is_bounded_between_samples(chart_page):
         assert any(min(left['y'], right['y']) - 0.05 <= sample['y'] <= max(left['y'], right['y']) + 0.05
                    for left, right in pairs), sample
     state['values'][2] = None
-    await page.locator('#history-range').select_option('24h')
+    await page.locator('#history-range [data-value="24h"]').click()
+    await page.locator('#history-chart').scroll_into_view_if_needed()
     await expect(page.locator('#history-chart path.series').first).not_to_have_attribute('d', geometry['curve'])
     gap = await page.locator('#history-chart').evaluate('''host => {
         const path = host.querySelector('path.series');
@@ -282,11 +290,12 @@ async def test_tooltip_works_away_from_the_line(chart_page):
     await expect(chart.locator('.active-series-marker')).to_have_count(2)
     svg = await chart.locator('svg').evaluate("node => node.dataset.original = 'inspect'")
     state['values'][2] = None
-    await page.locator('#history-range').select_option('24h')
+    await page.locator('#history-range [data-value="24h"]').click()
+    await page.locator('#history-chart').scroll_into_view_if_needed()
     await expect(chart.locator('svg')).not_to_have_attribute('data-original', svg)
     box = await area.bounding_box()
     await page.mouse.move(box['x'] + box['width'] * 360 / 900, box['y'] + box['height'] - 3)
-    await expect(tooltip).to_contain_text('Unavailable')
+    await expect(tooltip).not_to_contain_text('Unavailable')
     await expect(tooltip).to_contain_text('— W')
     assert await chart.locator('.active-series-marker:visible').count() == 0
     await page.mouse.move(box['x'], box['y'] + 3)
@@ -300,20 +309,23 @@ async def test_missing_settlement_gap_is_unavailable_but_valid_edges_remain_insp
 
     page, state = chart_page
     state['starts'] = [0, 60, 300, 600, 660]
-    await page.locator('#history-range').select_option('24h')
+    await page.locator('#history-range [data-value="24h"]').click()
+    await page.locator('#history-chart').scroll_into_view_if_needed()
     chart = page.locator('#history-chart')
     await expect(chart.locator('path.series').first).to_have_attribute('d', re.compile(r'^M[^M]+M[^M]+M[^M]+$'))
     box = await chart.locator('.chart-hit-area').bounding_box()
     tooltip = chart.locator('.chart-tooltip')
     await page.mouse.move(box['x'] + 240 / 900 * box['width'], box['y'] + 3)
-    await expect(tooltip).to_contain_text('Unavailable')
+    await expect(tooltip).not_to_contain_text('Unavailable')
     await expect(tooltip).to_contain_text('— W')
     assert await chart.locator('.active-series-marker[visibility=visible]').count() == 0
     # Mouse coordinates round to subpixels; exact interval boundaries are unit-tested.
     for at, value in [(179.9, '80 W'), (300.1, '100 W'), (359.9, '100 W'), (600.1, '20 W')]:
         await page.mouse.move(box['x'] + at / 900 * box['width'], box['y'] + 3)
         await expect(tooltip).to_contain_text(value)
-        await expect(tooltip).to_contain_text('Data complete')
+        await expect(tooltip).to_contain_text('125 %')
+        assert await chart.locator('.active-series-marker[visibility=visible]').count() == 2
+        await expect(tooltip).not_to_contain_text('Data complete')
 
 
 async def test_inspection_reads_original_thinned_record(chart_page):
@@ -322,7 +334,8 @@ async def test_inspection_reads_original_thinned_record(chart_page):
     page, state = chart_page
     state['ends'] = list(range(1, 1202))
     state['values'] = [index if index != 502 else 0 for index in range(1201)]
-    await page.locator('#history-range').select_option('24h')
+    await page.locator('#history-range [data-value="24h"]').click()
+    await page.locator('#history-chart').scroll_into_view_if_needed()
     chart = page.locator('#history-chart')
     await expect(chart.locator('.chart-hit-area')).to_be_visible()
     # The zero at index 502 is omitted from the displayed sample. Geometry there
@@ -378,11 +391,13 @@ async def test_keyboard_and_touch_inspection(chart_page):
     assert await touch_chart.locator('.chart-hit-area').evaluate("node => getComputedStyle(node).touchAction") == 'pan-y'
     session = await context.new_cdp_session(touch)
     before = await touch.locator('#content-scroll').evaluate('node => node.scrollTop')
-    await session.send('Input.dispatchTouchEvent', {'type': 'touchStart', 'touchPoints': [{'x': box['x'] + 20, 'y': box['y'] + 100}]})
+    # The comparison chart is last, so pan back toward the content above it.
+    assert before > 0
+    await session.send('Input.dispatchTouchEvent', {'type': 'touchStart', 'touchPoints': [{'x': box['x'] + 20, 'y': box['y'] + 20}]})
     for distance in [20, 40, 70, 100]:
-        await session.send('Input.dispatchTouchEvent', {'type': 'touchMove', 'touchPoints': [{'x': box['x'] + 20, 'y': box['y'] + 100 - distance}]})
+        await session.send('Input.dispatchTouchEvent', {'type': 'touchMove', 'touchPoints': [{'x': box['x'] + 20, 'y': box['y'] + 20 + distance}]})
     await session.send('Input.dispatchTouchEvent', {'type': 'touchEnd', 'touchPoints': []})
-    await touch.wait_for_function("before => document.querySelector('#content-scroll').scrollTop > before", arg=before)
+    await touch.wait_for_function("before => document.querySelector('#content-scroll').scrollTop < before", arg=before)
     assert await touch.evaluate('scrollY') == 0
     assert (await touch.locator('.app-header').bounding_box())['y'] == 0
     await context.close()
@@ -457,13 +472,14 @@ async def test_tooltip_on_top_clipped_chart_stays_below_header(chart_page):
 
     page, _ = chart_page
     await page.set_viewport_size({'width': 390, 'height': 600})
-    chart = page.locator('#history-chart')
+    # PR is the first chart area, with enough content below it to test top clipping.
+    chart = page.locator('#pr-chart')
     await expect(page.locator('#content-scroll')).to_have_count(1)
     await chart.evaluate('''host => {
         const scroll = document.querySelector('#content-scroll');
         scroll.scrollTo(0, scroll.scrollTop + host.getBoundingClientRect().top - scroll.getBoundingClientRect().top + 70);
     }''')
-    await page.wait_for_function("() => document.querySelector('#history-chart').getBoundingClientRect().top < document.querySelector('.app-header').getBoundingClientRect().bottom")
+    await page.wait_for_function("() => document.querySelector('#pr-chart').getBoundingClientRect().top < document.querySelector('.app-header').getBoundingClientRect().bottom")
     hit = await chart.locator('.chart-hit-area').bounding_box()
     header = await page.locator('.app-header').bounding_box()
     await page.mouse.move(hit['x'] + hit['width'] / 2, header['height'] + 10)
