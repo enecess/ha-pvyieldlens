@@ -49,9 +49,16 @@ async def state(entity: str):
 
 @app.post('/api/template')
 async def selected_states(request: Request):
-    entities = (await request.json())['variables']['entities']
-    available = {item['entity_id']: item for item in source_states()}
-    return [available.get(entity) for entity in entities]
+    payload = await request.json()
+    at = time.time()
+    available = {item['entity_id']: item for item in source_states(at)}
+    selected = [available.get(entity) for entity in payload['variables']['entities']]
+    if '"observed_at"' in payload['template']:
+        return {'observed_at': at, 'sources': [
+            {'state': item['state'], 'unit': item['attributes'].get('unit_of_measurement'),
+             'reported_at': datetime.fromisoformat(item['last_reported']).timestamp()} if item else None
+            for item in selected]}
+    return selected
 
 
 @app.get('/api/history/period/{start}')

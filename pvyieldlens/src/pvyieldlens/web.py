@@ -190,6 +190,20 @@ def create_app(service: Service, runtime: Runtime, run_background=True) -> FastA
         async with service.lock:
             return service.snapshot()
 
+    @app.get('/api/source-diagnostics')
+    async def source_diagnostics():
+        async with service.lock:
+            client = service.client
+            monitoring_settings = service.monitoring_settings
+        if monitoring_settings is None:
+            return {'observed_at': None, 'sources': []}
+        if client is None:
+            return JSONResponse({'error': 'ha_connection_failed'}, status_code=502)
+        try:
+            return await client.source_diagnostics(monitoring_settings.entities)
+        except NETWORK_ERRORS:
+            return JSONResponse({'error': 'ha_connection_failed'}, status_code=502)
+
     @app.get('/api/live-series')
     async def live_series():
         async with service.lock:

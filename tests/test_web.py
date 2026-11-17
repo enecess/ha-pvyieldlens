@@ -612,3 +612,111 @@ async def test_full_configuration_requires_forecast_settings_without_partial_wri
     assert response.json() == {'error': 'invalid_configuration', 'fields': ['forecast_settings']}
     assert service.monitoring_settings.total_max_power_at_stc_w == 5000
     assert service.store.db.total_changes == before
+
+
+async def test_source_diagnostics_requires_authentication_and_returns_unconfigured_empty(service):
+    app = create_app(service, Runtime(web_password='test-pass'), run_background=False)
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url='http://app') as client:
+        assert (await client.get('/api/source-diagnostics')).status_code == 401
+        response = await client.get('/api/source-diagnostics', auth=('admin', 'test-pass'))
+    assert response.status_code == 200
+    assert response.json() == {'observed_at': None, 'sources': []}
+    assert response.headers['Cache-Control'] == 'no-store'
+
+
+async def test_source_diagnostics_reads_leave_service_store_and_outputs_unchanged(service):
+    from pvyieldlens.home_assistant import HomeAssistantClient
+    from test_engine import samples
+    from test_home_assistant import state
+
+    await service.configure(settings(settlement_interval_minutes=1), now=0, origin='http://ha.test')
+    service.store.add_observations(samples(at=0), origin=service.origin)
+    await service.ingest([state(changed='1970-01-01T00:01:00+00:00', reported='1970-01-01T00:01:10+00:00')])
+    await service.tick(now=120)
+    requests = []
+
+    def respond(request):
+        requests.append(request)
+        return httpx.Response(200, json={'observed_at': 121.25, 'sources': [
+            {'state': '2.5', 'unit': 'kW', 'reported_at': 121.0}, None, None,
+        ]})
+
+    observation_count = service.store.db.execute('SELECT COUNT(*) FROM observations').fetchone()[0]
+    cursor = service.store.cursor
+    metadata = list(service.store.db.execute('SELECT * FROM metadata ORDER BY key'))
+    changes = service.store.db.total_changes
+    snapshot = service.snapshot(now=120)
+    live_series = service.live_series(now=120)
+    async with httpx.AsyncClient(transport=httpx.MockTransport(respond)) as ha_http:
+        service.client = HomeAssistantClient('http://ha.test', 'secret', http=ha_http)
+        app = create_app(service, Runtime(web_password='test-pass'), run_background=False)
+        async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url='http://app',
+                                     auth=('admin', 'test-pass')) as client:
+            for _ in range(2):
+                response = await client.get('/api/source-diagnostics')
+                assert response.status_code == 200
+                assert response.json() == {'observed_at': 121.25, 'sources': [
+                    {'entity_id': 'sensor.power', 'state': '2.5', 'unit': 'kW', 'reported_at': 121, 'valid': True},
+                    {'entity_id': 'sensor.temp', 'state': 'unavailable', 'unit': None, 'reported_at': None, 'valid': False},
+                    {'entity_id': 'sensor.sun', 'state': 'unavailable', 'unit': None, 'reported_at': None, 'valid': False},
+                ]}
+    assert service.store.db.execute('SELECT COUNT(*) FROM observations').fetchone()[0] == observation_count
+    assert service.store.cursor == cursor
+    assert list(service.store.db.execute('SELECT * FROM metadata ORDER BY key')) == metadata
+    assert service.store.db.total_changes == changes
+    assert service.snapshot(now=120) == snapshot
+    assert service.live_series(now=120) == live_series
+    assert len(requests) == 2
+    assert all(request.method == 'POST' and request.url.path == '/api/template' for request in requests)
+    assert not any(request.method == 'POST' and '/states/' in request.url.path for request in requests)
+
+
+async def test_source_diagnostics_uses_captured_configuration_without_locking_network_io(service):
+    import json
+    from pvyieldlens.home_assistant import HomeAssistantClient
+
+    await service.configure(settings(), now=0, origin='http://ha.test')
+    requests = []
+
+    async def respond(request):
+        assert not service.lock.locked()
+        async with service.lock:
+            service.client = None
+            service.monitoring_settings = settings(actual_power_entity='sensor.replacement')
+        requests.append(request)
+        return httpx.Response(200, json={'observed_at': 110.0, 'sources': [None, None, None]})
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(respond)) as ha_http:
+        service.client = HomeAssistantClient('http://ha.test', 'secret', http=ha_http)
+        app = create_app(service, Runtime(web_password='test-pass'), run_background=False)
+        async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url='http://app',
+                                     auth=('admin', 'test-pass')) as client:
+            response = await client.get('/api/source-diagnostics')
+    assert response.status_code == 200
+    assert [row['entity_id'] for row in response.json()['sources']] == ['sensor.power', 'sensor.temp', 'sensor.sun']
+    assert len(requests) == 1
+    assert json.loads(requests[0].content)['variables']['entities'] == ['sensor.power', 'sensor.temp', 'sensor.sun']
+
+
+@pytest.mark.parametrize('failure', ['unavailable_client', 'network', 'http', 'validation'])
+async def test_source_diagnostics_ha_failures_return_bad_gateway(service, failure):
+    from pvyieldlens.home_assistant import HomeAssistantClient
+
+    await service.configure(settings(), now=0, origin='http://ha.test')
+
+    def respond(request):
+        if failure == 'network':
+            raise httpx.ConnectError('offline', request=request)
+        if failure == 'http':
+            return httpx.Response(503)
+        return httpx.Response(200, json={'observed_at': None, 'sources': [None, None, None]})
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(respond)) as ha_http:
+        if failure != 'unavailable_client':
+            service.client = HomeAssistantClient('http://ha.test', 'secret', http=ha_http)
+        app = create_app(service, Runtime(web_password='test-pass'), run_background=False)
+        async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url='http://app',
+                                     auth=('admin', 'test-pass')) as client:
+            response = await client.get('/api/source-diagnostics')
+    assert response.status_code == 502
+    assert response.json() == {'error': 'ha_connection_failed'}

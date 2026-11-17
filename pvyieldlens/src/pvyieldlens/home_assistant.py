@@ -7,7 +7,7 @@ from typing import Literal
 from urllib.parse import urlsplit, urlunsplit
 
 import httpx
-from pydantic import AwareDatetime, BaseModel, Field, JsonValue, TypeAdapter, ValidationError
+from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, JsonValue, TypeAdapter, ValidationError
 from websockets.asyncio.client import connect
 
 from .engine import Observation
@@ -26,6 +26,21 @@ class HAState(BaseModel):
     last_updated: AwareDatetime
     last_changed: AwareDatetime
     last_reported: AwareDatetime | None = None
+
+
+class SourceReport(BaseModel):
+    model_config = ConfigDict(strict=True, allow_inf_nan=False)
+
+    state: str
+    unit: str | None
+    reported_at: float | None
+
+
+class SourceReports(BaseModel):
+    model_config = ConfigDict(strict=True, allow_inf_nan=False)
+
+    observed_at: float
+    sources: list[SourceReport | None] = Field(min_length=3, max_length=3)
 
 
 class HAConfig(BaseModel):
@@ -49,11 +64,11 @@ class WSMessage(BaseModel):
     event: Event | None = None
 
 
-def parse_state(state: HAState, role: Literal['power', 'temperature', 'irradiance'], historical=False) -> list[Observation]:
+def source_value(state: str, unit: str | None, role: Literal['power', 'temperature', 'irradiance']):
     value = None
-    if re.fullmatch(r"[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?", state.state):
-        number = float(state.state)
-        unit = (state.attributes.unit_of_measurement or '').replace('²', '2').replace('^', '').replace(' ', '')
+    if re.fullmatch(r"[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?", state):
+        number = float(state)
+        unit = (unit or '').replace('²', '2').replace('^', '').replace(' ', '')
         if math.isfinite(number):
             if role == 'power' and unit in ('W', 'kW') and number >= 0:
                 value = number * (1000 if unit == 'kW' else 1)
@@ -63,6 +78,11 @@ def parse_state(state: HAState, role: Literal['power', 'temperature', 'irradianc
                 value = (number-32) * 5/9 if unit == '°F' else number-273.15 if unit == 'K' else number
     if value is not None and not math.isfinite(value):
         value = None
+    return value
+
+
+def parse_state(state: HAState, role: Literal['power', 'temperature', 'irradiance'], historical=False) -> list[Observation]:
+    value = source_value(state.state, state.attributes.unit_of_measurement, role)
     at = state.last_updated.timestamp()
     points = [Observation(state.entity_id, at, value, at)]
     if not historical and state.last_reported and state.last_reported.timestamp() > at:
@@ -120,6 +140,21 @@ class HomeAssistantClient:
         now = datetime.now(timezone.utc)
         return [state or HAState(entity_id=entity, state='unavailable', last_changed=now, last_updated=now)
                 for entity, state in zip(entities, result, strict=True)]
+
+    async def source_diagnostics(self, entities: tuple[str, str, str]):
+        result = SourceReports.model_validate(await self.request('POST', 'template', json={
+            'template': '''{"observed_at": {{ as_timestamp(now()) | to_json }}, "sources": [
+                {% for entity in entities %}{% set s = states[entity] %}
+                {% if s is not none %}{{ dict(state=s.state, unit=s.attributes.get('unit_of_measurement'),
+                    reported_at=as_timestamp(s.last_reported) if s.last_reported is not none else none) | to_json }}
+                {% else %}null{% endif %}{% if not loop.last %},{% endif %}{% endfor %}]}''',
+            'variables': {'entities': entities},
+        }))
+        return {'observed_at': result.observed_at, 'sources': [
+            {'entity_id': entity, **source.model_dump(), 'valid': source_value(source.state, source.unit, role) is not None}
+            if source is not None else
+            {'entity_id': entity, 'state': 'unavailable', 'unit': None, 'reported_at': None, 'valid': False}
+            for entity, source, role in zip(entities, result.sources, ('power', 'temperature', 'irradiance'))]}
 
     async def history(self, entities: list[str], start: float, end: float) -> list[HAState]:
         stamp = datetime.fromtimestamp(start, timezone.utc).isoformat()
