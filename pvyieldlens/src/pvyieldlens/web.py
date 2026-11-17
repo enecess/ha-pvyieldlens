@@ -6,8 +6,10 @@ import secrets
 import time
 from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
+from datetime import date, datetime
 from pathlib import Path
 from urllib.parse import urlsplit
+from zoneinfo import ZoneInfo
 
 import httpx
 from fastapi import FastAPI, Query, Request
@@ -227,15 +229,27 @@ def create_app(service: Service, runtime: Runtime, run_background=True) -> FastA
     @app.get('/api/history')
     async def history(period: HistoryPeriod | None = None,
                       start: float | None = Query(default=None, ge=0, allow_inf_nan=False),
-                      end: float | None = Query(default=None, ge=0, allow_inf_nan=False)):
+                      end: float | None = Query(default=None, ge=0, allow_inf_nan=False),
+                      start_date: date | None = None, end_date: date | None = None,
+                      compare: bool | None = None):
         if period is not None:
-            if start is not None or end is not None:
+            if (start is not None or end is not None
+                    or period != 'custom' and (start_date is not None or end_date is not None)
+                    or period == 'custom' and (start_date is None or end_date is None or compare)):
                 return JSONResponse({'error': 'invalid_time_range'}, status_code=422)
             async with service.lock:
                 store = service.store
                 home_timezone = service.monitoring_settings.home_timezone if service.monitoring_settings else 'UTC'
-                return history_view(store, period, time.time(), home_timezone).model_dump(mode='json')
-        if start is None or end is None or end <= start or end - start > 90 * 86400:
+                now = time.time()
+                if period == 'custom':
+                    assert start_date is not None and end_date is not None
+                    today = datetime.fromtimestamp(now, ZoneInfo(home_timezone)).date()
+                    if end_date < start_date or (end_date - start_date).days >= 90 or end_date > today:
+                        return JSONResponse({'error': 'invalid_time_range'}, status_code=422)
+                return history_view(store, period, now, home_timezone, start_date=start_date,
+                                    end_date=end_date, compare=bool(compare)).model_dump(mode='json')
+        if (start_date is not None or end_date is not None or compare is not None
+                or start is None or end is None or end <= start or end - start > 90 * 86400):
             return JSONResponse({'error': 'invalid_time_range'}, status_code=422)
         async with service.lock:
             store = service.store

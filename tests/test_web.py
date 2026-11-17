@@ -720,3 +720,85 @@ async def test_source_diagnostics_ha_failures_return_bad_gateway(service, failur
             response = await client.get('/api/source-diagnostics')
     assert response.status_code == 502
     assert response.json() == {'error': 'ha_connection_failed'}
+
+
+@pytest.mark.parametrize('query', [
+    'period=custom&start_date=2026-08-19&end_date=2026-11-17',
+    'period=custom&start_date=2026-11-17&end_date=2026-11-18',
+    'period=custom&start_date=2026-11-18&end_date=2026-11-18',
+    'period=custom&start_date=2026-11-17&end_date=2026-11-16',
+    'period=custom&start_date=2026-11-17',
+    'period=custom&end_date=2026-11-17',
+    'period=custom',
+    'period=custom&start_date=invalid&end_date=2026-11-17',
+    'period=custom&start_date=2026-11-17&end_date=2026-11-17&compare=true',
+    'period=custom&start_date=2026-11-17&end_date=2026-11-17&start=0&end=60',
+    'period=today&start_date=2026-11-17',
+    'period=7d&end_date=2026-11-17',
+    'start_date=2026-11-17&end_date=2026-11-17',
+    'start=0&end=60&start_date=2026-11-17',
+    'start=0&end=60&compare=true',
+    'period=today&compare=invalid',
+])
+async def test_history_calendar_parameters_are_validated(service, monkeypatch, query):
+    from test_history import timestamp
+
+    service.monitoring_settings = settings(home_timezone='Asia/Shanghai')
+    monkeypatch.setattr('pvyieldlens.web.time.time', lambda: timestamp('2026-11-17T00:30:00'))
+    app = create_app(service, Runtime(web_password='test-pass'), run_background=False)
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url='http://app',
+                                 auth=('admin', 'test-pass')) as client:
+        assert (await client.get('/api/history?' + query)).status_code == 422
+
+
+@pytest.mark.parametrize('comparison_query', ['', '&compare=false'])
+async def test_history_custom_range_accepts_90_household_dates_across_dst(service, monkeypatch, comparison_query):
+    from test_history import timestamp
+
+    zone = 'America/New_York'
+    service.monitoring_settings = settings(home_timezone=zone)
+    monkeypatch.setattr('pvyieldlens.web.time.time', lambda: timestamp('2026-11-17T23:30:00', zone))
+    app = create_app(service, Runtime(web_password='test-pass'), run_background=False)
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url='http://app',
+                                 auth=('admin', 'test-pass')) as client:
+        response = await client.get('/api/history?period=custom&start_date=2026-08-20&end_date=2026-11-17' + comparison_query)
+    assert response.status_code == 200
+    body = response.json()
+    assert body['home_timezone'] == zone
+    assert body['today'] == '2026-11-17'
+    assert len(body['days']) == 90
+    assert body['requested_range']['end'] == timestamp('2026-11-17T23:30:00', zone)
+    assert body['days'][-1]['in_progress']
+    assert body['comparison'] is None
+
+
+async def test_history_previous_period_reads_comparable_summaries_under_service_lock(service, monkeypatch):
+    from test_history import settle_history_windows, timestamp
+
+    settle_history_windows(service.store, [
+        ('2026-11-16T12:00:00', 300, 540, 1000),
+        ('2026-11-16T12:05:00', 300, 0, 1000),
+        ('2026-11-17T12:00:00', 300, 480, 1000),
+    ])
+    service.monitoring_settings = settings(home_timezone='Asia/Shanghai')
+    now = timestamp('2026-11-17T12:07:00')
+    monkeypatch.setattr('pvyieldlens.web.time.time', lambda: now)
+    original_history = service.store.history
+
+    def read_locked(*args, **kwargs):
+        assert service.lock.locked()
+        return original_history(*args, **kwargs)
+
+    monkeypatch.setattr(service.store, 'history', read_locked)
+    app = create_app(service, Runtime(web_password='test-pass'), run_background=False)
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url='http://app',
+                                 auth=('admin', 'test-pass')) as client:
+        response = await client.get('/api/history?period=today&compare=true')
+        unrequested = await client.get('/api/history?period=today')
+    assert response.status_code == 200
+    body = response.json()
+    assert body['summary']['pr'] == pytest.approx(80)
+    assert body['comparison']['summary']['pr'] == pytest.approx(90)
+    assert body['comparison']['pr_change_pp'] == pytest.approx(-10)
+    assert body['comparison']['requested_range']['end'] == timestamp('2026-11-16T12:05:00')
+    assert unrequested.json()['comparison'] is None

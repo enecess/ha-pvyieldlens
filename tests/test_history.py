@@ -1,5 +1,5 @@
 import sqlite3
-from datetime import datetime
+from datetime import date, datetime
 from zoneinfo import ZoneInfo
 
 import pytest
@@ -226,3 +226,210 @@ def test_daily_pr_is_energy_weighted_and_valid_zero_actual_is_not_missing(store)
     all_three = history_view(store, '7d', start + 1800, 'Asia/Shanghai')
     assert all_three.days[-1].summary.actual_energy_kwh == pytest.approx(0.95)
     assert all_three.days[-1].summary.pr == pytest.approx(950 / 1100 * 100)
+
+
+def settle_history_windows(store, windows, home_timezone='Asia/Shanghai'):
+    config = settings(total_max_power_at_stc_w=600, home_timezone=home_timezone)
+    revision = store.save_monitoring_settings(config, timestamp(windows[0][0], home_timezone))
+    for local, seconds, power, sun in windows:
+        start = timestamp(local, home_timezone)
+        if store.cursor < start:
+            store.settle(calculate(config, [], store.cursor, start), revision, home_timezone)
+        store.settle(calculate(config, samples(at=start, power=power, temp=25, sun=sun),
+                               start, start + seconds), revision, home_timezone)
+
+
+def test_custom_range_counts_calendar_days_across_fall_dst(store):
+    from pvyieldlens.history import history_view
+
+    view = history_view(store, 'custom', timestamp('2026-11-18T12:00:00', 'America/New_York'),
+                        'America/New_York', start_date=date(2026, 8, 20), end_date=date(2026, 11, 17))
+    assert len(view.days) == 90
+    assert view.requested_range.start == timestamp('2026-08-20T00:00:00', 'America/New_York')
+    assert view.requested_range.end == timestamp('2026-11-18T00:00:00', 'America/New_York')
+    assert view.requested_range.end - view.requested_range.start == 90 * 86400 + 3600
+    assert view.days[0].summary.actual_energy_kwh is None
+    assert not any(day.in_progress for day in view.days)
+
+
+def test_custom_range_preserves_exact_allocations_and_zero(store):
+    from pvyieldlens.history import history_view, read_history_range
+
+    start, midnight, end = settle_cross_midnight(store)
+    store.settle(calculate(settings(), samples(at=end, power=0), end, end + 60), store.revision, 'Asia/Shanghai')
+    before = store.history(start, end + 60, include_day_allocations=True)
+    zero_start = timestamp('2026-11-12T00:00:00')
+    store.settle(calculate(settings(), [], end + 60, zero_start), store.revision, 'Asia/Shanghai')
+    store.settle(calculate(settings(), samples(at=zero_start, power=0), zero_start, zero_start + 60),
+                 store.revision, 'Asia/Shanghai')
+    view = history_view(store, 'custom', timestamp('2026-11-14T00:00:00'), 'Asia/Shanghai',
+                        start_date=date(2026, 11, 10), end_date=date(2026, 11, 13))
+    zero_day = view.days[2]
+    missing_day = view.days[3]
+    assert sum(day.summary.actual_energy_kwh or 0 for day in view.days) == pytest.approx(view.summary.actual_energy_kwh)
+    assert [day.summary.actual_energy_kwh for day in view.days[:2]] == pytest.approx([0.01, 0.06])
+    assert zero_day.summary.actual_energy_kwh == 0
+    assert missing_day.summary.actual_energy_kwh is None
+    assert view.comparison is None
+    fragment = read_history_range(store, midnight, end, 'Asia/Shanghai', now=end, include_days=False)
+    assert fragment.summary.actual_energy_kwh == pytest.approx(0.06)
+    assert fragment.windows[0]['source_start'] == start
+    assert fragment.days == []
+    assert store.history(start, end + 60, include_day_allocations=True) == before
+
+
+def test_custom_range_including_today_stops_at_now(store):
+    from pvyieldlens.history import history_view
+
+    now = timestamp('2026-11-17T12:07:00')
+    view = history_view(store, 'custom', now, 'Asia/Shanghai',
+                        start_date=date(2026, 11, 16), end_date=date(2026, 11, 17))
+    assert view.requested_range.end == now
+    assert [day.in_progress for day in view.days] == [False, True]
+    assert view.days[-1].end == timestamp('2026-11-18T00:00:00')
+
+
+def test_custom_range_marks_stored_timezone_allocation_mismatch(store):
+    from pvyieldlens.history import history_view
+
+    _, midnight, end = settle_cross_midnight(store, home_timezone='Asia/Taipei')
+    view = history_view(store, 'custom', end, 'Asia/Shanghai',
+                        start_date=date(2026, 11, 11), end_date=date(2026, 11, 11))
+    assert view.requested_range.start == midnight
+    assert view.boundary_unavailable
+    assert view.days[0].boundary_unavailable
+    assert view.summary.actual_energy_kwh is None
+    assert view.windows == []
+
+
+def test_custom_range_never_splits_settlement_at_arbitrary_cutoff(store):
+    from pvyieldlens.history import read_history_range
+
+    start, midnight, end = settle_cross_midnight(store)
+    view = read_history_range(store, midnight, end - 60, 'Asia/Shanghai', now=end, include_days=True)
+    assert view.windows == []
+    assert view.summary.actual_energy_kwh is None
+    assert view.boundary_unavailable
+    assert view.days[0].boundary_unavailable
+    assert store.history(start, end)[0]['actual_energy_wh'] == pytest.approx(70)
+
+
+@pytest.mark.parametrize('period,previous_start,current_start', [
+    ('today', '2026-11-16T00:00:00', '2026-11-17T00:00:00'),
+    ('7d', '2026-11-04T00:00:00', '2026-11-11T00:00:00'),
+    ('30d', '2026-09-19T00:00:00', '2026-10-19T00:00:00'),
+])
+def test_previous_period_stops_at_comparable_settlement(store, period, previous_start, current_start):
+    from pvyieldlens.history import history_view
+
+    previous_day = '2026-11-16' if period == 'today' else '2026-11-10' if period == '7d' else '2026-10-18'
+    settle_history_windows(store, [
+        (previous_day + 'T12:00:00', 300, 540, 1000),
+        (previous_day + 'T12:05:00', 300, 0, 1000),
+        ('2026-11-17T12:00:00', 300, 480, 1000),
+    ])
+    view = history_view(store, period, timestamp('2026-11-17T12:07:00'), 'Asia/Shanghai', compare=True)
+    assert view.requested_range.start == timestamp(current_start)
+    assert view.summary.pr == pytest.approx(80)
+    assert view.comparison.summary.pr == pytest.approx(90)
+    assert view.comparison.pr_change_pp == pytest.approx(-10)
+    assert view.comparison.requested_range.start == timestamp(previous_start)
+    assert view.comparison.requested_range.end == timestamp(previous_day + 'T12:05:00')
+    assert view.comparison.summary.end == timestamp(previous_day + 'T12:05:00')
+
+
+def test_previous_period_excludes_window_crossing_non_calendar_cutoff(store):
+    from pvyieldlens.history import history_view
+
+    settle_history_windows(store, [
+        ('2026-11-16T12:00:00', 600, 540, 1000),
+        ('2026-11-17T12:00:00', 300, 480, 1000),
+    ])
+    view = history_view(store, 'today', timestamp('2026-11-17T12:07:00'), 'Asia/Shanghai', compare=True)
+    assert view.comparison.requested_range.end == timestamp('2026-11-16T12:05:00')
+    assert view.comparison.summary.actual_energy_kwh is None
+    assert view.comparison.pr_change_pp is None
+
+
+@pytest.mark.parametrize('prior_sun', [0, 1000])
+def test_previous_period_empty_or_zero_denominator_pr_is_unavailable(store, prior_sun):
+    from pvyieldlens.history import history_view
+
+    if prior_sun == 0:
+        settle_history_windows(store, [
+            ('2026-11-16T12:00:00', 300, 0, 0),
+            ('2026-11-17T12:00:00', 300, 480, 1000),
+        ])
+    else:
+        settle_history_windows(store, [('2026-11-17T12:00:00', 300, 480, 1000)])
+    view = history_view(store, 'today', timestamp('2026-11-17T12:07:00'), 'Asia/Shanghai', compare=True)
+    assert view.comparison.summary.pr is None
+    assert view.comparison.pr_change_pp is None
+
+
+def test_previous_period_is_absent_without_current_settlement(store):
+    from pvyieldlens.history import history_view
+
+    view = history_view(store, 'today', timestamp('2026-11-17T12:07:00'), 'Asia/Shanghai', compare=True)
+    assert view.comparison is None
+
+
+def test_previous_period_uses_household_dates_across_dst(store):
+    from pvyieldlens.history import history_view
+
+    zone = 'America/New_York'
+    settle_history_windows(store, [
+        ('2026-10-31T12:00:00', 300, 540, 1000),
+        ('2026-11-01T12:00:00', 300, 480, 1000),
+    ], zone)
+    view = history_view(store, 'today', timestamp('2026-11-01T12:07:00', zone), zone, compare=True)
+    assert view.comparison.requested_range.start == timestamp('2026-10-31T00:00:00', zone)
+    assert view.comparison.requested_range.end == timestamp('2026-10-31T12:05:00', zone)
+    assert view.summary.end - view.comparison.requested_range.end == 25 * 3600
+    assert view.comparison.pr_change_pp == pytest.approx(-10)
+
+
+def test_previous_period_rolling_24h_preserves_seconds_and_whole_windows(store):
+    from pvyieldlens.history import history_view
+
+    settle_history_windows(store, [
+        ('2026-11-15T12:06:00', 300, 540, 1000),
+        ('2026-11-16T12:06:00', 300, 0, 1000),
+        ('2026-11-17T12:00:00', 300, 480, 1000),
+    ])
+    now = timestamp('2026-11-17T12:07:00')
+    view = history_view(store, '24h', now, 'Asia/Shanghai', compare=True)
+    assert view.requested_range.start == now - 86400
+    assert view.summary.pr == pytest.approx(80)
+    assert view.comparison.requested_range.start == now - 2 * 86400
+    assert view.comparison.requested_range.end == timestamp('2026-11-16T12:05:00')
+    assert view.comparison.summary.pr is None
+    assert view.comparison.pr_change_pp is None
+    assert not view.boundary_unavailable
+    assert view.days == []
+
+
+@pytest.mark.parametrize('first', [date(2026, 11, 16), date(2026, 11, 17)])
+def test_custom_range_at_midnight_keeps_inclusive_today_slot(store, first):
+    from pvyieldlens.history import history_view
+
+    now = timestamp('2026-11-17T00:00:00')
+    view = history_view(store, 'custom', now, 'Asia/Shanghai',
+                        start_date=first, end_date=date(2026, 11, 17))
+    assert len(view.days) == (date(2026, 11, 17) - first).days + 1
+    assert view.days[-1].day == '2026-11-17'
+    assert view.days[-1].in_progress
+    assert view.days[-1].summary.actual_energy_kwh is None
+    assert view.days[-1].start == now
+    assert view.days[-1].end == timestamp('2026-11-18T00:00:00')
+    assert view.requested_range.end == now
+
+
+def test_custom_range_ending_yesterday_at_midnight_excludes_today(store):
+    from pvyieldlens.history import history_view
+
+    now = timestamp('2026-11-17T00:00:00')
+    view = history_view(store, 'custom', now, 'Asia/Shanghai',
+                        start_date=date(2026, 11, 16), end_date=date(2026, 11, 16))
+    assert [day.day for day in view.days] == ['2026-11-16']
+    assert not view.days[0].in_progress

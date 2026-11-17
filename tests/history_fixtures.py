@@ -9,7 +9,7 @@ def history_payload(windows, summary, requested_range, period='today', home_time
              'actual_energy_kwh': None, 'pr': None, 'data_completeness_percent': None, 'valid_seconds': 0}
     dates = [today - timedelta(days=offset) for offset in reversed(range({'7d': 7, '30d': 30}.get(period, 0)))]
     return {'windows': windows, 'summary': summary, 'requested_range': requested_range,
-            'period': period, 'home_timezone': home_timezone, 'today': today.isoformat(), 'boundary_unavailable': False,
+            'comparison': None, 'period': period, 'home_timezone': home_timezone, 'today': today.isoformat(), 'boundary_unavailable': False,
             'days': [{'day': day.isoformat(),
                       'start': datetime.combine(day, datetime.min.time(), ZoneInfo(home_timezone)).timestamp(),
                       'end': datetime.combine(day + timedelta(days=1), datetime.min.time(), ZoneInfo(home_timezone)).timestamp(),
