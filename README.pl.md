@@ -6,7 +6,7 @@ Porównuj szacowaną i rzeczywistą moc paneli. Sprawdzaj PR oraz szacowaną ene
 
 ## Funkcje
 
-- Moc, PR i różnica mocy na żywo.
+- Moc, PR i moc możliwa do optymalizacji na żywo.
 - Historia mocy i PR co 1, 5 lub 10 minut.
 - Szacowana energia dzisiaj i od pierwszego uruchomienia.
 - Wykresy z ostatnich 24 godzin, 7 dni lub 30 dni.
