@@ -19,6 +19,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, ConfigDict, SecretStr, ValidationError, field_validator
 from starlette.middleware.gzip import GZipMiddleware
 
+from .generation import generation_view
 from .home_assistant import HomeAssistantClient
 from .history import HistoryPeriod, history_view
 from .service import NETWORK_ERRORS, Service
@@ -225,6 +226,13 @@ def create_app(service: Service, runtime: Runtime, run_background=True) -> FastA
             return JSONResponse({'error': 'forecast_location_required'}, status_code=422)
         scheduled = forecast.request_refresh()
         return JSONResponse({'scheduled': scheduled, 'status': forecast.view(time.time()).status}, status_code=202)
+
+    @app.get('/api/generation-data')
+    async def generation_data():
+        async with service.lock:
+            store = service.store
+            home_timezone = service.monitoring_settings.home_timezone if service.monitoring_settings else 'UTC'
+            return generation_view(store, time.time(), home_timezone).model_dump(mode='json')
 
     @app.get('/api/history')
     async def history(period: HistoryPeriod | None = None,

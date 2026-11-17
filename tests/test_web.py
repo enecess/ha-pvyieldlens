@@ -802,3 +802,75 @@ async def test_history_previous_period_reads_comparable_summaries_under_service_
     assert body['comparison']['pr_change_pp'] == pytest.approx(-10)
     assert body['comparison']['requested_range']['end'] == timestamp('2026-11-16T12:05:00')
     assert unrequested.json()['comparison'] is None
+
+
+async def test_generation_data_is_authenticated_and_unconfigured_empty(service, monkeypatch):
+    monkeypatch.setattr('pvyieldlens.web.time.time', lambda: 45000)
+    app = create_app(service, Runtime(web_password='test-pass'), run_background=False)
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url='http://app') as client:
+        assert (await client.get('/api/generation-data')).status_code == 401
+        response = await client.get('/api/generation-data', auth=('admin', 'test-pass'))
+
+    assert response.status_code == 200
+    assert response.json() == {'windows': [], 'inputs': [], 'requested_range': {'start': 0, 'end': 45000},
+                               'home_timezone': 'UTC'}
+    assert response.headers['Cache-Control'] == 'no-store'
+
+
+async def test_generation_data_reads_committed_day_under_lock_without_ha_or_writes(service, monkeypatch):
+    import sqlite3
+    from pvyieldlens.home_assistant import HomeAssistantClient
+    from test_history import settle_cross_midnight
+
+    start, midnight, end = settle_cross_midnight(service.store)
+    service.monitoring_settings = settings(home_timezone='Asia/Shanghai')
+    service.store.set_meta('connection', '{"url":"http://private-ha.test","token":"private-token"}')
+    monkeypatch.setattr('pvyieldlens.web.time.time', lambda: end + 30)
+    windows = service.store.history(start, end, include_day_allocations=True)
+    metadata = [tuple(row) for row in service.store.db.execute('SELECT * FROM metadata ORDER BY key')]
+    before = service.snapshot(end + 30)
+    changes = service.store.db.total_changes
+    original_history = service.store.history
+
+    def read_locked(*args, **kwargs):
+        assert service.lock.locked()
+        return original_history(*args, **kwargs)
+
+    monkeypatch.setattr(service.store, 'history', read_locked)
+    service.store.db.set_authorizer(lambda action, *_: sqlite3.SQLITE_DENY
+                                   if action in (sqlite3.SQLITE_INSERT, sqlite3.SQLITE_UPDATE, sqlite3.SQLITE_DELETE)
+                                   else sqlite3.SQLITE_OK)
+    requests = []
+
+    def respond(request):
+        requests.append(request)
+        return httpx.Response(500)
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(respond)) as ha_http:
+        service.client = HomeAssistantClient('http://private-ha.test', 'private-token', http=ha_http)
+        app = create_app(service, Runtime(web_password='test-pass'), run_background=False)
+        async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url='http://app',
+                                     auth=('admin', 'test-pass')) as client:
+            response = await client.get('/api/generation-data')
+            repeated = await client.get('/api/generation-data')
+
+    assert response.status_code == repeated.status_code == 200
+    body = response.json()
+    assert repeated.json() == body
+    assert set(body) == {'windows', 'inputs', 'requested_range', 'home_timezone'}
+    assert body['home_timezone'] == 'Asia/Shanghai'
+    assert body['requested_range'] == {'start': midnight, 'end': end}
+    assert len(body['windows']) == len(body['inputs']) == 1
+    window = body['windows'][0]
+    assert (window['start'], window['end']) == (midnight, end)
+    assert (window['estimated_power_w'], window['actual_power_w']) == pytest.approx((1200, 1200))
+    assert body['inputs'] == [{'start': midnight, 'end': end, 'irradiance_w_m2': 2000,
+                              'module_temperature_c': 25}]
+    assert all(field not in response.text for field in (
+        'private-token', 'private-ha.test', 'entity_id', 'sensor.temp', 'sensor.sun', 'reported_at',
+        'connection', 'day_allocations', 'monitoring_settings', 'origin'))
+    assert requests == []
+    assert original_history(start, end, include_day_allocations=True) == windows
+    assert [tuple(row) for row in service.store.db.execute('SELECT * FROM metadata ORDER BY key')] == metadata
+    assert service.store.db.total_changes == changes
+    assert service.snapshot(end + 30) == before
