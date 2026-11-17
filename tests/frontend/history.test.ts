@@ -76,7 +76,7 @@ it('requests named presets and keeps detail charts below calendar-only daily pan
 
 it('invalidates calendar cache at HA midnight without a new settlement and reformats without fetching', async () => {
   await mount();
-  props.snapshot = { ...props.snapshot, energy_totals: { ...props.snapshot.energy, day: '2026-11-12' } };
+  props.snapshot = { ...props.snapshot, energy_totals: { ...props.snapshot.energy_totals, day: '2026-11-12' } };
   await flush(); expect(requests).toHaveLength(2);
   props.theme = 'light'; props.displayTimezone = 'UTC'; useI18n().setLanguage('de');
   await flush(); expect(requests).toHaveLength(2);
