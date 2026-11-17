@@ -3,7 +3,7 @@ import { createApp, h, nextTick, reactive } from 'vue';
 import { plot, type ChartPoint, type ChartOptions, type ChartSeries } from '../../pvyieldlens/frontend/src/charts';
 import PowerChart from '../../pvyieldlens/frontend/src/PowerChart.vue';
 
-const series = [{ key: 'actual_power' as const, label: 'Power', color: 'blue' }];
+const series = [{ key: 'actual_power_w' as const, label: 'Power', color: 'blue' }];
 const options = { language: 'en' as const, timezone: 'UTC', translate: (key: string) => key };
 const cleanup: (() => void)[] = [];
 afterEach(() => { cleanup.splice(0).forEach(dispose => dispose()); vi.restoreAllMocks(); vi.unstubAllGlobals(); });
@@ -22,11 +22,11 @@ function inspect(host: HTMLElement, at: number, start: number, end: number) {
 }
 
 it('picks the nearest original singleton within six CSS pixels after SVG scaling', () => {
-  const points = [{ at: 40, actual_power: 0 }, { at: 41, actual_power: 17.3, breakBefore: true }];
+  const points = [{ at: 40, actual_power_w: 0 }, { at: 41, actual_power_w: 17.3, breakBefore: true }];
   let selected: ChartPoint | undefined;
   const { host, handle } = chart(points, { range: { start: 0, end: 100 }, tooltip: point => {
     selected = point;
-    return { title: String(point.at), rows: [{ label: 'Power', value: String(point.actual_power) }] };
+    return { title: String(point.at), rows: [{ label: 'Power', value: String(point.actual_power_w) }] };
   } });
   vi.spyOn(host.querySelector('svg')!, 'getBoundingClientRect').mockReturnValue(new DOMRect(100, 0, 600, 130));
   const move = (clientX: number) => host.querySelector('.chart-hit-area')!.dispatchEvent(new MouseEvent('pointermove', { clientX }));
@@ -44,10 +44,10 @@ it('picks the nearest original singleton within six CSS pixels after SVG scaling
 
 it('limits pixel tolerance to visible finite singleton glyphs and keeps keyboard records', () => {
   const { host, handle } = chart([
-    { at: -0.1, actual_power: 10 },
-    { at: 20, actual_power: null, breakBefore: true },
-    { at: 40, actual_power: Number.NaN, breakBefore: true },
-    { at: 60, actual_power: 10, breakBefore: true }, { at: 80, actual_power: 20 },
+    { at: -0.1, actual_power_w: 10 },
+    { at: 20, actual_power_w: null, breakBefore: true },
+    { at: 40, actual_power_w: Number.NaN, breakBefore: true },
+    { at: 60, actual_power_w: 10, breakBefore: true }, { at: 80, actual_power_w: 20 },
   ], { range: { start: 0, end: 100 } });
   [0, 20.1, 40.1, 80.1].forEach(at => {
     inspect(host, at, 0, 100);
@@ -62,7 +62,7 @@ it('limits pixel tolerance to visible finite singleton glyphs and keeps keyboard
 });
 
 it.each(['mouse', 'touch'])('keeps a covered continuous run authoritative over a nearby singleton for %s', pointerType => {
-  const points = [{ at: 40, actual_power: 10 }, { at: 45, actual_power: 20, breakBefore: true }, { at: 46, actual_power: 30 }];
+  const points = [{ at: 40, actual_power_w: 10 }, { at: 45, actual_power_w: 20, breakBefore: true }, { at: 46, actual_power_w: 30 }];
   const { host, handle } = chart(points, { range: { start: 0, end: 1000 } });
   const hit = host.querySelector('.chart-hit-area')!;
   const clientX = 48 + 45.1 / 1000 * 1140;
@@ -76,7 +76,7 @@ it.each(['mouse', 'touch'])('keeps a covered continuous run authoritative over a
 });
 
 it.each(['mouse', 'touch'])('retains null-split singleton picking before an unavailable record for %s', pointerType => {
-  const { host, handle } = chart([{ at: 40, actual_power: 0 }, { at: 41, actual_power: null }, { at: 80, actual_power: null }],
+  const { host, handle } = chart([{ at: 40, actual_power_w: 0 }, { at: 41, actual_power_w: null }, { at: 80, actual_power_w: null }],
     { range: { start: 0, end: 1000 } });
   const hit = host.querySelector('.chart-hit-area')!;
   (pointerType === 'touch' ? ['pointerdown', 'pointerup'] : ['pointermove']).forEach(type => {
@@ -90,10 +90,10 @@ it.each(['mouse', 'touch'])('retains null-split singleton picking before an unav
 
 it.each([
   { edge: 'left', at: 0.4, expectedAt: 3, points: [
-    { at: -1, actual_power: 10 }, { at: 2, actual_power: null }, { at: 3, actual_power: 20 }, { at: 80, actual_power: null },
+    { at: -1, actual_power_w: 10 }, { at: 2, actual_power_w: null }, { at: 3, actual_power_w: 20 }, { at: 80, actual_power_w: null },
   ] },
   { edge: 'right', at: 999.6, expectedAt: 997, points: [
-    { at: 920, actual_power: null }, { at: 997, actual_power: 20 }, { at: 998, actual_power: null }, { at: 1001, actual_power: 10 },
+    { at: 920, actual_power_w: null }, { at: 997, actual_power_w: 20 }, { at: 998, actual_power_w: null }, { at: 1001, actual_power_w: 10 },
   ] },
 ].flatMap(test => ['mouse', 'touch'].map(pointerType => ({ ...test, pointerType }))))(
   'keeps a visible singleton when covered nearest is outside the $edge range edge for $pointerType',
@@ -111,10 +111,10 @@ it.each([
 );
 
 it('reports unavailable between broken runs and outside point coverage', () => {
-  const tooltip = vi.fn((point: ChartPoint) => ({ title: String(point.at), rows: [{ label: 'Power', value: String(point.actual_power) }] }));
+  const tooltip = vi.fn((point: ChartPoint) => ({ title: String(point.at), rows: [{ label: 'Power', value: String(point.actual_power_w) }] }));
   const { host, handle } = chart([
-    { at: 20, actual_power: 10 }, { at: 40, actual_power: 20 },
-    { at: 80, actual_power: 30, breakBefore: true }, { at: 100, actual_power: 40 },
+    { at: 20, actual_power_w: 10 }, { at: 40, actual_power_w: 20 },
+    { at: 80, actual_power_w: 30, breakBefore: true }, { at: 100, actual_power_w: 40 },
   ], { range: { start: 0, end: 120 }, tooltip });
   [0, 10, 60, 110, 120].forEach(at => {
     inspect(host, at, 0, 120);
@@ -132,13 +132,13 @@ it('reports unavailable between broken runs and outside point coverage', () => {
 });
 
 it('uses settlement coverage without rejecting valid interval edges or crossing a missing settlement', () => {
-  const window = { start: 20, end: 40, actual_power: 10, estimated_power: 20, pr: 50, optimizable_power: 10,
-    actual_energy_wh: 1, estimated_energy_wh: 2, valid_seconds: 20, coverage_percent: 100,
+  const window = { start: 20, end: 40, actual_power_w: 10, estimated_power_w: 20, pr: 50, optimizable_power_w: 10,
+    actual_energy_wh: 1, estimated_energy_wh: 2, valid_seconds: 20, data_completeness_percent: 100,
     quality: 'complete' as const, reason: null };
   const { host, handle } = chart([
-    { at: 40, actual_power: 10, window },
-    { at: 60, actual_power: 20, window: { ...window, start: 40, end: 60 } },
-    { at: 140, actual_power: 30, window: { ...window, start: 80, end: 140 }, breakBefore: true },
+    { at: 40, actual_power_w: 10, window },
+    { at: 60, actual_power_w: 20, window: { ...window, start: 40, end: 60 } },
+    { at: 140, actual_power_w: 30, window: { ...window, start: 80, end: 140 }, breakBefore: true },
   ], { range: { start: 0, end: 160 }, coverage: 'windows' });
   [0, 10, 70, 150, 160].forEach(at => {
     inspect(host, at, 0, 160);
@@ -151,7 +151,7 @@ it('uses settlement coverage without rejecting valid interval edges or crossing 
 });
 
 it('smooths_without_overshoot', () => {
-  const points = [0, 80, 100, 20, 0].map((actual_power, index) => ({ at: [0, 20, 90, 150, 300][index], actual_power }));
+  const points = [0, 80, 100, 20, 0].map((actual_power_w, index) => ({ at: [0, 20, 90, 150, 300][index], actual_power_w }));
   const beforeTotals = structuredClone(points);
   const { host } = chart(points);
   const path = host.querySelector('path.series')!.getAttribute('d')!;
@@ -160,7 +160,7 @@ it('smooths_without_overshoot', () => {
   const afterTotals = points;
   expect(beforeTotals).toEqual(afterTotals);
   expect(host.querySelectorAll('path.series')).toHaveLength(series.length);
-  expect(chart([{ at: 0, actual_power: 0 }]).host.querySelector('.series-point')).not.toBeNull();
+  expect(chart([{ at: 0, actual_power_w: 0 }]).host.querySelector('.series-point')).not.toBeNull();
   expect(chart(points.slice(0, 2)).host.querySelector('path.series')!.getAttribute('d')).toContain('L');
   const pr = plot(host, [{ at: 0, pr: 125 }, { at: 1, pr: 0 }], [{ key: 'pr', label: 'PR', color: 'blue' }], '%', options);
   expect(host.textContent).toContain('138');
@@ -169,23 +169,23 @@ it('smooths_without_overshoot', () => {
 });
 
 it('retains_missing_segments_before_thinning', () => {
-  const points = Array.from({ length: 1201 }, (_, at) => ({ at, actual_power: at === 501 ? null : at % 100 }));
+  const points = Array.from({ length: 1201 }, (_, at) => ({ at, actual_power_w: at === 501 ? null : at % 100 }));
   const { host } = chart(points);
   expect(host.querySelector('path.series')!.getAttribute('d')!.match(/M/g)).toHaveLength(2);
-  const broken = chart([{ at: 0, actual_power: 0 }, { at: 1, actual_power: 10, breakBefore: true }]);
+  const broken = chart([{ at: 0, actual_power_w: 0 }, { at: 1, actual_power_w: 10, breakBefore: true }]);
   expect(broken.host.querySelector('path.series')!.getAttribute('d')!.match(/M/g)).toHaveLength(2);
 });
 
 it('inspects_raw_points_omitted_by_thinning', () => {
-  const rawPoints = Array.from({ length: 1201 }, (_, at) => ({ at, actual_power: at === 502 ? 0 : at }));
+  const rawPoints = Array.from({ length: 1201 }, (_, at) => ({ at, actual_power_w: at === 502 ? 0 : at }));
   let tooltipPoint: ChartPoint | undefined;
   const { host, handle } = chart(rawPoints, { tooltip: (point: ChartPoint) => {
     tooltipPoint = point;
-    return { title: String(point.at), rows: [{ label: 'Power', value: String(point.actual_power) }] };
+    return { title: String(point.at), rows: [{ label: 'Power', value: String(point.actual_power_w) }] };
   } });
   inspect(host, 502, 0, 1200);
   expect(tooltipPoint?.at).toBe(rawPoints[502].at);
-  expect(tooltipPoint?.actual_power).toBe(rawPoints[502].actual_power);
+  expect(tooltipPoint?.actual_power_w).toBe(rawPoints[502].actual_power_w);
   expect(host.querySelector('.chart-tooltip')?.textContent).toContain('Power0');
   expect(handle.selectedAt()).toBe(502);
   handle.dispose();
@@ -195,18 +195,18 @@ it('inspects_raw_points_omitted_by_thinning', () => {
 });
 
 it('uses_half_open_forecast_intervals', () => {
-  const points = [0, 3600].map(start => ({ at: start + 1800, power_w: start ? 200 : 100,
-    interval: { start, end: start + 3600, power_w: start ? 200 : 100, energy_kwh: 0.1,
-      poa_w_m2: 800, air_temperature_c: 20, cell_temperature_c: 45, quality: 'complete' as const } }));
+  const points = [0, 3600].map(start => ({ at: start + 1800, forecast_power_w: start ? 200 : 100,
+    interval: { start, end: start + 3600, forecast_power_w: start ? 200 : 100, forecast_energy_kwh: 0.1,
+      irradiance_w_m2: 800, air_temperature_c: 20, cell_temperature_c: 45, quality: 'complete' as const } }));
   let intervalAtBoundary: ChartPoint | undefined;
   const { host } = chart(points, { range: { start: 0, end: 7200 }, selection: 'interval',
     tooltip: (point: ChartPoint) => { intervalAtBoundary = point; return { title: String(point.at), rows: [] }; } },
-  [{ key: 'power_w', label: 'Forecast power', color: 'blue' }]);
+  [{ key: 'forecast_power_w', label: 'Forecast power', color: 'blue' }]);
   inspect(host, 3600, 0, 7200);
   expect(intervalAtBoundary?.interval?.start).toBe(3600);
   inspect(host, 7200, 0, 7200);
   expect(intervalAtBoundary?.interval?.start).toBe(3600);
-  const missing = chart([{ at: 50, actual_power: null }], { range: { start: 0, end: 100 },
+  const missing = chart([{ at: 50, actual_power_w: null }], { range: { start: 0, end: 100 },
     tooltip: () => ({ title: 'Unavailable', rows: [{ label: 'Power', value: '—' }] }) });
   inspect(missing.host, 50, 0, 100);
   expect(missing.host.querySelector('.chart-tooltip')?.textContent).toBe('UnavailablePower—');
@@ -218,7 +218,7 @@ it('preserves_selection_on_redraw', async () => {
   vi.stubGlobal('ResizeObserver', class { observe() {} disconnect() {} });
   vi.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockReturnValue(1200);
   vi.spyOn(HTMLElement.prototype, 'clientHeight', 'get').mockReturnValue(260);
-  const props = reactive({ id: 'test-chart', points: [{ at: 0, actual_power: 0 }, { at: 1, actual_power: 10 }],
+  const props = reactive({ id: 'test-chart', points: [{ at: 0, actual_power_w: 0 }, { at: 1, actual_power_w: 10 }],
     series, unit: 'W', active: true, language: 'en' as const, timezone: 'UTC', theme: 'light' as 'light' | 'dark', currentTime: 0 });
   const host = document.createElement('div');
   document.body.append(host);
@@ -237,7 +237,7 @@ it('preserves_selection_on_redraw', async () => {
   await nextTick(); await nextTick();
   expect(host.querySelector('.chart-tooltip')?.textContent).toBe(before);
   expect(document.activeElement).toBe(host.querySelector('.chart-hit-area'));
-  props.points = [{ at: 0, actual_power: 0 }];
+  props.points = [{ at: 0, actual_power_w: 0 }];
   await nextTick(); await nextTick();
   expect(host.querySelector('.chart-tooltip')?.hasAttribute('hidden')).toBe(true);
   inspect(host, 0, 0, 1);
@@ -253,7 +253,7 @@ it('waits for measurable chart dimensions before drawing during navigation', asy
   vi.spyOn(HTMLElement.prototype, 'clientHeight', 'get').mockReturnValue(260);
   const host = document.createElement('div');
   document.body.append(host);
-  const props = reactive({ id: 'sizing-chart', points: [{ at: 0, actual_power: 0 }],
+  const props = reactive({ id: 'sizing-chart', points: [{ at: 0, actual_power_w: 0 }],
     series, unit: 'W', active: true, language: 'en' as const, timezone: 'UTC', theme: 'light' as const });
   const app = createApp({ render: () => h(PowerChart, props) });
   app.mount(host);
@@ -261,7 +261,7 @@ it('waits for measurable chart dimensions before drawing during navigation', asy
   const initial = host.querySelector('svg');
   width.mockReturnValue(0);
   resized();
-  props.points = [{ at: 0, actual_power: 100 }];
+  props.points = [{ at: 0, actual_power_w: 100 }];
   await nextTick(); await nextTick();
   expect(host.querySelector('svg')).toBe(initial);
   width.mockReturnValue(1200);
@@ -282,9 +282,9 @@ it('keeps unavailable gaps and distinct second-level labels in a short power ser
   });
   try {
     plot(host, [
-      { at: 1793491200, actual_power: 10 }, { at: 1793491201, actual_power: null },
-      { at: 1793491202, actual_power: 20 }, { at: 1793491203, actual_power: 30 },
-    ], [{ key: 'actual_power', label: 'Power', color: 'blue' }], 'W', {
+      { at: 1793491200, actual_power_w: 10 }, { at: 1793491201, actual_power_w: null },
+      { at: 1793491202, actual_power_w: 20 }, { at: 1793491203, actual_power_w: 30 },
+    ], [{ key: 'actual_power_w', label: 'Power', color: 'blue' }], 'W', {
       language: 'en', timezone: 'UTC', translate: key => key,
     });
     expect(host.querySelector('path')!.getAttribute('d')!.match(/M/g)).toHaveLength(2);
@@ -306,8 +306,8 @@ it('distinguishes repeated local clock ticks when the plotted window spans a DST
     return new DOMRect(Number(this.getAttribute('x') ?? 0), 0, 60, 12);
   });
   try {
-    plot(host, [{ at: 1793511000, actual_power: 10 }, { at: 1793514600, actual_power: 20 }],
-      [{ key: 'actual_power', label: 'Power', color: 'blue' }], 'W', {
+    plot(host, [{ at: 1793511000, actual_power_w: 10 }, { at: 1793514600, actual_power_w: 20 }],
+      [{ key: 'actual_power_w', label: 'Power', color: 'blue' }], 'W', {
         language: 'en', timezone: 'America/New_York', translate: key => key,
       });
     const ticks = [...host.querySelectorAll('.time-tick')].map(node => node.textContent);

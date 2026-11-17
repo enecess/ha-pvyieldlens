@@ -10,30 +10,30 @@ from test_browser import browser_workspace
 pytestmark = pytest.mark.skipif(os.getenv('PVYL_BROWSER_TESTS') != '1', reason='Set PVYL_BROWSER_TESTS=1')
 
 
-def forecast_payload(day='2026-11-01', timezone='UTC'):
-    zone = ZoneInfo(timezone)
+def forecast_payload(day='2026-11-01', home_timezone='UTC'):
+    zone = ZoneInfo(home_timezone)
     dates = [datetime.fromisoformat(day).replace(tzinfo=zone) + timedelta(days=i) for i in range(8)]
     boundaries = [date.timestamp() for date in dates]
     def total(start, end):
-        return {'start': start, 'end': end, 'kwh': 89.28, 'coverage_percent': 100, 'quality': 'complete'}
+        return {'start': start, 'end': end, 'forecast_energy_kwh': 89.28, 'data_completeness_percent': 100, 'quality': 'complete'}
     rows = []
     start = boundaries[0] // 3600 * 3600
     while start < boundaries[-1]:
         left, right = max(start, boundaries[0]), min(start + 3600, boundaries[-1])
-        rows.append({'start': left, 'end': right, 'poa_w_m2': 800, 'air_temperature_c': 20,
-                     'cell_temperature_c': 45, 'power_w': 3720, 'energy_kwh': 3720 * (right-left) / 3600000,
+        rows.append({'start': left, 'end': right, 'irradiance_w_m2': 800, 'air_temperature_c': 20,
+                     'cell_temperature_c': 45, 'forecast_power_w': 3720, 'forecast_energy_kwh': 3720 * (right-left) / 3600000,
                      'quality': 'complete'})
         start += 3600
     return {'status': 'ready', 'refreshing': False, 'fetched_at': boundaries[0] + 3600,
-            'calculated_at': boundaries[0] + 48000, 'last_error': None, 'timezone': timezone,
+            'calculated_at': boundaries[0] + 48000, 'last_error': None, 'home_timezone': home_timezone,
             'today': total(boundaries[0], boundaries[1]),
-            'remaining_today': {**total(boundaries[0]+48000, boundaries[1]), 'kwh': 39.68},
+            'remaining_today': {**total(boundaries[0]+48000, boundaries[1]), 'forecast_energy_kwh': 39.68},
             'tomorrow': total(boundaries[1], boundaries[2]),
-            'seven_days': {**total(boundaries[0], boundaries[-1]), 'kwh': 624.96},
+            'seven_days': {**total(boundaries[0], boundaries[-1]), 'forecast_energy_kwh': 624.96},
             'days': [{**total(left, right), 'day': dates[i].date().isoformat(),
                       'weather': {'weather_code': [0, 3, 61, 71, 95, None, 48][i],
-                                  'temperature_min_c': 0 if i == 0 else 10 + i,
-                                  'temperature_max_c': 20 + i,
+                                  'air_temperature_min_c': 0 if i == 0 else 10 + i,
+                                  'air_temperature_max_c': 20 + i,
                                   'quality': 'partial' if i == 5 else 'complete'}}
                      for i, (left, right) in enumerate(zip(boundaries, boundaries[1:]))], 'intervals': rows}
 
@@ -79,6 +79,8 @@ async def test_forecast_days_select_hourly_details_and_preserve_selection(foreca
     await expect(page.locator('#forecast-rows tr').first).to_contain_text('800')
     await expect(page.locator('#forecast-rows tr').first).to_contain_text('20')
     await expect(page.locator('#forecast-rows tr').first).to_contain_text('45')
+    await expect(page.locator('#forecast-details th')).to_contain_text([
+        'Interval', 'Irradiance', 'Air temperature', 'Estimated cell temperature', 'Forecast power', 'Interval energy'])
     await expect(page.locator('#forecast-chart svg')).to_have_attribute('aria-label', 'Forecast power')
     await page.locator('#forecast-chart .chart-hit-area').focus()
     await page.keyboard.press('ArrowRight')
@@ -104,10 +106,10 @@ async def test_forecast_states_are_truthful(forecast_page, status):
     if status in ('disabled', 'location_unavailable', 'unavailable', 'loading'):
         view.update(fetched_at=None, days=[], intervals=[], today=None, remaining_today=None, tomorrow=None, seven_days=None)
     if status in ('partial', 'stale'):
-        view['days'][1].update(kwh=None, quality='partial', coverage_percent=50)
-        view['seven_days'].update(kwh=None, quality='partial', coverage_percent=92.85)
+        view['days'][1].update(forecast_energy_kwh=None, quality='partial', data_completeness_percent=50)
+        view['seven_days'].update(forecast_energy_kwh=None, quality='partial', data_completeness_percent=92.85)
         view['tomorrow'] = view['days'][1]
-        view['intervals'][36].update(power_w=None, energy_kwh=None, quality='unavailable')
+        view['intervals'][36].update(forecast_power_w=None, forecast_energy_kwh=None, quality='unavailable')
     if status in ('unavailable', 'stale'):
         view['last_error'] = 'forecast_request_failed'
     await page.locator('#forecast-tab').click()
@@ -117,7 +119,7 @@ async def test_forecast_states_are_truthful(forecast_page, status):
         await expect(page.locator('#forecast-days button').first).to_contain_text('89.28')
         await page.locator('#forecast-days button').nth(1).click()
         await expect(page.locator('#forecast-day-total')).to_have_text('— kWh')
-        await expect(page.locator('#forecast-day-coverage')).to_contain_text('50%')
+        await expect(page.locator('#forecast-day-data-completeness')).to_contain_text('50%')
         assert await page.locator('#forecast-chart path.series').evaluate("node => (node.getAttribute('d').match(/M/g) || []).length") == 2
         geometry = await page.locator('#forecast-chart').evaluate('''host => {
             const path = host.querySelector('path.series'), width = host.clientWidth - 60;
@@ -148,7 +150,7 @@ async def test_scalar_poll_does_not_redraw_or_refetch_hourly_forecast(forecast_p
     await page.locator('#forecast-chart svg').evaluate("node => node.dataset.original = 'steady'")
     marker = await page.locator('#forecast-chart .current-time').get_attribute('x1')
     requests = state['hourly']
-    state['view']['remaining_today']['kwh'] = 38.44
+    state['view']['remaining_today']['forecast_energy_kwh'] = 38.44
     state['view']['calculated_at'] += 1200
     await page.evaluate('now => Date.now = () => now', state['view']['calculated_at']*1000)
     await expect(page.locator('#forecast-remaining')).to_have_text('38.44')
@@ -180,7 +182,7 @@ async def test_forecast_midnight_refreshes_dates_without_changing_fetched_time(f
     state['view']['fetched_at'] = before_view['fetched_at']
     await expect(page.locator('#forecast-days button').first).to_have_attribute('data-day', '2026-11-02')
     assert state['view']['fetched_at'] == before_view['fetched_at']
-    assert state['view']['remaining_today']['kwh'] >= 0
+    assert state['view']['remaining_today']['forecast_energy_kwh'] >= 0
     await expect(page.locator('#forecast-days button').first).to_have_attribute('aria-pressed', 'true')
     await expect(page.locator('#forecast-days [aria-current=date]')).to_have_attribute('data-day', '2026-11-02')
 
@@ -191,7 +193,7 @@ async def test_forecast_ingress_mobile_and_language(forecast_page, width):
     from fastapi import FastAPI
     from test_integration import fake_server
     page, state, web = forecast_page
-    state['view'] = forecast_payload(timezone='America/New_York')
+    state['view'] = forecast_payload(home_timezone='America/New_York')
     ingress = FastAPI()
     ingress.mount('/api/hassio_ingress/forecast-test', web)
     async with fake_server(ingress) as url:
@@ -227,7 +229,7 @@ async def test_forecast_ingress_mobile_and_language(forecast_page, width):
 async def test_non_hour_timezone_clips_both_daily_interval_portions(forecast_page):
     from playwright.async_api import expect
     page, state, _ = forecast_page
-    state['view'] = forecast_payload(timezone='Asia/Kathmandu')
+    state['view'] = forecast_payload(home_timezone='Asia/Kathmandu')
     await page.locator('#forecast-tab').click()
     await expect(page.locator('#forecast-days button')).to_have_count(7)
     await page.locator('#forecast-days button').nth(1).click()
@@ -246,7 +248,7 @@ async def test_non_hour_timezone_clips_both_daily_interval_portions(forecast_pag
 async def test_shared_plot_keeps_gaps_and_readable_responsive_ticks(forecast_page):
     from playwright.async_api import expect
     page, state, _ = forecast_page
-    state['view']['intervals'][12].update(power_w=None, energy_kwh=None, quality='unavailable')
+    state['view']['intervals'][12].update(forecast_power_w=None, forecast_energy_kwh=None, quality='unavailable')
     await page.locator('#forecast-tab').click()
     await expect(page.locator('#forecast-chart svg')).to_be_visible()
     result = await page.locator('#forecast-chart').evaluate("""host => {
@@ -316,14 +318,14 @@ async def test_forecast_and_monitoring_layout_evidence(forecast_page, browser_wo
     await page.evaluate('now => Date.now = () => now', now*1000)
     inputs = forecast_input()
     midnight = datetime.fromtimestamp(now, ZoneInfo('UTC')).replace(hour=0, minute=0, second=0, microsecond=0).timestamp()
-    weather = tuple(WeatherSample(at=midnight+i*3600, poa_w_m2=[0,0,0,0,0,0,20,100,300,500,650,800,850,700,500,300,100,20,0,0,0,0,0,0][i % 24], air_temperature_c=20, weather_code=0)
+    weather = tuple(WeatherSample(at=midnight+i*3600, irradiance_w_m2=[0,0,0,0,0,0,20,100,300,500,650,800,850,700,500,300,100,20,0,0,0,0,0,0][i % 24], air_temperature_c=20, weather_code=0)
                     for i in range(7*24+1))
     state['view'] = forecast_view(ForecastBatch(inputs=inputs, fetched_at=now-1800,
         intervals=calculate_forecast(inputs, weather), weather_samples=weather), inputs,
         ForecastSettings(enabled=True, tilt_deg=25, azimuth_deg=180), now).model_dump(mode='json')
     for offset in range(0,1800,60):
         values = samples(power=2500 + offset/3, at=start+offset)
-        service.store.settle(calculate(service.config, values, start+offset, start+offset+60), 1, 'UTC')
+        service.store.settle(calculate(service.monitoring_settings, values, start+offset, start+offset+60), 1, 'UTC')
     service.store.add_observations(samples(at=now-60))
     await service.tick(now)
     await expect(page.locator('#live-actual')).to_have_text('3,348')
@@ -369,7 +371,7 @@ async def test_new_batch_keeps_selected_date_with_an_older_light_snapshot(foreca
     state['light'] = copy.deepcopy(state['view'])
     state['view']['fetched_at'] += 3600
     state['view']['calculated_at'] += 3600
-    state['view']['remaining_today']['kwh'] = 31.11
+    state['view']['remaining_today']['forecast_energy_kwh'] = 31.11
     await page.locator('#forecast-tab').click()
     await expect(page.locator('#forecast-remaining')).to_have_text('31.11')
     await expect(page.locator('#forecast-days button')).to_have_count(7)
@@ -425,7 +427,7 @@ async def test_missing_daily_weather_keeps_energy_and_neutral_cards(forecast_pag
     from playwright.async_api import expect
     page, state, _ = forecast_page
     state['view']['days'][0]['weather'] = None
-    state['view']['days'][1]['weather'].update(weather_code=None, temperature_min_c=0, temperature_max_c=0)
+    state['view']['days'][1]['weather'].update(weather_code=None, air_temperature_min_c=0, air_temperature_max_c=0)
     await page.locator('#forecast-tab').click()
     await expect(page.locator('#forecast-days .day-weather').first).to_have_text('Unknown weather')
     await expect(page.locator('#forecast-days .day-temperature').first).to_have_text('— / —')

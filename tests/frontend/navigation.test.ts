@@ -6,10 +6,10 @@ import DiscardChangesDialog from '../../pvyieldlens/frontend/src/components/Disc
 import { useI18n } from '../../pvyieldlens/frontend/src/i18n';
 
 const configuration = {
-  settings: { rated_power_w: 5000, temperature_coefficient_pct_per_c: -0.35,
-    power_entity: 'sensor.power', temperature_entity: 'sensor.temp', irradiance_entity: 'sensor.sun',
-    interval_minutes: 1, realtime_window_seconds: 60, update_seconds: 1,
-    power_max_age_seconds: 300, temperature_max_age_seconds: 900, irradiance_max_age_seconds: 300, timezone: 'UTC' },
+  monitoring_settings: { total_max_power_at_stc_w: 5000, pmax_temperature_coefficient_pct_per_c: -0.35,
+    actual_power_entity: 'sensor.power', module_temperature_entity: 'sensor.temp', irradiance_entity: 'sensor.sun',
+    settlement_interval_minutes: 1, live_window_seconds: 60, update_interval_seconds: 1,
+    actual_power_max_age_seconds: 300, module_temperature_max_age_seconds: 900, irradiance_max_age_seconds: 300, home_timezone: 'UTC' },
   forecast_settings: { enabled: false, tilt_deg: null, azimuth_deg: null, noct_c: 45 },
   location: null, mode: 'docker', connection: { url: 'http://ha', token_set: false },
 };
@@ -19,7 +19,7 @@ let reads: number;
 const flush = async () => { await new Promise<void>(resolve => setImmediate(resolve)); await nextTick(); };
 const click = async (selector: string) => { host.querySelector<HTMLElement>(selector)!.click(); await flush(); };
 const input = async (value: string) => {
-  const field = host.querySelector<HTMLInputElement>('[name=rated_power_w]')!;
+  const field = host.querySelector<HTMLInputElement>('[name=total_max_power_at_stc_w]')!;
   field.value = value;
   field.dispatchEvent(new Event('input', { bubbles: true }));
   await flush();
@@ -54,15 +54,15 @@ it('keeps the selected page and edited draft until discard is confirmed, then lo
   expect(host.querySelector('#settings-button')?.getAttribute('aria-current')).toBe('page');
   expect(host.querySelector<HTMLDialogElement>('dialog')?.open).toBe(true);
   await click('#keep-editing');
-  expect(host.querySelector<HTMLInputElement>('[name=rated_power_w]')!.value).toBe('6100');
+  expect(host.querySelector<HTMLInputElement>('[name=total_max_power_at_stc_w]')!.value).toBe('6100');
   await click('#history-tab');
   await click('#discard-changes');
   expect(host.querySelector('#history-tab')?.getAttribute('aria-current')).toBe('page');
-  expect(host.querySelector<HTMLInputElement>('[name=rated_power_w]')!.value).toBe('5000');
+  expect(host.querySelector<HTMLInputElement>('[name=total_max_power_at_stc_w]')!.value).toBe('5000');
   const before = reads;
   await click('#settings-button');
   expect(reads).toBe(before + 1);
-  expect(host.querySelector<HTMLInputElement>('[name=rated_power_w]')!.value).toBe('5000');
+  expect(host.querySelector<HTMLInputElement>('[name=total_max_power_at_stc_w]')!.value).toBe('5000');
 });
 
 it('treats a same-page Settings request as a no-op without a read or draft reset', async () => {
@@ -70,7 +70,7 @@ it('treats a same-page Settings request as a no-op without a read or draft reset
   const before = reads;
   await click('#settings-button');
   expect(reads).toBe(before);
-  expect(host.querySelector<HTMLInputElement>('[name=rated_power_w]')!.value).toBe('6100');
+  expect(host.querySelector<HTMLInputElement>('[name=total_max_power_at_stc_w]')!.value).toBe('6100');
   expect(host.querySelector<HTMLDialogElement>('dialog')?.open ?? false).toBe(false);
 });
 

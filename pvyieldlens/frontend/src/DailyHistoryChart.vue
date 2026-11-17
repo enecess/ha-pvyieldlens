@@ -32,7 +32,7 @@ const values = computed(() => props.days.flatMap(day => props.mode === 'energy'
 const maximum = computed(() => (Math.max(0, ...values.value) || 1) * 1.1);
 const y = (value: number) => 16 + (maximum.value - value) / maximum.value * plotHeight.value;
 const rows = computed(() => props.days.map((day, index) => ({ day, index, label: date(day.day),
-  bars: [ { value: day.summary.estimated_energy_kwh, color: 'var(--pv-theoretical)' },
+  bars: [ { value: day.summary.estimated_energy_kwh, color: 'var(--pv-estimated)' },
     { value: day.summary.actual_energy_kwh, color: 'var(--pv-actual)' } ].filter(item => item.value != null),
 })));
 const prPath = computed(() => props.days.map((day, index) => day.summary.pr == null ? ''
@@ -99,7 +99,7 @@ onBeforeUnmount(() => {
       <path v-if="mode === 'pr'" class="series" :d="prPath" stroke="var(--pv-actual)" />
       <g v-for="row in rows" :key="row.day.day" class="daily-column" :data-day="row.day.day" :aria-current="row.day.in_progress ? 'date' : undefined">
         <template v-if="mode === 'energy'"><rect v-for="(bar, index) in row.bars" :key="index" class="daily-bar"
-          :x="x(row.index) + (bar.color === 'var(--pv-theoretical)' ? -slot * 0.32 : slot * 0.02)" :y="y(bar.value!)"
+          :x="x(row.index) + (bar.color === 'var(--pv-estimated)' ? -slot * 0.32 : slot * 0.02)" :y="y(bar.value!)"
           :width="slot * 0.3" :height="y(0) - y(bar.value!)" :fill="bar.color" /></template>
         <circle v-else-if="row.day.summary.pr != null" class="daily-pr-point" :cx="x(row.index)" :cy="y(row.day.summary.pr)" r="3" fill="var(--pv-actual)" />
         <text v-if="row.index === days.length - 1 || row.index % ticks === 0 && (days.length - 1 - row.index) * slot >= 70" :x="x(row.index)" :y="height - 8"
@@ -113,14 +113,14 @@ onBeforeUnmount(() => {
     </svg>
     <div v-else-if="active" class="chart-empty">{{ t('history_no_periods') }}</div>
     <div v-if="selectedDay" ref="tip" class="chart-tooltip daily-tooltip" :style="tipStyle" tabindex="0" role="status" @keydown.esc="selected = null; hit?.focus()">
-      <strong>{{ date(selectedDay.day, true) }}<template v-if="selectedDay.in_progress"> · {{ t('forecast_today') }} · {{ cutoff(selectedDay) }}</template></strong>
-      <div><span>{{ t('history_expected_energy') }}</span><span>{{ number(selectedDay.summary.estimated_energy_kwh, 3) }} kWh</span></div>
-      <div><span>{{ t('history_actual_energy') }}</span><span>{{ number(selectedDay.summary.actual_energy_kwh, 3) }} kWh</span></div>
+      <strong>{{ date(selectedDay.day, true) }}<template v-if="selectedDay.in_progress"> · {{ t('today') }} · {{ cutoff(selectedDay) }}</template></strong>
+      <div><span>{{ t('estimated_energy') }}</span><span>{{ number(selectedDay.summary.estimated_energy_kwh, 3) }} kWh</span></div>
+      <div><span>{{ t('actual_energy') }}</span><span>{{ number(selectedDay.summary.actual_energy_kwh, 3) }} kWh</span></div>
       <div><span>{{ t('pr') }}</span><span>{{ number(selectedDay.summary.pr) }} %</span></div>
-      <div><span>{{ t('coverage') }}</span><span>{{ number(selectedDay.summary.coverage_percent) }} %</span></div>
-      <p class="daily-span">{{ t('history_span') }}: {{ span }}</p>
+      <div><span>{{ t('data_completeness') }}</span><span>{{ number(selectedDay.summary.data_completeness_percent) }} %</span></div>
+      <p class="daily-span">{{ t('included_settled_span') }}: {{ span }}</p>
       <p v-if="selectedDay.boundary_unavailable">{{ t('history_day_unavailable') }}</p>
     </div>
-    <p v-if="days.at(-1)?.in_progress" class="daily-cutoff muted">* {{ t('forecast_today') }} · {{ cutoff(days.at(-1)!) }}</p>
+    <p v-if="days.at(-1)?.in_progress" class="daily-cutoff muted">* {{ t('today') }} · {{ cutoff(days.at(-1)!) }}</p>
   </div>
 </template>

@@ -7,18 +7,18 @@ import type { Snapshot } from '../../pvyieldlens/frontend/src/models';
 const cleanup: (() => void)[] = [];
 const reading: Snapshot = {
   configured: true, connected: true, error: null, history_available: true, calculated_at: 10000, revision: 1,
-  statistics: null, realtime: null,
-  energy: { daily_kwh: 0, total_kwh: 0, daily_complete: true, day: '2026-11-14', timezone: 'UTC',
-    daily_valid_seconds: 0, total_valid_seconds: 0, settled_until: 10000 },
+  latest_settled_window: null, live_window: null,
+  energy_totals: { estimated_energy_today_kwh: 0, estimated_energy_lifetime_kwh: 0, today_allocation_complete: true, day: '2026-11-14', home_timezone: 'UTC',
+    today_valid_seconds: 0, lifetime_valid_seconds: 0, settled_until: 10000 },
   sources: [{ entity_id: 'sensor.power', state: '4500', unit: 'W', reported_at: 10000, valid: true }],
-  timezone: 'UTC', location: null,
+  home_timezone: 'UTC', location: null,
   forecast: { status: 'disabled', refreshing: false, fetched_at: null, calculated_at: 10000, last_error: null,
-    timezone: null, today: null, remaining_today: null, tomorrow: null, seven_days: null },
+    home_timezone: null, today: null, remaining_today: null, tomorrow: null, seven_days: null },
 };
 function mount() {
   const props = reactive({ active: true, configuration: null, snapshot: structuredClone(reading),
-    language: 'en' as const, theme: 'light' as const, displayTimezone: 'UTC', historyError: null,
-    range: { start: 9400, end: 10000 }, points: [{ at: 10000, actual_power: 4500 }] });
+    language: 'en' as const, theme: 'light' as const, displayTimezone: 'UTC', seriesError: null,
+    range: { start: 9400, end: 10000 }, points: [{ at: 10000, actual_power_w: 4500 }] });
   const host = document.createElement('div');
   document.body.append(host);
   const app = createApp({ render: () => h(LivePage, props) });
@@ -89,4 +89,27 @@ it('stops inactive and hidden timers, refreshes immediately on return, and clean
   expect(sourceAge()).toBe('22 s');
   cleanup.splice(0).forEach(dispose => dispose());
   expect(vi.getTimerCount()).toBe(0);
+});
+
+it('shows the new live quantities with distinct missing and valid zero values', async () => {
+  const { props, host } = mount();
+  props.snapshot.live_window = { start: 9940, end: 10000, valid_seconds: 60,
+    estimated_energy_wh: 62, actual_energy_wh: 55.8, estimated_power_w: 3720,
+    actual_power_w: 3348, optimizable_power_w: 372, pr: 90,
+    data_completeness_percent: 100, quality: 'complete', reason: null };
+  await nextTick();
+  expect(host.querySelector('#live-estimated')?.textContent).toBe('3,720');
+  expect(host.querySelector('#live-actual')?.textContent).toBe('3,348');
+  expect(host.querySelector('#live-optimizable-power')?.textContent).toBe('372');
+  expect(host.textContent).toContain('Estimated power');
+  expect(host.textContent).toContain('Optimizable power');
+  props.snapshot.live_window = { ...props.snapshot.live_window, estimated_power_w: 0, actual_power_w: 0,
+    optimizable_power_w: 0, pr: null, reason: 'zero_estimated_power' };
+  await nextTick();
+  expect(host.querySelector('#live-estimated')?.textContent).toBe('0');
+  expect(host.querySelector('#live-pr')?.textContent).toBe('—');
+  props.snapshot.live_window = null;
+  await nextTick();
+  expect(host.querySelector('#live-estimated')?.textContent).toBe('—');
+  expect(host.textContent).not.toMatch(/undefined|NaN/);
 });

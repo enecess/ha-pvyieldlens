@@ -4,16 +4,16 @@ import { formatTimes } from './timezones';
 
 export interface ChartPoint {
   at: number;
-  estimated_power?: number | null;
-  actual_power?: number | null;
+  estimated_power_w?: number | null;
+  actual_power_w?: number | null;
   pr?: number | null;
-  power_w?: number | null;
+  forecast_power_w?: number | null;
   interval?: ForecastInterval;
   window?: WindowResult;
   breakBefore?: boolean;
 }
 export interface ChartSeries {
-  key: 'estimated_power' | 'actual_power' | 'pr' | 'power_w';
+  key: 'estimated_power_w' | 'actual_power_w' | 'pr' | 'forecast_power_w';
   label: string;
   color: string;
 }
@@ -199,7 +199,7 @@ export function plot(host: HTMLElement, data: ChartPoint[], series: ChartSeries[
     }) } : { title: formatTimes([at], language, timezone, {
       year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit',
     })[0], rows: [...series.map(item => ({ label: t(item.label), value: `— ${unit}`, color: item.color })),
-      { label: t('chart_quality'), value: t('unavailable') }] };
+      { label: t('data_quality'), value: t('unavailable') }] };
     const title = document.createElement('strong');
     title.textContent = content.title;
     tip.replaceChildren(title);
@@ -295,7 +295,7 @@ export function plot(host: HTMLElement, data: ChartPoint[], series: ChartSeries[
     marker.setAttribute('x1', String(x(at)));
     marker.setAttribute('x2', String(x(at)));
     marker.style.display = at < start || at > end ? 'none' : '';
-    marker.setAttribute('aria-label', `${t('forecast_now')}: ${formatTimes([at], language, timezone, { hour: '2-digit', minute: '2-digit', second: '2-digit' })[0]}`);
+    marker.setAttribute('aria-label', `${t('current_time')}: ${formatTimes([at], language, timezone, { hour: '2-digit', minute: '2-digit', second: '2-digit' })[0]}`);
   };
   if (currentTime !== undefined) updateTime(currentTime);
   if (selectedAt != null) show(data.find(point => point.at === selectedAt));

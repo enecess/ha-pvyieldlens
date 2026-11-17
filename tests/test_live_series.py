@@ -38,7 +38,7 @@ async def test_live_series_replays_without_settlement(service, monkeypatch):
             pytest.fail(f'Live reconstruction accessed HA: {name}')
 
     service.client = NoHAReads()
-    before = (store.cursor, store.get_meta('estimated_energy_lifetime_wh'), store.get_meta('valid_seconds'))
+    before = (store.cursor, store.get_meta('estimated_energy_lifetime_wh'), store.get_meta('lifetime_valid_seconds'))
     changes = store.db.total_changes
     result = service.live_series(now=1200)
     assert result['range'] == {'start': 600, 'end': 1200}
@@ -53,7 +53,7 @@ async def test_live_series_replays_without_settlement(service, monkeypatch):
     service._recovery_needed = False
     assert service.live_series(now=1200)['recovering'] is False
     assert calls == [(540, 1200, settings().entities, '')] * 2
-    assert before == (store.cursor, store.get_meta('estimated_energy_lifetime_wh'), store.get_meta('valid_seconds'))
+    assert before == (store.cursor, store.get_meta('estimated_energy_lifetime_wh'), store.get_meta('lifetime_valid_seconds'))
     assert store.db.total_changes == changes
 
 

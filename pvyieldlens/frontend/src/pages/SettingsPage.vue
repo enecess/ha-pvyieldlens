@@ -14,7 +14,7 @@ const emit = defineEmits<{
 }>();
 const { t, language } = useI18n();
 const configuration = shallowRef<Configuration | null>(null);
-const baseline = shallowRef(draftFromConfiguration({ settings: null, forecast_settings: {
+const baseline = shallowRef(draftFromConfiguration({ monitoring_settings: null, forecast_settings: {
   enabled: false, tilt_deg: null, azimuth_deg: null, noct_c: 45,
 }, location: null, mode: 'docker', connection: { url: '', token_set: false } }));
 const draft = ref(structuredClone(baseline.value));
@@ -37,29 +37,29 @@ const connectionKey = computed(() => {
 });
 const discovered = computed(() => connections.get(connectionKey.value));
 const connectionStatus = computed(() => discoveryRequest.value === connectionKey.value ? 'connecting'
-  : discoveryFailure.value?.key === connectionKey.value ? discoveryFailure.value.code : discovered.value ? 'connected' : '');
+  : discoveryFailure.value?.key === connectionKey.value ? discoveryFailure.value.code : discovered.value ? 'connection_verified' : '');
 const locationText = computed(() => {
   const value = props.location;
   const number = new Intl.NumberFormat(language.value, { maximumFractionDigits: 5 });
   return value ? `${value.location_name || t('ha_location')} · ${number.format(value.latitude)}, ${number.format(value.longitude)}` : t('location_unavailable');
 });
 const sections = [
-  { key: 'connection', label: 'connection', icon: Plug }, { key: 'panels', label: 'solar', icon: Sun },
+  { key: 'connection', label: 'connection', icon: Plug }, { key: 'modules', label: 'pv_modules', icon: Sun },
   { key: 'sources', label: 'inputs', icon: Database }, { key: 'monitoring', label: 'monitoring', icon: Clock3 },
   { key: 'forecast', label: 'forecast', icon: Compass },
 ] as const;
 const sensorFields = [
-  { key: 'power_entity', label: 'power_source', units: ['W', 'kW'] },
-  { key: 'temperature_entity', label: 'temp_source', units: ['°C', '°F', 'K'] },
-  { key: 'irradiance_entity', label: 'irr_source', units: ['W/m²', 'W/m2', 'W/m^2', 'kW/m²', 'kW/m2'] },
+  { key: 'actual_power_entity', label: 'actual_power_sensor', units: ['W', 'kW'] },
+  { key: 'module_temperature_entity', label: 'module_temperature_sensor', units: ['°C', '°F', 'K'] },
+  { key: 'irradiance_entity', label: 'irradiance_sensor', units: ['W/m²', 'W/m2', 'W/m^2', 'kW/m²', 'kW/m2'] },
 ] as const;
 const sensorOptions = computed(() => sensorFields.map(field => ({ ...field,
   entities: (discovered.value?.entities ?? []).filter(entity => !entity.entity_id.startsWith('sensor.pvyieldlens_')
     && (field.units as readonly string[]).includes(entity.unit ?? '')),
 })));
 const timeoutFields = [
-  { key: 'power_max_age_seconds', label: 'power_age' }, { key: 'temperature_max_age_seconds', label: 'temp_age' },
-  { key: 'irradiance_max_age_seconds', label: 'irr_age' },
+  { key: 'actual_power_max_age_seconds', label: 'actual_power_max_age' }, { key: 'module_temperature_max_age_seconds', label: 'module_temperature_max_age' },
+  { key: 'irradiance_max_age_seconds', label: 'irradiance_max_age' },
 ] as const;
 let scrollFrame = 0;
 
@@ -174,8 +174,8 @@ async function save() {
   const sources = inputs.filter(input => input.name.endsWith('_entity'));
   sources.forEach(input => input.setCustomValidity(input.value.startsWith('sensor.pvyieldlens_')
     || sources.some(other => other !== input && other.value === input.value && input.value !== '') ? t('invalid_configuration') : ''));
-  const update = inputs.find(input => input.name === 'update_seconds')!;
-  update.setCustomValidity(Number(draft.value.monitoring.update_seconds) > Number(draft.value.monitoring.realtime_window_seconds) ? t('invalid_configuration') : '');
+  const update = inputs.find(input => input.name === 'update_interval_seconds')!;
+  update.setCustomValidity(Number(draft.value.monitoring.update_interval_seconds) > Number(draft.value.monitoring.live_window_seconds) ? t('invalid_configuration') : '');
   const invalid = inputs.find(input => input.willValidate && !input.validity.valid);
   if (invalid) { invalid.setAttribute('aria-invalid', 'true'); await revealInvalid(invalid); invalid.reportValidity(); return; }
   const key = connectionKey.value;
@@ -183,7 +183,7 @@ async function save() {
   busy.value = true;
   try {
     const value = await api.saveConfiguration(configurationUpdateFromDraft(draft.value, {
-      mode: configuration.value!.mode, timezone: preview?.timezone ?? configuration.value!.settings?.timezone ?? 'UTC',
+      mode: configuration.value!.mode, home_timezone: preview?.home_timezone ?? configuration.value!.monitoring_settings?.home_timezone ?? 'UTC',
     }));
     adoptConfiguration(value);
     if (key !== connectionKey.value) {
@@ -195,7 +195,7 @@ async function save() {
   } catch (failure) {
     saveResult.value = failure instanceof ApiError ? failure.code : 'error';
     const fields = failure instanceof ApiError ? failure.fields : [];
-    const invalidInputs = inputs.filter(input => fields.some(field => field === `settings.${input.name}`
+    const invalidInputs = inputs.filter(input => fields.some(field => field === `monitoring_settings.${input.name}`
       || field === `forecast_settings.${input.name.replace(/^forecast_/, '')}` || field === `connection.${input.id.replace(/^ha-/, '')}`)
       || saveResult.value === 'connection_required' && input.id === 'ha-token');
     invalidInputs.forEach(input => input.setAttribute('aria-invalid', 'true'));
@@ -227,11 +227,11 @@ async function save() {
                 </div>
                 <div class="connection-actions"><button id="load-entities" class="secondary" type="button" :disabled="discoveryRequest !== null" @click="discoverEntities(true)"><RefreshCw :size="14" aria-hidden="true" />{{ t(discoveryRequest !== null ? 'connecting' : 'connect') }}</button><span id="connection-result" role="status">{{ connectionStatus ? t(connectionStatus) : '' }}</span></div>
               </section>
-              <section class="form-section panel" data-settings-section="panels">
-                <h2><Sun :size="18" aria-hidden="true" />{{ t('solar') }}</h2>
+              <section class="form-section panel" data-settings-section="modules">
+                <h2><Sun :size="18" aria-hidden="true" />{{ t('pv_modules') }}</h2>
                 <div class="form-grid">
-                  <label><span>{{ t('rated_power') }}</span><div class="input-unit"><input name="rated_power_w" type="number" min="1" max="1000000000" step="any" required :value="draft.monitoring.rated_power_w" @input="draft.monitoring.rated_power_w = inputValue($event)"><span>W</span></div></label>
-                  <label><span>{{ t('coefficient') }}</span><div class="input-unit"><input name="temperature_coefficient_pct_per_c" type="number" min="-5" max="5" step="any" required :value="draft.monitoring.temperature_coefficient_pct_per_c" @input="draft.monitoring.temperature_coefficient_pct_per_c = inputValue($event)"><span>%/°C</span></div><small>{{ t('coef_help') }}</small></label>
+                  <label><span>{{ t('total_max_power_at_stc') }}</span><div class="input-unit"><input name="total_max_power_at_stc_w" type="number" min="1" max="1000000000" step="any" required :value="draft.monitoring.total_max_power_at_stc_w" @input="draft.monitoring.total_max_power_at_stc_w = inputValue($event)"><span>W</span></div></label>
+                  <label><span>{{ t('pmax_temperature_coefficient') }}</span><div class="input-unit"><input name="pmax_temperature_coefficient_pct_per_c" type="number" min="-5" max="5" step="any" required :value="draft.monitoring.pmax_temperature_coefficient_pct_per_c" @input="draft.monitoring.pmax_temperature_coefficient_pct_per_c = inputValue($event)"><span>%/°C</span></div><small>{{ t('pmax_temperature_coefficient_help') }}</small></label>
                 </div>
               </section>
               <section class="form-section panel" data-settings-section="sources">
@@ -245,16 +245,16 @@ async function save() {
               <section class="form-section panel" data-settings-section="monitoring">
                 <h2><Clock3 :size="18" aria-hidden="true" />{{ t('monitoring') }}</h2>
                 <div class="form-grid three">
-                  <label><span>{{ t('interval') }}</span><div class="input-unit"><select v-model="draft.monitoring.interval_minutes" name="interval_minutes"><option value="1">1</option><option value="5">5</option><option value="10">10</option></select><span>{{ t('minutes') }}</span></div></label>
-                  <label><span>{{ t('realtime_window') }}</span><div class="input-unit"><input name="realtime_window_seconds" type="number" min="10" max="3600" required :value="draft.monitoring.realtime_window_seconds" @input="draft.monitoring.realtime_window_seconds = inputValue($event)"><span>s</span></div></label>
-                  <label><span>{{ t('update_interval') }}</span><div class="input-unit"><input name="update_seconds" type="number" min="1" max="60" required :value="draft.monitoring.update_seconds" @input="draft.monitoring.update_seconds = inputValue($event)"><span>s</span></div></label>
+                  <label><span>{{ t('settlement_interval') }}</span><div class="input-unit"><select v-model="draft.monitoring.settlement_interval_minutes" name="settlement_interval_minutes"><option value="1">1</option><option value="5">5</option><option value="10">10</option></select><span>{{ t('minutes') }}</span></div></label>
+                  <label><span>{{ t('live_window_duration') }}</span><div class="input-unit"><input name="live_window_seconds" type="number" min="10" max="3600" required :value="draft.monitoring.live_window_seconds" @input="draft.monitoring.live_window_seconds = inputValue($event)"><span>s</span></div></label>
+                  <label><span>{{ t('update_interval') }}</span><div class="input-unit"><input name="update_interval_seconds" type="number" min="1" max="60" required :value="draft.monitoring.update_interval_seconds" @input="draft.monitoring.update_interval_seconds = inputValue($event)"><span>s</span></div></label>
                 </div>
                 <div class="advanced-settings"><h3>{{ t('advanced') }}</h3><p class="muted">{{ t('hold_help') }}</p><div class="form-grid three"><label v-for="field in timeoutFields" :key="field.key"><span>{{ t(field.label) }}</span><div class="input-unit"><input :name="field.key" type="number" min="1" max="86400" required :value="draft.monitoring[field.key]" @input="draft.monitoring[field.key] = inputValue($event)"><span>s</span></div></label></div></div>
               </section>
               <section class="form-section panel" data-settings-section="forecast">
                 <h2><Compass :size="18" aria-hidden="true" />{{ t('forecast') }}</h2><p class="muted">{{ t('forecast_help') }}</p>
                 <p id="forecast-location" class="readonly-row">{{ locationText }}</p>
-                <p id="home-timezone" class="readonly-row">{{ t('home_timezone') }}: {{ location?.timezone ?? configuration?.settings?.timezone ?? '—' }}</p><p class="muted">{{ t('location_help') }}</p>
+                <p id="home-timezone" class="readonly-row">{{ t('home_timezone') }}: {{ location?.home_timezone ?? configuration?.monitoring_settings?.home_timezone ?? '—' }}</p><p class="muted">{{ t('location_help') }}</p>
                 <label class="checkbox-row"><span>{{ t('forecast_enabled') }}</span><input v-model="draft.forecast.enabled" name="forecast_enabled" type="checkbox"></label>
                 <div class="form-grid">
                   <label><span>{{ t('forecast_tilt') }}</span><div class="input-unit"><input name="forecast_tilt_deg" type="number" min="0" max="90" step="any" :required="draft.forecast.enabled" :value="draft.forecast.tilt_deg" @input="draft.forecast.tilt_deg = inputValue($event)"><span>°</span></div></label>
@@ -266,7 +266,7 @@ async function save() {
             </fieldset>
           </form>
         </div>
-        <div id="settings-actions"><div class="settings-feedback"><span v-if="busy" role="status">{{ t('settings_loading') }}</span><span id="save-result" role="status">{{ saveResult ? t(saveResult) : '' }}</span></div><div class="settings-buttons"><button id="cancel-settings" class="secondary" type="button" :disabled="busy" @click="loadConfiguration()"><RotateCcw :size="15" aria-hidden="true" />{{ t('cancel_settings') }}</button><button id="save-button" class="primary" form="settings-form" type="submit" :disabled="!editable || !dirty"><Check :size="16" aria-hidden="true" />{{ t(busy ? 'saving' : 'save') }}</button></div></div>
+        <div id="settings-actions"><div class="settings-feedback"><span v-if="busy" role="status">{{ t('settings_loading') }}</span><span id="save-result" role="status">{{ saveResult ? t(saveResult) : '' }}</span></div><div class="settings-buttons"><button id="discard-settings-changes" class="secondary" type="button" :disabled="busy" @click="loadConfiguration()"><RotateCcw :size="15" aria-hidden="true" />{{ t('discard_changes') }}</button><button id="save-button" class="primary" form="settings-form" type="submit" :disabled="!editable || !dirty"><Check :size="16" aria-hidden="true" />{{ t(busy ? 'saving' : 'save') }}</button></div></div>
       </div>
     </div>
   </section>

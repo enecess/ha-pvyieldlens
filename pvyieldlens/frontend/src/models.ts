@@ -1,16 +1,16 @@
 export interface MonitoringSettings {
-  rated_power_w: number;
-  temperature_coefficient_pct_per_c: number;
-  power_entity: string;
-  temperature_entity: string;
+  total_max_power_at_stc_w: number;
+  pmax_temperature_coefficient_pct_per_c: number;
+  actual_power_entity: string;
+  module_temperature_entity: string;
   irradiance_entity: string;
-  interval_minutes: 1 | 5 | 10;
-  realtime_window_seconds: number;
-  update_seconds: number;
-  power_max_age_seconds: number;
-  temperature_max_age_seconds: number;
+  settlement_interval_minutes: 1 | 5 | 10;
+  live_window_seconds: number;
+  update_interval_seconds: number;
+  actual_power_max_age_seconds: number;
+  module_temperature_max_age_seconds: number;
   irradiance_max_age_seconds: number;
-  timezone: string;
+  home_timezone: string;
 }
 
 export interface ForecastSettings {
@@ -25,11 +25,11 @@ export interface HALocation {
   latitude: number;
   longitude: number;
   location_name: string | null;
-  timezone: string;
+  home_timezone: string;
 }
 
 export interface Configuration {
-  settings: MonitoringSettings | null;
+  monitoring_settings: MonitoringSettings | null;
   forecast_settings: ForecastSettings;
   location: HALocation | null;
   mode: 'app' | 'docker';
@@ -42,11 +42,11 @@ export interface ConfigurationSaveResult extends Configuration {
 
 export interface ConnectionInput { url: string; token?: string }
 export interface SourceEntity { entity_id: string; name: string; unit: string | null; state: string }
-export interface ConnectionResult { timezone: string; location: HALocation | null; entities: SourceEntity[] }
+export interface ConnectionResult { home_timezone: string; location: HALocation | null; entities: SourceEntity[] }
 export interface ConfigurationUpdate {
-  settings: MonitoringSettings;
+  monitoring_settings: MonitoringSettings;
   connection?: ConnectionInput | null;
-  forecast_settings?: ForecastSettings | null;
+  forecast_settings: ForecastSettings;
 }
 
 export interface WindowResult {
@@ -55,11 +55,11 @@ export interface WindowResult {
   valid_seconds: number;
   estimated_energy_wh: number;
   actual_energy_wh: number;
-  estimated_power: number | null;
-  actual_power: number | null;
+  estimated_power_w: number | null;
+  actual_power_w: number | null;
   pr: number | null;
-  optimizable_power: number | null;
-  coverage_percent: number;
+  optimizable_power_w: number | null;
+  data_completeness_percent: number;
   quality: string;
   reason: string | null;
 }
@@ -71,7 +71,7 @@ export interface HistorySummary {
   estimated_energy_kwh: number | null;
   actual_energy_kwh: number | null;
   pr: number | null;
-  coverage_percent: number | null;
+  data_completeness_percent: number | null;
   valid_seconds: number;
 }
 export interface HistoryResponse {
@@ -90,42 +90,42 @@ export interface HistoryDay {
 }
 export interface HistoryView extends HistoryResponse {
   period: HistoryPeriod;
-  timezone: string;
+  home_timezone: string;
   today: string;
   boundary_unavailable: boolean;
   days: HistoryDay[];
 }
 
-export interface LiveHistoryResponse {
+export interface LiveSeriesResponse {
   configured: boolean;
   recovering: boolean;
   range: { start: number; end: number };
   step_seconds: number | null;
-  context: { revision: number; settings: MonitoringSettings } | null;
+  context: { revision: number; monitoring_settings: MonitoringSettings } | null;
   points: (WindowResult & { at: number })[];
 }
 
 export interface ForecastInterval {
   start: number;
   end: number;
-  poa_w_m2: number | null;
+  irradiance_w_m2: number | null;
   air_temperature_c: number | null;
   cell_temperature_c: number | null;
-  power_w: number | null;
-  energy_kwh: number | null;
+  forecast_power_w: number | null;
+  forecast_energy_kwh: number | null;
   quality: 'complete' | 'unavailable';
 }
 export interface EnergyForecast {
   start: number;
   end: number;
-  kwh: number | null;
-  coverage_percent: number;
+  forecast_energy_kwh: number | null;
+  data_completeness_percent: number;
   quality: 'complete' | 'partial' | 'unavailable';
 }
 export interface DailyWeather {
   weather_code: number | null;
-  temperature_min_c: number | null;
-  temperature_max_c: number | null;
+  air_temperature_min_c: number | null;
+  air_temperature_max_c: number | null;
   quality: 'complete' | 'partial' | 'unavailable';
 }
 export interface ForecastDay extends EnergyForecast { day: string; weather: DailyWeather | null }
@@ -135,7 +135,7 @@ export interface ForecastView {
   fetched_at: number | null;
   calculated_at: number;
   last_error: string | null;
-  timezone: string | null;
+  home_timezone: string | null;
   today: EnergyForecast | null;
   remaining_today: EnergyForecast | null;
   tomorrow: EnergyForecast | null;
@@ -153,20 +153,20 @@ export interface Snapshot {
   history_available: boolean;
   calculated_at: number | null;
   revision: number;
-  statistics: HistoryWindow | null;
-  realtime: WindowResult | null;
-  energy: {
-    daily_kwh: number;
-    total_kwh: number;
+  latest_settled_window: HistoryWindow | null;
+  live_window: WindowResult | null;
+  energy_totals: {
+    estimated_energy_today_kwh: number;
+    estimated_energy_lifetime_kwh: number;
     day: string;
-    timezone: string;
-    daily_valid_seconds: number;
-    daily_complete: boolean;
-    total_valid_seconds: number;
+    home_timezone: string;
+    today_valid_seconds: number;
+    today_allocation_complete: boolean;
+    lifetime_valid_seconds: number;
     settled_until: number | null;
   };
   sources: { entity_id: string; state: string; unit: string | null; reported_at: number; valid: boolean }[];
-  timezone: string;
+  home_timezone: string;
   location: HALocation | null;
   forecast: ForecastSummary;
 }

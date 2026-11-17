@@ -23,10 +23,10 @@ async def test_daily_slots_zero_gaps_cutoff_and_viewport(browser_workspace, widt
     await page.set_viewport_size({'width': width, 'height': 900})
     end = datetime(2026, 11, 11, 0, 3, tzinfo=timezone.utc).timestamp()
     summary = {'start': end-180, 'end': end, 'estimated_energy_kwh': 0.08,
-               'actual_energy_kwh': 0.07, 'pr': 87.5, 'coverage_percent': 60, 'valid_seconds': 108}
+               'actual_energy_kwh': 0.07, 'pr': 87.5, 'data_completeness_percent': 60, 'valid_seconds': 108}
     window = {'revision': 1, 'start': end-180, 'end': end, 'valid_seconds': 108,
-              'estimated_energy_wh': 60, 'actual_energy_wh': 60, 'estimated_power': 2000,
-              'actual_power': 2000, 'pr': 100, 'optimizable_power': 0, 'coverage_percent': 60,
+              'estimated_energy_wh': 60, 'actual_energy_wh': 60, 'estimated_power_w': 2000,
+              'actual_power_w': 2000, 'pr': 100, 'optimizable_power_w': 0, 'data_completeness_percent': 60,
               'quality': 'partial', 'reason': 'missing_data', 'source_start': end-300, 'source_end': end}
 
     async def history(route):
@@ -102,7 +102,7 @@ async def test_ha_midnight_refreshes_without_settlement(browser_workspace, monke
     import pvyieldlens.service as service_module
 
     page, service, _ = browser_workspace
-    await service.configure(service.config.model_copy(update={'timezone': 'Asia/Shanghai'}))
+    await service.configure(service.monitoring_settings.model_copy(update={'home_timezone': 'Asia/Shanghai'}))
     now = datetime(2026, 11, 10, 15, 59, 59, tzinfo=timezone.utc).timestamp()
     clock = SimpleNamespace(time=lambda: now)
     monkeypatch.setattr(web_module, 'time', clock)
@@ -130,7 +130,7 @@ async def test_daily_touch_columns_preserve_vertical_scroll(browser_workspace):
 
     page, _, _ = browser_workspace
     payload = history_payload([], {'start': None, 'end': None, 'estimated_energy_kwh': None,
-        'actual_energy_kwh': None, 'pr': None, 'coverage_percent': None, 'valid_seconds': 0},
+        'actual_energy_kwh': None, 'pr': None, 'data_completeness_percent': None, 'valid_seconds': 0},
         {'start': 1793740800, 'end': 1794326580}, '7d')
     context = await page.context.browser.new_context(has_touch=True, is_mobile=True,
         viewport={'width': 390, 'height': 600}, http_credentials={'username': 'admin', 'password': 'browser-test'})

@@ -21,11 +21,11 @@ const settingsPage = ref<InstanceType<typeof SettingsPage>>();
 const pendingDestination = ref<{ page: Page; section?: SettingsSection } | null>(null);
 const theme = createThemeController(window);
 const { preference, mode, source } = theme;
-const { configuration, snapshot, livePoints, liveRange, liveHistoryError, error, displayTimezone, acceptConfiguration, acceptSavedConfiguration } = useDashboard();
+const { configuration, snapshot, livePoints, liveRange, liveSeriesError, error, displayTimezone, acceptConfiguration, acceptSavedConfiguration } = useDashboard();
 const { languageChoice, language, t, setLanguage } = useI18n();
 const warnings = computed(() => [error.value, snapshot.value?.error,
   snapshot.value?.history_available === false ? 'history_unavailable' : null,
-  snapshot.value?.energy.daily_complete === false ? 'daily_energy_incomplete' : null,
+  snapshot.value?.energy_totals.today_allocation_complete === false ? 'daily_energy_incomplete' : null,
 ].filter((value): value is string => Boolean(value)));
 onUnmounted(theme.dispose);
 
@@ -55,7 +55,7 @@ function discardAndNavigate() {
 
 <template>
   <header class="app-header">
-    <a class="brand" href="./" aria-label="PVYieldLens home" :aria-disabled="settingsState.busy || undefined" @click.prevent="requestPage('live')">
+    <a class="brand" href="./" :aria-label="t('brand_home')" :aria-disabled="settingsState.busy || undefined" @click.prevent="requestPage('live')">
       <img class="brand-icon" :src="brandIcon" alt="" width="128" height="128">
       PVYieldLens
     </a>
@@ -73,7 +73,7 @@ function discardAndNavigate() {
     <div class="utilities">
       <div class="preferences">
         <div class="theme-preferences">
-          <span id="connection-state" role="status"><span class="status-dot" :class="{ good: snapshot?.connected && !error }"></span>{{ t(!configuration?.settings ? 'unconfigured' : snapshot?.connected && !error ? 'live' : 'offline') }}</span>
+          <span id="connection-state" role="status"><span class="status-dot" :class="{ good: snapshot?.connected && !error }"></span>{{ t(!configuration?.monitoring_settings ? 'unconfigured' : snapshot?.connected && !error ? 'connection_connected' : 'connection_disconnected') }}</span>
           <label class="theme-control" for="theme-select">
             <SunMoon :size="16" aria-hidden="true" />
             <span class="sr-only">{{ t('theme_mode') }}</span>
@@ -96,7 +96,7 @@ function discardAndNavigate() {
   <div id="content-scroll" ref="contentScroll">
     <main :class="{ 'settings-active': page === 'settings' }" :data-configuration-ready="configuration !== null" :data-snapshot-ready="snapshot !== null">
       <div v-show="warnings.length" id="banner" class="banner" role="status">{{ warnings.map(key => t(key)).join(' ') }}</div>
-      <LivePage v-show="page === 'live'" :active="page === 'live'" :configuration="configuration" :snapshot="snapshot" :points="livePoints" :range="liveRange" :history-error="liveHistoryError" :language="language" :theme="mode" :display-timezone="displayTimezone" @open-settings="requestPage('settings')" />
+      <LivePage v-show="page === 'live'" :active="page === 'live'" :configuration="configuration" :snapshot="snapshot" :points="livePoints" :range="liveRange" :series-error="liveSeriesError" :language="language" :theme="mode" :display-timezone="displayTimezone" @open-settings="requestPage('settings')" />
       <HistoryPage v-show="page === 'history'" :active="page === 'history'" :configuration="configuration" :snapshot="snapshot" :language="language" :theme="mode" :display-timezone="displayTimezone" />
       <ForecastPage v-show="page === 'forecast'" :active="page === 'forecast'" :summary="snapshot?.forecast ?? null" :language="language" :theme="mode" :display-timezone="displayTimezone" @open-settings="requestPage('settings', $event)" />
       <SettingsPage v-show="page === 'settings'" ref="settingsPage" :active="page === 'settings'" :initial-section="settingsSection" :location="configuration?.location ?? null" @loaded="acceptConfiguration" @saved="acceptSavedConfiguration" @state-change="settingsState = $event" />

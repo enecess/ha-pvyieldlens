@@ -19,7 +19,7 @@ async def layout_page(tmp_path):
     from pvyieldlens.web import Runtime, create_app
 
     service = Service(Store(tmp_path / 'data.sqlite'))
-    await service.configure(settings(interval_minutes=1, update_seconds=1), now=int(time.time())-86430)
+    await service.configure(settings(settlement_interval_minutes=1, update_interval_seconds=1), now=int(time.time())-86430)
     async with fake_server() as ha_url:
         web = create_app(service, Runtime(web_password='browser-test', ha_url=ha_url,
                                          ha_token='simulation-token'), run_background=False)
@@ -154,7 +154,7 @@ async def test_content_empty_gutter_matches_background_and_scrolled_header_stays
     await page.locator('#history-tab').click()
     await expect(page.locator('#history-totals')).to_have_count(0)
     await page.locator('#content-scroll').evaluate('node => node.scrollTo(0, node.scrollHeight)')
-    await page.wait_for_function("document.querySelector('#content-scroll').scrollTop > 0")
+    await page.wait_for_function("() => document.querySelector('#content-scroll').scrollTop > 0")
     scrolled = await page.evaluate('''() => {
         const header = document.querySelector('.app-header').getBoundingClientRect(), node = document.querySelector('#content-scroll');
         return {headerTop: header.top, headerRight: header.right, headerBottom: header.bottom,
@@ -180,7 +180,7 @@ async def test_tablet_data_header_keeps_controls_inside_viewport(layout_page, la
     async def unconfigured(route):
         response = await route.fetch()
         configuration = await response.json()
-        configuration['settings'] = None
+        configuration['monitoring_settings'] = None
         await route.fulfill(response=response, json=configuration)
     await page.route('**/api/config', unconfigured)
     await page.reload()
@@ -215,7 +215,7 @@ async def test_scrolled_navigation_reveals_destination_and_preserves_same_page_s
     await page.locator('#source-diagnostics').evaluate('node => node.open = true')
     await expect(page.locator('#content-scroll')).to_have_count(1)
     await page.locator('#content-scroll').evaluate('node => node.scrollTo(0, 500)')
-    await page.wait_for_function("document.querySelector('#content-scroll').scrollTop > 50")
+    await page.wait_for_function("() => document.querySelector('#content-scroll').scrollTop > 50")
     before = await page.locator('#content-scroll').evaluate('node => node.scrollTop')
     await page.locator('#live-tab').evaluate('node => node.click()')
     assert await page.locator('#content-scroll').evaluate('node => node.scrollTop') == pytest.approx(before, abs=1)
@@ -226,8 +226,8 @@ async def test_scrolled_navigation_reveals_destination_and_preserves_same_page_s
     if width > 600:
         assert await page.locator('#content-scroll').evaluate('node => node.scrollTop') == 0
     await page.locator('button[data-settings-category=monitoring]').click()
-    await expect(page.locator('[name=power_max_age_seconds]')).to_be_visible()
-    await page.locator('[name=update_seconds]').fill('2')
+    await expect(page.locator('[name=actual_power_max_age_seconds]')).to_be_visible()
+    await page.locator('[name=update_interval_seconds]').fill('2')
     before = await page.locator('#settings-scroll').evaluate('node => node.scrollTop')
     await page.locator('#settings-button').click()
     assert await page.locator('#settings-scroll').evaluate('node => node.scrollTop') == pytest.approx(before, abs=1)
@@ -335,7 +335,7 @@ async def test_short_mobile_settings_keeps_directory_and_actions_usable(layout_p
     directory = await page.locator('#settings-categories').bounding_box()
     assert directory['y'] == pytest.approx(header['height'], abs=1)
     evidence = []
-    for category in ['connection', 'panels', 'sources', 'monitoring', 'forecast']:
+    for category in ['connection', 'modules', 'sources', 'monitoring', 'forecast']:
         await page.locator(f'[data-settings-category={category}]').click()
         await page.locator('#settings-categories').evaluate('node => node.scrollIntoView({block: "start"})')
         geometry = await page.evaluate('''() => {
@@ -414,7 +414,7 @@ async def test_settings_mobile_categories_and_long_locale_fit(layout_page, layou
     assert selected_language['text'] <= selected_language['available'], selected_language
     await expect(page.locator('#connection-result')).not_to_be_empty()
     assert await page.locator('#settings-form').count() == 1
-    for category in ['connection', 'panels', 'sources', 'monitoring', 'forecast']:
+    for category in ['connection', 'modules', 'sources', 'monitoring', 'forecast']:
         await page.locator(f'button[data-settings-category={category}]').click()
         await expect(page.locator(f'[data-settings-section={category}]')).to_be_visible()
         await expect(page.locator('[data-settings-section]:visible')).to_have_count(5)
@@ -445,7 +445,7 @@ async def test_history_summary_and_charts_share_range(layout_page, layout_artifa
     start = service.store.cursor
     now = int(start + 86430)
     for offset, power in [(0, 1000), (60, 2000), (120, 3000)]:
-        service.store.settle(calculate(service.config, samples(power=power, at=start+offset),
+        service.store.settle(calculate(service.monitoring_settings, samples(power=power, at=start+offset),
                                       start+offset, start+offset+60), 1, 'UTC')
     clock = SimpleNamespace(time=lambda: now)
     monkeypatch.setattr(web_module, 'time', clock)
@@ -461,7 +461,7 @@ async def test_history_summary_and_charts_share_range(layout_page, layout_artifa
     assert payload['summary']['estimated_energy_kwh'] == pytest.approx(0.124)
     await expect(page.locator('#history-energy')).to_have_text('0.124')
     await expect(page.locator('#history-pr')).to_have_text('67.2')
-    await expect(page.locator('#stat-coverage')).to_contain_text('100%')
+    await expect(page.locator('#history-data-completeness')).to_contain_text('100%')
     for selector in ['#history-chart', '#pr-chart']:
         await page.locator(selector + ' .chart-hit-area').focus()
         await page.keyboard.press('ArrowRight')
@@ -495,7 +495,7 @@ async def test_history_summary_and_charts_share_range(layout_page, layout_artifa
     await expect(page.locator('#history-chart svg')).not_to_have_attribute('data-original', 'hidden')
     await page.locator('#language-select').select_option('en')
     await expect(page.locator('#history-totals')).to_have_count(0)
-    total = service.snapshot(now=now)['energy']['total_kwh']
+    total = service.snapshot(now=now)['energy_totals']['estimated_energy_lifetime_kwh']
     async with page.expect_response(lambda response: '/api/history?' in response.url):
         await page.locator('#history-range').select_option('7d')
     await expect(page.locator('#history-energy')).to_have_text('0.186')
@@ -503,7 +503,7 @@ async def test_history_summary_and_charts_share_range(layout_page, layout_artifa
     await page.keyboard.press('ArrowRight')
     await expect(page.locator('#history-chart .chart-tooltip')).to_contain_text('1,000 W')
     assert await page.locator('#history-chart path.series').first.evaluate('path => path.getTotalLength()') > 0
-    assert service.snapshot(now=now)['energy']['total_kwh'] == total
+    assert service.snapshot(now=now)['energy_totals']['estimated_energy_lifetime_kwh'] == total
     await page.screenshot(path=str(layout_artifacts / 'history-populated-desktop.png'), full_page=True)
     await page.locator('#live-tab').click()
     await expect(page.locator('#history-chart svg')).to_be_hidden()
@@ -516,7 +516,7 @@ async def test_completeness_hints_follow_language(layout_page):
     hints = []
     for language in ['en', 'zh']:
         await page.locator('#language-select').select_option(language)
-        metric_hints = await page.locator('#live-coverage, #stat-coverage').evaluate_all('nodes => nodes.map(node => node.title)')
+        metric_hints = await page.locator('#live-data-completeness, #history-data-completeness').evaluate_all('nodes => nodes.map(node => node.title)')
         assert len(metric_hints) == 2 and all(metric_hints)
         assert metric_hints[0] == metric_hints[1]
         assert metric_hints[0] not in await page.locator('.quality-panel').inner_text()
@@ -546,7 +546,7 @@ async def test_sensors_empty_data_empty_and_language_changes(layout_page, layout
     await expect(table.locator('tbody tr:visible').first.locator('td').first).to_have_text('sensor.power')
     await expect(table.locator('tbody tr:visible').nth(1).locator('td').nth(1)).to_contain_text('45 °C')
     await page.screenshot(path=str(layout_artifacts / 'sources-populated-zh.png'), full_page=True)
-    await service.configure(service.config.model_copy(update={'rated_power_w': 6000}))
+    await service.configure(service.monitoring_settings.model_copy(update={'total_max_power_at_stc_w': 6000}))
     await expect(empty).to_have_text('暂无传感器数据')
     await expect(table.locator('tbody tr:visible')).to_have_count(1)
 
@@ -562,7 +562,7 @@ async def test_live_readings_keep_polling_while_configuring(layout_page, layout_
     await expect(page.locator('#live-pr')).to_have_text('90')
     await expect(page.locator('#live-actual')).to_have_text('3,348')
     await expect(page.locator('#live-estimated')).to_have_text('3,720')
-    await expect(page.locator('#live-opportunity')).to_have_text('372')
+    await expect(page.locator('#live-optimizable-power')).to_have_text('372')
     await page.screenshot(path=str(layout_artifacts / 'live-populated-desktop.png'), full_page=True)
     await page.set_viewport_size({'width': 390, 'height': 844})
     geometry = await page.evaluate('''() => {
@@ -613,15 +613,15 @@ async def test_live_readings_keep_polling_while_configuring(layout_page, layout_
     await expect(page.locator('#settings-page')).to_be_visible()
     await expect(page.locator('#live-page')).not_to_be_visible()
     await page.locator('#live-chart svg').evaluate("node => node.dataset.original = 'hidden'")
-    await expect(page.locator('[name=rated_power_w]')).to_have_value('5000')
-    await page.locator('[name=rated_power_w]').fill('6100')
+    await expect(page.locator('[name=total_max_power_at_stc_w]')).to_have_value('5000')
+    await page.locator('[name=total_max_power_at_stc_w]').fill('6100')
     service.store.add_observations(samples(power=3000, at=now))
     await service.tick(now+60)
     await expect(page.locator('#live-actual')).to_have_text('3,000')
     await expect(page.locator('#live-chart svg')).to_have_attribute('data-original', 'hidden')
-    await expect(page.locator('[name=rated_power_w]')).to_have_value('6100')
-    await page.locator('#cancel-settings').click()
-    await expect(page.locator('[name=rated_power_w]')).to_have_value('5000')
+    await expect(page.locator('[name=total_max_power_at_stc_w]')).to_have_value('6100')
+    await page.locator('#discard-settings-changes').click()
+    await expect(page.locator('[name=total_max_power_at_stc_w]')).to_have_value('5000')
     await page.locator('#live-tab').click()
     await expect(page.locator('#live-chart svg')).not_to_have_attribute('data-original', 'hidden')
     curve = await page.locator('#live-chart path.series').nth(1).get_attribute('d')
@@ -657,9 +657,9 @@ async def test_settings_scrollspy_and_bottom_actions(layout_page, layout_artifac
     await page.set_viewport_size({'width': width, 'height': height})
     await page.emulate_media(reduced_motion='reduce')
     await page.locator('#settings-button').click()
-    await expect(page.locator('[name=rated_power_w]')).to_be_enabled()
+    await expect(page.locator('[name=total_max_power_at_stc_w]')).to_be_enabled()
     await expect(page.locator('[data-settings-section]')).to_have_count(5)
-    for category in ['connection', 'panels', 'sources', 'monitoring', 'forecast']:
+    for category in ['connection', 'modules', 'sources', 'monitoring', 'forecast']:
         await page.locator(f'[data-settings-category={category}]').click()
         await expect(page.locator(f'[data-settings-category={category}]')).to_have_attribute('aria-pressed', 'true')
         position = await page.locator('#settings-scroll').evaluate('node => node.scrollTop')
@@ -706,13 +706,13 @@ async def test_settings_scrollspy_and_bottom_actions(layout_page, layout_artifac
     assert boxes['last']['top'] >= boxes['scroll']['top']
     assert boxes['last']['bottom'] < boxes['actions']['top']
     assert boxes['documentWidth'] <= boxes['width']
-    await page.locator('[data-settings-category=panels]').click()
-    await page.locator('[name=rated_power_w]').fill('')
+    await page.locator('[data-settings-category=modules]').click()
+    await page.locator('[name=total_max_power_at_stc_w]').fill('')
     await page.locator('[data-settings-category=forecast]').click()
     await page.locator('#save-button').click()
-    await expect(page.locator('[name=rated_power_w]')).to_be_focused()
-    await expect(page.locator('[data-settings-category=panels]')).to_have_attribute('aria-pressed', 'true')
-    focused = await page.locator('[name=rated_power_w]').bounding_box()
+    await expect(page.locator('[name=total_max_power_at_stc_w]')).to_be_focused()
+    await expect(page.locator('[data-settings-category=modules]')).to_have_attribute('aria-pressed', 'true')
+    focused = await page.locator('[name=total_max_power_at_stc_w]').bounding_box()
     assert focused['y'] >= boxes['scroll']['top']
     assert focused['y'] + focused['height'] < boxes['actions']['top']
 
@@ -733,11 +733,11 @@ async def test_settings_sections_remeasure_when_visible_resized_and_expanded(lay
             await page.route('**/api/config', app_configuration)
             await page.reload()
         await page.locator('#settings-button').click()
-        await expect(page.locator('[name=rated_power_w]')).to_be_enabled()
+        await expect(page.locator('[name=total_max_power_at_stc_w]')).to_be_enabled()
         await page.set_viewport_size({'width': 1440, 'height': 700})
         await page.locator('[data-settings-category=monitoring]').click()
         await page.locator('#settings-scroll').evaluate('node => node.scrollTop += 50')
-        await page.locator('[name=update_seconds]').focus()
+        await page.locator('[name=update_interval_seconds]').focus()
         await expect(page.locator('[data-settings-category=monitoring]')).to_have_attribute('aria-current', 'location')
         reading_top = await page.locator('#settings-scroll').evaluate('''node =>
             node.querySelector('[data-settings-section=monitoring] h2').getBoundingClientRect().top - node.getBoundingClientRect().top''')
@@ -748,7 +748,7 @@ async def test_settings_sections_remeasure_when_visible_resized_and_expanded(lay
             return Math.abs(container.querySelector('[data-settings-section=monitoring] h2').getBoundingClientRect().top
                 - container.getBoundingClientRect().top - top) <= 1;
         }''', arg=reading_top)
-        await expect(page.locator('[name=update_seconds]')).to_be_focused()
+        await expect(page.locator('[name=update_interval_seconds]')).to_be_focused()
         for width, height in [(2560, 1440), (1920, 1080), (1440, 700), (390, 844), (390, 430), (2560, 1440)]:
             await page.set_viewport_size({'width': width, 'height': height})
             for category in ['monitoring', 'forecast']:
@@ -768,10 +768,10 @@ async def test_settings_sections_remeasure_when_visible_resized_and_expanded(lay
                 const heading = container.querySelector('[data-settings-section=forecast] h2');
                 return Math.abs(heading.getBoundingClientRect().top - container.getBoundingClientRect().top - 20) <= 1;
             }''')
-        await page.locator('#cancel-settings').click()
+        await page.locator('#discard-settings-changes').click()
         await page.locator('#live-tab').click()
         await page.locator('#settings-button').click()
-        await expect(page.locator('[name=rated_power_w]')).to_be_enabled()
+        await expect(page.locator('[name=total_max_power_at_stc_w]')).to_be_enabled()
         await expect(page.locator('[data-settings-category=connection]')).to_have_attribute('aria-current', 'location')
         await page.locator('[data-settings-category=monitoring]').click()
         await expect(page.locator('[data-settings-category=monitoring]')).to_have_attribute('aria-current', 'location')

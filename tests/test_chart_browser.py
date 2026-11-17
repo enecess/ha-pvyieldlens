@@ -27,11 +27,11 @@ async def test_singleton_glyph_pixel_picking(browser_workspace, scenario, chart_
     await page.set_viewport_size({'width': 1440, 'height': 1000})
     now = int(time.time())
     endpoint = now - 180
-    await service.configure(service.config.model_copy(update={'update_seconds': 60}))
+    await service.configure(service.monitoring_settings.model_copy(update={'update_interval_seconds': 60}))
     record = {'start': endpoint - 60, 'end': endpoint, 'valid_seconds': 60,
-              'estimated_power': 4400, 'actual_power': 0 if zero else 3885.2,
-              'pr': 0 if zero else 88.3, 'optimizable_power': 4400 if zero else 514.8,
-              'coverage_percent': 100, 'estimated_energy_wh': 4400 / 60,
+              'estimated_power_w': 4400, 'actual_power_w': 0 if zero else 3885.2,
+              'pr': 0 if zero else 88.3, 'optimizable_power_w': 4400 if zero else 514.8,
+              'data_completeness_percent': 100, 'estimated_energy_wh': 4400 / 60,
               'actual_energy_wh': 0 if zero else 3885.2 / 60,
               'quality': 'complete', 'reason': None, 'revision': service.store.revision}
     records = [record]
@@ -42,21 +42,21 @@ async def test_singleton_glyph_pixel_picking(browser_workspace, scenario, chart_
 
     async def snapshot(route):
         result = service.snapshot(now=now)
-        result.update(connected=True, calculated_at=endpoint, realtime=record, statistics=record)
+        result.update(connected=True, calculated_at=endpoint, live_window=record, latest_settled_window=record)
         await route.fulfill(json=result)
 
     async def history(route):
         await route.fulfill(json=history_payload(records, {'start': records[0]['start'], 'end': records[-1]['end'],
                         'actual_energy_kwh': record['actual_energy_wh'] / 1000,
                         'estimated_energy_kwh': record['estimated_energy_wh'] / 1000,
-                        'pr': record['pr'], 'coverage_percent': 100, 'valid_seconds': 60},
+                        'pr': record['pr'], 'data_completeness_percent': 100, 'valid_seconds': 60},
             {'start': now - 86400, 'end': now}, parse_qs(urlsplit(route.request.url).query).get('period', ['today'])[0]))
 
     async def live(route):
         await route.fulfill(json={
             'configured': True, 'recovering': False, 'range': {'start': now - 600, 'end': now},
             'step_seconds': 60, 'context': {'revision': service.store.revision,
-                                          'settings': service.config.model_dump()},
+                                          'monitoring_settings': service.monitoring_settings.model_dump()},
             'points': [{'at': point['end'], **point} for point in records],
         })
 
@@ -68,7 +68,7 @@ async def test_singleton_glyph_pixel_picking(browser_workspace, scenario, chart_
         page = await touch_context.new_page()
     await page.route('**/api/snapshot', snapshot)
     await page.route('**/api/history?*', history)
-    await page.route('**/api/live-history', live)
+    await page.route('**/api/live-series', live)
     await page.clock.set_fixed_time(datetime.fromtimestamp(now, timezone.utc))
     await page.goto(url)
     if chart_id != 'live-chart':
@@ -173,16 +173,16 @@ async def chart_page(browser_workspace):
     async def history(route):
         ends = state['ends']
         starts = state.get('starts', [0, *ends])
-        windows = [{'start': starts[index], 'end': end, 'estimated_power': value,
-                    'actual_power': value, 'pr': 125 if value is not None else None,
-                    'optimizable_power': 0 if value is not None else None,
+        windows = [{'start': starts[index], 'end': end, 'estimated_power_w': value,
+                    'actual_power_w': value, 'pr': 125 if value is not None else None,
+                    'optimizable_power_w': 0 if value is not None else None,
                     'estimated_energy_wh': 1, 'actual_energy_wh': 1, 'valid_seconds': end - starts[index],
-                    'coverage_percent': 100 if value is not None else 0,
+                    'data_completeness_percent': 100 if value is not None else 0,
                     'quality': 'complete' if value is not None else 'unavailable', 'reason': None, 'revision': 1}
                    for index, (end, value) in enumerate(zip(ends, state['values']))]
         await route.fulfill(json=history_payload(windows,
             {'start': 0, 'end': ends[-1], 'estimated_energy_kwh': 0.005, 'actual_energy_kwh': 0.005,
-             'pr': 125, 'coverage_percent': 100, 'valid_seconds': 900},
+             'pr': 125, 'data_completeness_percent': 100, 'valid_seconds': 900},
             {'start': 0, 'end': ends[-1]}, parse_qs(urlsplit(route.request.url).query).get('period', ['today'])[0]))
 
     await page.route('**/api/history?*', history)
@@ -327,7 +327,7 @@ async def test_inspection_reads_original_thinned_record(chart_page):
     await expect(chart.locator('.chart-hit-area')).to_be_visible()
     # The zero at index 502 is omitted from the displayed sample. Geometry there
     # follows its neighboring retained values, while inspection must still return zero.
-    await page.wait_for_function("document.querySelector('#history-chart .chart-hit-area').getAttribute('aria-valuemax') === '1201'")
+    await page.wait_for_function("() => document.querySelector('#history-chart .chart-hit-area').getAttribute('aria-valuemax') === '1201'")
     displayed_power = await chart.evaluate('''host => {
         const path = host.querySelector('path.series'), target = 48 + 503 / 1201 * (host.clientWidth - 60);
         const samples = Array.from({length: 10001}, (_, index) => path.getPointAtLength(path.getTotalLength() * index / 10000));
@@ -463,7 +463,7 @@ async def test_tooltip_on_top_clipped_chart_stays_below_header(chart_page):
         const scroll = document.querySelector('#content-scroll');
         scroll.scrollTo(0, scroll.scrollTop + host.getBoundingClientRect().top - scroll.getBoundingClientRect().top + 70);
     }''')
-    await page.wait_for_function("document.querySelector('#history-chart').getBoundingClientRect().top < document.querySelector('.app-header').getBoundingClientRect().bottom")
+    await page.wait_for_function("() => document.querySelector('#history-chart').getBoundingClientRect().top < document.querySelector('.app-header').getBoundingClientRect().bottom")
     hit = await chart.locator('.chart-hit-area').bounding_box()
     header = await page.locator('.app-header').bounding_box()
     await page.mouse.move(hit['x'] + hit['width'] / 2, header['height'] + 10)

@@ -28,10 +28,10 @@ async def timezone_page(tmp_path, monkeypatch):
     monkeypatch.setattr(web_module, 'time', clock)
     monkeypatch.setattr(service_module, 'time', clock)
     service = Service(Store(tmp_path / 'data.sqlite'))
-    await service.configure(settings(timezone='Asia/Shanghai', update_seconds=1), now=instant.timestamp() - 60)
-    result = calculate(service.config, samples(at=instant.timestamp() - 60), instant.timestamp() - 60, instant.timestamp())
+    await service.configure(settings(home_timezone='Asia/Shanghai', update_interval_seconds=1), now=instant.timestamp() - 60)
+    result = calculate(service.monitoring_settings, samples(at=instant.timestamp() - 60), instant.timestamp() - 60, instant.timestamp())
     service.store.settle(result, 1, 'Asia/Shanghai')
-    service.realtime = result.public()
+    service.live_window = result.public()
     view = forecast_payload('2026-11-16', 'Asia/Shanghai')
     view.update(fetched_at=instant.timestamp(), calculated_at=instant.timestamp())
     state = {'mode': 'app', 'forecast': 0, 'snapshots': 0, 'requests': []}
@@ -75,7 +75,7 @@ Intl.DateTimeFormat.prototype = Native.prototype;''')
                 payload = service.snapshot(now=instant.timestamp())
                 payload.update(calculated_at=instant.timestamp(),
                                forecast={key: value for key, value in view.items() if key not in ('days', 'intervals')})
-                payload['energy'].update(daily_kwh=3.25, total_kwh=123.5)
+                payload['energy_totals'].update(estimated_energy_today_kwh=3.25, estimated_energy_lifetime_kwh=123.5)
                 await route.fulfill(json=payload)
 
             async def forecast(route):
@@ -136,8 +136,8 @@ async def test_viewer_timezone_keeps_household_forecast_day(timezone_page):
     assert 'Asia/Shanghai' not in await app.locator('#live-page').inner_text()
     await app.locator('[data-day="2026-11-18"]').click()
     await app.locator('#settings-button').click()
-    await app.locator('[data-settings-category=panels]').click()
-    await app.locator('[name=rated_power_w]').fill('6100')
+    await app.locator('[data-settings-category=modules]').click()
+    await app.locator('[name=total_max_power_at_stc_w]').fill('6100')
     await expect(app.locator('#home-timezone')).to_contain_text('Home time zone')
     forecast_fetch_count_before = state['forecast']
     requests_before = len(state['requests'])
@@ -149,7 +149,7 @@ async def test_viewer_timezone_keeps_household_forecast_day(timezone_page):
     await expect(app.locator('#history-boundaries')).to_contain_text('Nov 16, 2026, 13:00')
     await expect(app.locator('#last-settled')).to_contain_text('13:00')
     await expect(app.locator('#forecast-home-time-note')).to_have_count(0)
-    await expect(app.locator('[name=rated_power_w]')).to_have_value('6100')
+    await expect(app.locator('[name=total_max_power_at_stc_w]')).to_have_value('6100')
     await expect(app.locator('#history-range')).to_have_value('7d')
     await expect(app.locator('[data-day="2026-11-18"]')).to_have_attribute('aria-pressed', 'true')
     totals_after = [await app.locator(selector).inner_text() for selector in ('#history-actual-energy', '#history-energy')]

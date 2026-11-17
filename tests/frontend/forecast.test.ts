@@ -67,7 +67,7 @@ it('updates lightweight energy and time without replacing the detailed chart or 
   const chart = host.querySelector('#forecast-chart svg');
   expect(chart).not.toBeNull();
   props.summary = { ...view, calculated_at: view.calculated_at + 1200,
-    remaining_today: { ...view.remaining_today!, kwh: 38.44 } };
+    remaining_today: { ...view.remaining_today!, forecast_energy_kwh: 38.44 } };
   await flush();
   expect(text(host, '#forecast-remaining')).toBe('38.44');
   expect(host.querySelector('#forecast-chart svg')).toBe(chart);
@@ -91,7 +91,7 @@ it('keeps a newer detailed response and selection when a light snapshot is older
   const older = payload();
   view.fetched_at! += 3600;
   view.calculated_at += 3600;
-  view.remaining_today!.kwh = 31.11;
+  view.remaining_today!.forecast_energy_kwh = 31.11;
   const { props, host } = mount(older);
   await flush();
   select(host);
@@ -123,10 +123,10 @@ it('refreshes calendar boundaries at midnight while retaining a still-valid sele
 
 it('shows partial and unavailable totals as unavailable even when a numeric partial sum exists', async () => {
   view.status = 'partial';
-  view.remaining_today = { ...view.remaining_today!, quality: 'partial', kwh: 12.34 };
-  view.tomorrow = { ...view.tomorrow!, quality: 'unavailable', kwh: 0 };
-  view.seven_days = { ...view.seven_days!, quality: 'partial', kwh: 100 };
-  view.days[2] = { ...view.days[2], quality: 'partial', kwh: 40, coverage_percent: 50 };
+  view.remaining_today = { ...view.remaining_today!, quality: 'partial', forecast_energy_kwh: 12.34 };
+  view.tomorrow = { ...view.tomorrow!, quality: 'unavailable', forecast_energy_kwh: 0 };
+  view.seven_days = { ...view.seven_days!, quality: 'partial', forecast_energy_kwh: 100 };
+  view.days[2] = { ...view.days[2], quality: 'partial', forecast_energy_kwh: 40, data_completeness_percent: 50 };
   const { host } = mount(view);
   await flush();
   select(host);
@@ -135,12 +135,12 @@ it('shows partial and unavailable totals as unavailable even when a numeric part
   expect(text(host, '#forecast-tomorrow')).toBe('—');
   expect(text(host, '#forecast-seven-days')).toBe('— kWh');
   expect(text(host, '#forecast-day-total')).toBe('— kWh');
-  expect(text(host, '#forecast-day-coverage')).toContain('50%');
+  expect(text(host, '#forecast-day-data-completeness')).toContain('50%');
 });
 
 it('inspects one original hourly row at a time without changing daily energy', async () => {
-  view.intervals[0].power_w = 0;
-  view.intervals[0].energy_kwh = 0;
+  view.intervals[0].forecast_power_w = 0;
+  view.intervals[0].forecast_energy_kwh = 0;
   const { host } = mount();
   await flush();
   const beforeTotals = text(host, '#forecast-day-total');
@@ -150,6 +150,9 @@ it('inspects one original hourly row at a time without changing daily energy', a
   hit.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true }));
   expect(host.querySelector('.chart-tooltip')?.textContent).toContain('Forecast power3,720 W');
   expect(host.querySelector('.chart-tooltip')?.textContent).toContain('3.72 kWh');
+  expect(host.querySelector('.chart-tooltip')?.textContent).toContain('Irradiance800 W/m²');
+  expect(host.querySelector('.chart-tooltip')?.textContent).toContain('Air temperature20 °C');
+  expect(host.querySelector('.chart-tooltip')?.textContent).toContain('Estimated cell temperature45 °C');
   expect(text(host, '#forecast-day-total')).toEqual(beforeTotals);
 });
 
@@ -193,7 +196,7 @@ it('shows_weather_and_today_independently_of_selection', async () => {
   expect(cards[0].querySelector('.day-label')?.textContent).toBe('Today');
   expect(cards[0].getAttribute('aria-label')).toContain('November 1, 2026');
   expect(cards[0].getAttribute('aria-label')).toContain('Clear sky');
-  expect(cards[0].getAttribute('aria-label')).toContain('Hourly forecast high 20 °C, low 0 °C');
+  expect(cards[0].getAttribute('aria-label')).toContain('Forecast air temperature: high 20 °C, low 0 °C');
   expect(cards[0].getAttribute('aria-label')).toContain('89.28 kWh');
   select(host);
   await flush();
@@ -213,7 +216,7 @@ it('keeps_weather_through_scalar_updates', async () => {
   expect(weather).toBe('Clear sky');
   const { days, intervals, ...summary } = view;
   props.summary = { ...summary, calculated_at: view.calculated_at + 1200,
-    remaining_today: { ...view.remaining_today!, kwh: 38.44 } };
+    remaining_today: { ...view.remaining_today!, forecast_energy_kwh: 38.44 } };
   await flush();
   expect(text(host, '#forecast-days .day-weather')).toBe(weather);
   expect(host.querySelector('#forecast-chart svg')).toBe(chart);
@@ -229,8 +232,8 @@ it('keeps_weather_through_scalar_updates', async () => {
 
 it('shows neutral missing weather and preserves complete zero temperatures', async () => {
   view.days[0].weather = null;
-  view.days[1].weather = { weather_code: 0, temperature_min_c: null, temperature_max_c: null, quality: 'partial' };
-  view.days[2].weather = { weather_code: null, temperature_min_c: 0, temperature_max_c: 0, quality: 'partial' };
+  view.days[1].weather = { weather_code: 0, air_temperature_min_c: null, air_temperature_max_c: null, quality: 'partial' };
+  view.days[2].weather = { weather_code: null, air_temperature_min_c: 0, air_temperature_max_c: 0, quality: 'partial' };
   const { host } = mount(view);
   await flush();
   const cards = [...host.querySelectorAll('#forecast-days button')];

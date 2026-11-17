@@ -6,15 +6,15 @@ import { useI18n } from '../../pvyieldlens/frontend/src/i18n';
 import type { Configuration, Snapshot } from '../../pvyieldlens/frontend/src/models';
 
 const summary = { start: 1794326400, end: 1794326580, estimated_energy_kwh: 0.08,
-  actual_energy_kwh: 0.07, pr: 87.5, coverage_percent: 60, valid_seconds: 180 };
+  actual_energy_kwh: 0.07, pr: 87.5, data_completeness_percent: 60, valid_seconds: 180 };
 const window = { revision: 1, start: 1794326400, end: 1794326580, valid_seconds: 180,
-  estimated_energy_wh: 60, actual_energy_wh: 60, estimated_power: 1200, actual_power: 1200,
-  pr: 100, optimizable_power: 0, coverage_percent: 100, quality: 'complete', reason: null,
+  estimated_energy_wh: 60, actual_energy_wh: 60, estimated_power_w: 1200, actual_power_w: 1200,
+  pr: 100, optimizable_power_w: 0, data_completeness_percent: 100, quality: 'complete', reason: null,
   source_start: 1794326280, source_end: 1794326580 };
 const empty = { start: null, end: null, estimated_energy_kwh: null, actual_energy_kwh: null,
-  pr: null, coverage_percent: null, valid_seconds: 0 };
+  pr: null, data_completeness_percent: null, valid_seconds: 0 };
 const view = (period: string) => ({ windows: [window], summary, requested_range: { start: window.start, end: window.end },
-  period, timezone: 'Asia/Shanghai', today: '2026-11-11', boundary_unavailable: false,
+  period, home_timezone: 'Asia/Shanghai', today: '2026-11-11', boundary_unavailable: false,
   days: period === '7d' || period === '30d' ? Array.from({ length: period === '7d' ? 7 : 30 }, (_, i) => ({
     day: new Date(Date.UTC(2026, 10, 11 - (period === '7d' ? 6 : 29) + i)).toISOString().slice(0, 10),
     start: window.start - ((period === '7d' ? 6 : 29) - i) * 86400, end: window.start + (i + 1) * 86400,
@@ -41,8 +41,8 @@ beforeEach(async () => {
     requests.push(url);
     return new Response(JSON.stringify(view(new URL(url, 'http://test/').searchParams.get('period') ?? '')));
   });
-  props = reactive({ active: true, configuration: { settings: { timezone: 'Asia/Shanghai' } } as Configuration,
-    snapshot: { revision: 1, statistics: window, timezone: 'Asia/Shanghai', energy: { day: '2026-11-11' } } as Snapshot,
+  props = reactive({ active: true, configuration: { monitoring_settings: { home_timezone: 'Asia/Shanghai' } } as Configuration,
+    snapshot: { revision: 1, latest_settled_window: window, home_timezone: 'Asia/Shanghai', energy_totals: { day: '2026-11-11' } } as Snapshot,
     language: 'en', theme: 'light', displayTimezone: 'America/Los_Angeles' });
   host = document.createElement('div'); document.body.append(host);
   app = createApp({ render: () => null });
@@ -54,7 +54,7 @@ it('defaults to Today and shows server actual energy first without the totals fo
   await mount();
   expect(requests).toEqual(['api/history?period=today']);
   expect([...host.querySelectorAll('.metric-label')].map(node => node.textContent)).toEqual([
-    'Range actual energy', 'Theoretical energy in range', 'PR in range', 'Data completeness']);
+    'Range actual energy', 'Estimated energy in range', 'PR in range', 'Data completeness']);
   expect(host.querySelector('#history-actual-energy')?.textContent).toBe('0.07');
   expect(host.querySelector('#history-pr')?.textContent).toBe('87.5');
   expect(host.querySelector('#history-totals')).toBeNull();
@@ -76,7 +76,7 @@ it('requests named presets and keeps detail charts below calendar-only daily pan
 
 it('invalidates calendar cache at HA midnight without a new settlement and reformats without fetching', async () => {
   await mount();
-  props.snapshot = { ...props.snapshot, energy: { ...props.snapshot.energy, day: '2026-11-12' } };
+  props.snapshot = { ...props.snapshot, energy_totals: { ...props.snapshot.energy, day: '2026-11-12' } };
   await flush(); expect(requests).toHaveLength(2);
   props.theme = 'light'; props.displayTimezone = 'UTC'; useI18n().setLanguage('de');
   await flush(); expect(requests).toHaveLength(2);
@@ -89,7 +89,7 @@ it('retains fragment provenance in detail inspection', async () => {
   host.querySelector('.chart-hit-area')!.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true }));
   await flush();
   expect(host.querySelector('.chart-tooltip')?.textContent).toContain('Range boundary fragment');
-  expect(host.querySelector('.chart-tooltip')?.textContent).toContain('Original settlement');
+  expect(host.querySelector('.chart-tooltip')?.textContent).toContain('Original settled window');
   expect(host.querySelector('.chart-tooltip')?.textContent).toContain('07:58');
 });
 
