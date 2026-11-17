@@ -5,8 +5,10 @@ from datetime import datetime, timezone
 import json
 import os
 from pathlib import Path
+import platform
 import secrets
 import subprocess
+import sys
 import tempfile
 import time
 import traceback
@@ -17,7 +19,7 @@ import httpx
 from pvyieldlens.engine import calculate
 from pvyieldlens.home_assistant import HAState, HomeAssistantClient, entity_payloads, parse_state
 from pvyieldlens.service import Service
-from pvyieldlens.settings import Settings
+from pvyieldlens.settings import MonitoringSettings
 from pvyieldlens.storage import Store
 
 
@@ -58,7 +60,7 @@ async def exercise(client, directory):
     assert configuration.location.latitude == 0
     assert configuration.location.longitude == 0
     assert configuration.location.location_name == 'PVYieldLens compatibility'
-    assert configuration.location.timezone == 'UTC'
+    assert configuration.location.home_timezone == 'UTC'
     checks['rest_config_location'] = True
     stream = client.events()
     assert await anext(stream) is None
@@ -167,9 +169,9 @@ async def exercise(client, directory):
     checks['recorder_full_attributes_no_last_reported_native_skip_initial_state'] = True
 
     entities = ('sensor.compat_recovery_power', 'sensor.compat_recovery_temperature', 'sensor.compat_recovery_sun')
-    config = Settings(rated_power_w=5000, temperature_coefficient_pct_per_c=-.35,
-        power_entity=entities[0], temperature_entity=entities[1], irradiance_entity=entities[2],
-        interval_minutes=1, power_max_age_seconds=1, temperature_max_age_seconds=1,
+    config = MonitoringSettings(total_max_power_at_stc_w=5000, pmax_temperature_coefficient_pct_per_c=-.35,
+        actual_power_entity=entities[0], module_temperature_entity=entities[1], irradiance_entity=entities[2],
+        settlement_interval_minutes=1, actual_power_max_age_seconds=1, module_temperature_max_age_seconds=1,
         irradiance_max_age_seconds=1)
     recovery_start = time.time() - .01
     for entity, value, unit in zip(entities, ('1000', '25', '1000'), ('W', '°C', 'W/m²')):
@@ -181,13 +183,13 @@ async def exercise(client, directory):
     await service.ingest(baseline)
     await asyncio.sleep(1.2)
     await service.tick()
-    assert service.snapshot()['realtime']['quality'] == 'unavailable'
+    assert service.snapshot()['live_window']['quality'] == 'unavailable'
     for entity, value, unit in zip(entities, ('1000', '25', '1000'), ('W', '°C', 'W/m²')):
         await post(entity, value, unit)
     current = await client.states(entities)
     await service.ingest(current)
     await service.tick()
-    assert service.snapshot()['realtime']['quality'] != 'unavailable'
+    assert service.snapshot()['live_window']['quality'] != 'unavailable'
     recovery_end = time.time()
     async with asyncio.timeout(30):
         while True:
@@ -205,11 +207,11 @@ async def exercise(client, directory):
     empty = await client.history(list(entities), recovery_end - .1, recovery_end)
     assert empty == []
     await service.recover()
-    await service.configure(config.model_copy(update={'rated_power_w': 5001}), now=recovery_end,
+    await service.configure(config.model_copy(update={'total_max_power_at_stc_w': 5001}), now=recovery_end,
                             origin=client.base_url)
     await service.tick()
     committed = store.history(recovery_start, recovery_end)
-    total = service.snapshot()['energy']['total_kwh']
+    total = service.snapshot()['energy_totals']['estimated_energy_lifetime_kwh']
     assert committed and total > 0
     store.close()
     store = Store(directory / 'app.sqlite')
@@ -217,66 +219,97 @@ async def exercise(client, directory):
     await service.recover()
     await service.tick()
     assert store.history(recovery_start, recovery_end) == committed
-    assert service.snapshot()['energy']['total_kwh'] == total
+    assert service.snapshot()['energy_totals']['estimated_energy_lifetime_kwh'] == total
     store.close()
     checks['service_poll_freshness_conservative_recorder_restart_recovery'] = True
     checks['recorder_recovered_valid_seconds'] = recovered.valid_seconds
     checks['recorder_elapsed_seconds'] = recovery_end - recovery_start
 
-    snapshot = {'statistics': {'estimated_power': 5000, 'actual_power': 4500, 'pr': 90, 'revision': 1},
-        'realtime': {'estimated_power': 5000, 'actual_power': 5500, 'pr': 110, 'optimizable_power': -500},
-        'energy': {'daily_kwh': .1, 'total_kwh': 1.2, 'daily_complete': False},
-        'calculated_at': time.time(), 'revision': 2}
+    snapshot = {
+        'latest_settled_window': {'estimated_power_w': 5000, 'actual_power_w': 4500, 'pr': 90,
+            'revision': 1, 'start': 0, 'end': 60, 'valid_seconds': 60,
+            'data_completeness_percent': 100, 'quality': 'complete', 'reason': None},
+        'live_window': {'estimated_power_w': 5000, 'actual_power_w': 5500, 'pr': 110,
+            'optimizable_power_w': -500, 'start': 30, 'end': 90, 'valid_seconds': 60,
+            'data_completeness_percent': 100, 'quality': 'complete', 'reason': None},
+        'energy_totals': {'estimated_energy_today_kwh': .1, 'estimated_energy_lifetime_kwh': 1.2,
+            'today_allocation_complete': False, 'today_valid_seconds': 60,
+            'lifetime_valid_seconds': 600, 'day': '2026-11-13', 'home_timezone': 'UTC', 'settled_until': 60},
+        'calculated_at': time.time(), 'revision': 2,
+    }
+    day_start = datetime(2026, 11, 13, tzinfo=timezone.utc).timestamp()
+    snapshot['forecast'] = {
+        'status': 'ready', 'refreshing': False, 'home_timezone': 'UTC',
+        'fetched_at': day_start + 3600, 'calculated_at': day_start + 7200, 'last_error': None,
+        'today': {'start': day_start, 'end': day_start + 86400, 'forecast_energy_kwh': 2.4,
+                  'data_completeness_percent': 100, 'quality': 'complete'},
+        'remaining_today': {'start': day_start + 7200, 'end': day_start + 86400, 'forecast_energy_kwh': 1.2,
+                            'data_completeness_percent': 100, 'quality': 'complete'},
+        'tomorrow': {'start': day_start + 86400, 'end': day_start + 172800, 'forecast_energy_kwh': 3.6,
+                     'data_completeness_percent': 100, 'quality': 'complete'},
+        'seven_days': {'start': day_start, 'end': day_start + 604800, 'forecast_energy_kwh': 20.4,
+                       'data_completeness_percent': 100, 'quality': 'complete'},
+    }
+    expected = {
+        'settled_estimated_power': (5000, 'W', 'power', 'measurement'),
+        'settled_actual_power': (4500, 'W', 'power', 'measurement'),
+        'settled_pr': (90, '%', None, 'measurement'),
+        'estimated_energy_today': (.1, 'kWh', 'energy', 'total_increasing'),
+        'estimated_energy_lifetime': (1.2, 'kWh', 'energy', 'total_increasing'),
+        'live_estimated_power': (5000, 'W', 'power', 'measurement'),
+        'live_actual_power': (5500, 'W', 'power', 'measurement'),
+        'live_pr': (110, '%', None, 'measurement'),
+        'live_optimizable_power': (-500, 'W', 'power', 'measurement'),
+        'forecast_energy_today': (2.4, 'kWh', 'energy', None),
+        'forecast_energy_remaining_today': (1.2, 'kWh', 'energy', None),
+        'forecast_energy_tomorrow': (3.6, 'kWh', 'energy', None),
+        'forecast_energy_7d': (20.4, 'kWh', 'energy', None),
+    }
     payloads = entity_payloads(snapshot)
+    assert set(payloads) == {'sensor.pvyieldlens_' + name for name in expected}
     await client.publish(payloads)
-    assert len(payloads) == 13
-    expected = {'estimated_power': 5000, 'actual_power': 4500, 'pr': 90,
-        'daily_estimated_energy': .1, 'total_estimated_energy': 1.2,
-        'realtime_estimated_power': 5000, 'realtime_actual_power': 5500,
-        'realtime_pr': 110, 'realtime_optimizable_power': -500}
-    for name, value in expected.items():
+    checks['published_entities'] = {}
+    for name, (value, unit, device_class, state_class) in expected.items():
         entity = 'sensor.pvyieldlens_' + name
         actual = await client.request('GET', 'states/' + entity)
         assert float(actual['state']) == value
         attrs = actual['attributes']
-        if 'energy' in entity:
-            assert attrs['unit_of_measurement'] == 'kWh'
-            assert attrs['device_class'] == 'energy'
-            assert attrs['state_class'] == 'total_increasing'
-            assert attrs['daily_complete'] is False
-        elif entity.endswith('_pr'):
-            assert attrs['unit_of_measurement'] == '%'
-            assert attrs['state_class'] == 'measurement'
+        assert attrs['friendly_name'] == name
+        assert attrs['unit_of_measurement'] == unit
+        assert attrs.get('device_class') == device_class
+        assert attrs.get('state_class') == state_class
+        if device_class is None:
             assert 'device_class' not in attrs
-        else:
-            assert attrs['unit_of_measurement'] == 'W'
-            assert attrs['device_class'] == 'power'
-            assert attrs['state_class'] == 'measurement'
-    assert (await client.request('GET', 'states/sensor.pvyieldlens_estimated_power'))['attributes']['configuration_revision'] == 1
+        if state_class is None:
+            assert 'state_class' not in attrs
+        assert attrs == payloads[entity]['attributes']
+        if not name.startswith('forecast_'):
+            assert attrs['calculated_at'] == snapshot['calculated_at']
+            assert attrs['sampling_method'] == 'state_hold'
+            assert attrs['configuration_revision'] == (1 if name.startswith('settled_') else 2)
+            if name.startswith('estimated_energy_'):
+                assert all(attrs[key] == snapshot['energy_totals'][key] for key in (
+                    'settled_until', 'day', 'home_timezone', 'today_valid_seconds',
+                    'lifetime_valid_seconds', 'today_allocation_complete'))
+            else:
+                data = snapshot['latest_settled_window' if name.startswith('settled_') else 'live_window']
+                assert all(attrs[key] == data[key] for key in (
+                    'start', 'end', 'valid_seconds', 'data_completeness_percent', 'quality', 'reason'))
+        checks['published_entities'][entity] = {'state': actual['state'], 'attributes': attrs}
+    assert (await client.request('GET', 'states/sensor.pvyieldlens_settled_estimated_power'))['attributes']['configuration_revision'] == 1
     for daily, total in ((.2, 1.3), (0, 1.3)):
-        snapshot['energy'].update(daily_kwh=daily, total_kwh=total, daily_complete=True)
+        snapshot['energy_totals'].update(estimated_energy_today_kwh=daily,
+            estimated_energy_lifetime_kwh=total, today_allocation_complete=True)
         await client.publish(entity_payloads(snapshot))
-        assert float((await client.request('GET', 'states/sensor.pvyieldlens_daily_estimated_energy'))['state']) == daily
-        assert float((await client.request('GET', 'states/sensor.pvyieldlens_total_estimated_energy'))['state']) == total
-    snapshot.update(statistics=None, realtime=None)
+        actual = await client.request('GET', 'states/sensor.pvyieldlens_estimated_energy_today')
+        assert float(actual['state']) == daily
+        assert actual['attributes']['today_allocation_complete'] is True
+        assert float((await client.request('GET', 'states/sensor.pvyieldlens_estimated_energy_lifetime'))['state']) == total
+    snapshot.update(latest_settled_window=None, live_window=None)
     await client.publish(entity_payloads(snapshot))
-    assert (await client.states(('sensor.pvyieldlens_pr',)))[0].state == 'unavailable'
-    checks['nine_outputs_metadata_daily_complete_growth_reset_unavailable'] = True
+    assert (await client.states(('sensor.pvyieldlens_settled_pr',)))[0].state == 'unavailable'
+    checks['monitoring_outputs_allocation_growth_reset_unavailable'] = True
 
-    day_start = datetime(2026, 11, 13, tzinfo=timezone.utc).timestamp()
-    snapshot['forecast'] = {
-        'status': 'ready', 'refreshing': False, 'timezone': 'UTC',
-        'fetched_at': day_start + 3600, 'calculated_at': day_start + 7200, 'last_error': None,
-        'today': {'start': day_start, 'end': day_start + 86400, 'kwh': 2.4,
-                  'coverage_percent': 100, 'quality': 'complete'},
-        'remaining_today': {'start': day_start + 7200, 'end': day_start + 86400, 'kwh': 1.2,
-                            'coverage_percent': 100, 'quality': 'complete'},
-        'tomorrow': {'start': day_start + 86400, 'end': day_start + 172800, 'kwh': 3.6,
-                     'coverage_percent': 100, 'quality': 'complete'},
-        'seven_days': {'start': day_start, 'end': day_start + 604800, 'kwh': 20.4,
-                       'coverage_percent': 100, 'quality': 'complete'},
-    }
-    await client.publish(entity_payloads(snapshot))
     for name, value, start, end in (
         ('today', 2.4, day_start, day_start + 86400),
         ('remaining_today', 1.2, day_start + 7200, day_start + 86400),
@@ -286,17 +319,14 @@ async def exercise(client, directory):
         actual = await client.request('GET', 'states/sensor.pvyieldlens_forecast_energy_' + name)
         assert float(actual['state']) == value
         attrs = actual['attributes']
-        assert attrs['unit_of_measurement'] == 'kWh'
-        assert attrs['device_class'] == 'energy'
-        assert 'state_class' not in attrs
         assert attrs['start'] == start and attrs['end'] == end
-        assert attrs['timezone'] == 'UTC'
+        assert attrs['home_timezone'] == 'UTC'
         assert attrs['fetched_at'] == day_start + 3600
         assert attrs['calculated_at'] == day_start + 7200
-        assert attrs['coverage_percent'] == 100 and attrs['quality'] == 'complete'
+        assert attrs['data_completeness_percent'] == 100 and attrs['quality'] == 'complete'
         assert attrs['status'] == 'ready' and attrs['refreshing'] is False
         assert attrs['last_error'] is None
-    snapshot['forecast']['remaining_today']['kwh'] = .6
+    snapshot['forecast']['remaining_today']['forecast_energy_kwh'] = .6
     await client.publish(entity_payloads(snapshot))
     assert float((await client.request('GET',
         'states/sensor.pvyieldlens_forecast_energy_remaining_today'))['state']) == .6
@@ -305,6 +335,7 @@ async def exercise(client, directory):
     for name in ('today', 'remaining_today', 'tomorrow', '7d'):
         actual = await client.request('GET', 'states/sensor.pvyieldlens_forecast_energy_' + name)
         assert actual['state'] == 'unavailable'
+        assert actual['attributes']['friendly_name'] == 'forecast_energy_' + name
         assert actual['attributes']['status'] == 'disabled'
         assert 'state_class' not in actual['attributes']
     checks['four_forecast_outputs_energy_no_state_class_periods_decrease_disabled'] = True
@@ -377,7 +408,8 @@ async def main():
     args = parser.parse_args()
     args.output.parent.mkdir(parents=True, exist_ok=True)
     results = {'tested_at': datetime.now(timezone.utc).isoformat(), 'scope': 'Core API and Recorder on linux/amd64',
-               'results': []}
+               'driver': {'python': sys.version.split()[0], 'platform': platform.platform(),
+                          'docker_engine': docker('version', '--format', '{{.Server.Version}}')}, 'results': []}
     for version in args.versions:
         try:
             result = await run_release(version, args.image_repository, args.startup_timeout, args.output.parent.resolve())

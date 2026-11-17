@@ -2,13 +2,13 @@
 
 # PVYieldLens
 
-Vergleichen Sie die erwartete und die tatsächliche Leistung Ihrer Solarmodule. Sehen Sie PR und erwartete Energie für heute und insgesamt.
+Vergleichen Sie die geschätzte und die tatsächliche Leistung Ihrer Solarmodule. Sehen Sie PR und geschätzte Energie für heute und insgesamt.
 
 ## Funktionen
 
-- Leistung, PR und Differenz in Echtzeit.
+- Leistung, PR und optimierbare Leistung in Echtzeit.
 - Verlauf für Leistung und PR in 1, 5 oder 10 Minuten.
-- Erwartete Energie für heute und seit dem Start.
+- Geschätzte Energie für heute und seit dem Start.
 - Diagramme für 24 Stunden, 7 Tage oder 30 Tage.
 - Sechs Sprachen, wählbar oben rechts.
 
@@ -52,20 +52,20 @@ Die Seite ist zunächst nur auf dem Docker-Rechner erreichbar. Für andere Gerä
 
 ## Einstellungen
 
-**Live** zeigt aktuelle Sensormittelwerte und Diagnosen, **Verlauf** abgeschlossene Zeiträume samt Energie/PR im gewählten Bereich und **Prognose** wetterbasierte Erträge. Tages- und Gesamtsummen bleiben vom gewählten Bereich unabhängig. Der separate Eintrag **Einstellungen** mit Zahnrad und Text liegt oben rechts; alle drei Datenreiter bleiben erreichbar. Das Kategorienverzeichnis scrollt durch ein zusammenhängendes Formular: Home-Assistant-Verbindung, Solarmodule, Sensoren, Überwachung und Prognose.
+**Live** zeigt aktuelle Sensormittelwerte und Diagnosen, **Verlauf** abgeschlossene Zeiträume samt Energie/PR im gewählten Bereich und **Prognose** wetterbasierte Erträge. Der separate Eintrag **Einstellungen** mit Zahnrad und Text liegt oben rechts; alle drei Datenreiter bleiben erreichbar. Das Kategorienverzeichnis scrollt durch ein zusammenhängendes Formular: Home-Assistant-Verbindung, PV-Module, Sensoren, Überwachung und Prognose.
 
-**Speichern** lässt die Einstellungen geöffnet. **Änderungen verwerfen** lädt die gespeicherte Konfiguration vom Server neu und ersetzt Ihre Änderungen; bei einem Ladefehler bleibt der Entwurf zum erneuten Versuch erhalten. Beim Verlassen mit Änderungen können Sie weiterbearbeiten oder die Änderungen verwerfen. Erneutes Öffnen lädt die gespeicherte Konfiguration.
+**Konfiguration speichern** lässt die Einstellungen geöffnet. **Änderungen verwerfen** lädt die gespeicherte Konfiguration vom Server neu und ersetzt Ihre Änderungen; bei einem Ladefehler bleibt der Entwurf zum erneuten Versuch erhalten. Beim Verlassen mit Änderungen können Sie weiterbearbeiten oder die Änderungen verwerfen. Erneutes Öffnen lädt die gespeicherte Konfiguration.
 
 Der **Darstellungsmodus** oben rechts bietet Auto, Hell und Dunkel. Auto folgt dem Modus von Home Assistant in dessen Oberfläche und sonst der Systemeinstellung, wenn kein nutzbarer Home-Assistant-Kontext besteht. Hell oder Dunkel überschreibt Auto lokal; Auto stellt das Folgen wieder her. Sprach- und Designwechsel erhalten den Entwurf.
 
 | Einstellung | Eingabe |
 | --- | --- |
-| Gesamtnennleistung | Summe der Modulleistungen in W, z. B. `5000`. |
-| Temperaturfaktor K | Wert aus dem Modul-Datenblatt in %/°C, z. B. `-0,35`. |
-| PV-Leistung | Sensor für die erzeugte Solarleistung (W oder kW). |
+| Gesamte Maximalleistung unter STC | Summe der maximalen Modulleistungen unter Standardtestbedingungen (STC) in W, z. B. `5000`. |
+| Temperaturkoeffizient von Pmax | Pmax-Koeffizient aus dem Moduldatenblatt in %/°C, z. B. `-0,35`. |
+| Tatsächliche Leistung | Sensor für die erzeugte Solarleistung (W oder kW). |
 | Modultemperatur | Temperatursensor am Modul (°C, °F oder K). |
-| Strahlung am Modul | Sensor in der gleichen Ebene wie die Module (W/m² oder kW/m²). |
-| Verlauf: Zeitabstand | 1, 5 oder 10 Minuten. Standard: 5 Minuten. |
+| Bestrahlungsstärke | Sensor in der gleichen Ebene wie die Module (W/m² oder kW/m²). |
+| Abrechnungsintervall | 1, 5 oder 10 Minuten. Standard: 5 Minuten. |
 | Mittelwert über | Zeitraum für den aktuellen Mittelwert. Standard: 60 Sekunden. |
 | Update alle | Abstand zwischen Updates. Standard: 5 Sekunden. |
 
@@ -77,51 +77,55 @@ Geglättete Kurven dienen nur der Anzeige. Maus-, Touch- und Tastaturdetails zei
 
 ## Ertragsprognose
 
-Die Prognose ist standardmäßig deaktiviert, auch nach einem Upgrade. Aktivieren Sie sie unter **Einstellungen > Prognose** und tragen Sie Neigung (0–90°), Kompassrichtung (Nord 0°, Ost 90°, Süd 180°, West 270° oder eigener Azimut von 0° bis unter 360°) und NOCT laut Datenblatt ein (über 20°C, höchstens 80°C; Standard 45°C). Nennleistung und K werden mit der Überwachung geteilt. Standort und Zeitzone stammen automatisch aus der gespeicherten HA-Verbindung; ändern Sie diese in HA.
+Die Prognose ist bei der ersten Installation standardmäßig deaktiviert. Aktivieren Sie sie unter **Einstellungen > Prognose** und tragen Sie Neigung (0–90°), Kompassrichtung (Nord 0°, Ost 90°, Süd 180°, West 270° oder eigener Azimut von 0° bis unter 360°) und NOCT laut Datenblatt ein (über 20°C, höchstens 80°C; Standard 45°C). Gesamte Maximalleistung unter STC und Temperaturkoeffizient von Pmax werden mit der Überwachung geteilt. Standort und Zeitzone stammen automatisch aus der gespeicherten HA-Verbindung; ändern Sie diese in HA.
 
-Open-Meteo liefert stündliches Wetter für heute und die folgenden sechs lokalen Kalendertage. Wählen Sie ein Datum für Tagesenergie, stündliche Leistungskurve und Intervalltabelle. Die heutige Prognose umfasst den ganzen Tag, **Heute verbleibend** nur die Zeit ab jetzt bis zur lokalen Mitternacht. Beide beruhen auf dem letzten erfolgreichen Wetterabruf und sind von der abgeschlossenen, aus Sensorwerten berechneten theoretischen Energie getrennt. Die verbleibende Energie sinkt zwischen Abrufen mit der Zeit; neue Wetterdaten können auch die Tagesprognose ändern.
+Die Überwachung nutzt die gemessene **Modultemperatur**. Die Prognose berechnet aus **Lufttemperatur** und **Nominaler Zellbetriebstemperatur (NOCT)** die **Geschätzte Zelltemperatur**. Diese Größen sind verschieden; die Überwachung rechnet Modultemperatur nicht in Zelltemperatur um.
 
-Jede Datumskarte zeigt Wetter, Höchst-/Tiefsttemperatur der Stundenprognosen, Energiebalken und kWh. Das warme Label **Heute** folgt Mitternacht der Hauszeit und bleibt bei einer anderen, blau markierten Auswahl sichtbar. Tagestemperaturen stammen aus unvermittelten Stundenwerten, das repräsentative Wetter aus dem höchsten bekannten WMO-Code des Tages. Jedes Feld benötigt alle erwarteten UTC-Stundenwerte innerhalb des Haustages, auch bei 23/25 Stunden oder nicht ganzstündigen Zeitzonen. Unvollständige Felder sind nicht verfügbar, vollständige andere Felder bleiben sichtbar. Nullwerte sind gültig; unbekanntes Wetter erhält ein neutrales Symbol. Wetter und Leistung teilen Abruf, Cache und Abrufzeit ohne zusätzliche Aktualisierungen. Alte Caches behalten gültige Energie und erhalten Wetter beim nächsten regulären Abruf.
+Open-Meteo liefert stündliches Wetter für heute und die folgenden sechs lokalen Kalendertage. Wählen Sie ein Datum für Tagesenergie, stündliche Leistungskurve und Intervalltabelle. Die heutige Prognose umfasst den ganzen Tag, **Heute verbleibend** nur die Zeit ab jetzt bis zur lokalen Mitternacht. Beide beruhen auf dem letzten erfolgreichen Wetterabruf und sind von der abgeschlossenen, aus Sensorwerten berechneten geschätzten Energie getrennt. Die verbleibende Energie sinkt zwischen Abrufen mit der Zeit; neue Wetterdaten können auch die Tagesprognose ändern.
 
-Das Wetter wird stündlich oder über **Prognose aktualisieren** abgerufen. Passende Cache-Daten bleiben nach Neustart erhalten. Bei Fehlern bleiben Abrufzeit und ältere Werte sichtbar; ein neuer Versuch folgt nach 15 Minuten. Daten ab zwei Stunden Alter gelten ebenfalls als veraltet. Fehlende Wetterintervalle machen betroffene Summen nicht verfügbar; die Vollständigkeit bleibt sichtbar, fehlende Werte zählen nicht als null. Deaktivierung, fehlender HA-Standort, erstes Laden und nicht verfügbare Daten werden angezeigt.
+Jede Datumskarte zeigt Wetter, Höchst-/Tiefsttemperatur der Stundenprognosen, Energiebalken und kWh. Das warme Label **Heute** folgt Mitternacht der Hauszeit und bleibt bei einer anderen, blau markierten Auswahl sichtbar. Tagestemperaturen stammen aus unvermittelten Stundenwerten, das repräsentative Wetter aus dem höchsten bekannten WMO-Code des Tages. Jedes Feld benötigt alle erwarteten UTC-Stundenwerte innerhalb des Haustages, auch bei 23/25 Stunden oder nicht ganzstündigen Zeitzonen. Unvollständige Felder sind nicht verfügbar, vollständige andere Felder bleiben sichtbar. Nullwerte sind gültig; unbekanntes Wetter erhält ein neutrales Symbol. Wetter und Leistung teilen Abruf, Cache und Abrufzeit ohne zusätzliche Aktualisierungen.
 
-Die Werte sind eine theoretische Gleichstromreferenz für ein Modulfeld mit Strahlung in Modulebene und vereinfachtem NOCT-Temperaturmodell. Wechselrichterwirkungsgrad/Begrenzung, Schatten, Schnee, Schmutz und Systemverluste sind nicht enthalten; tatsächlicher Wechselstromertrag ist nicht garantiert. Die vier Prognoseentitäten haben kWh und Geräteklasse energy, aber keine `state_class`; sie können sinken und bleiben von kumulierten Zählern getrennt. Eine native HA-Prognose- oder Energie-Dashboard-Integration wird nicht bereitgestellt.
+Das Wetter wird stündlich oder über **Prognose aktualisieren** abgerufen. Passende Cache-Daten bleiben nach Neustart erhalten. Bei Fehlern bleiben Abrufzeit und ältere Werte sichtbar; ein neuer Versuch folgt nach 15 Minuten. Daten ab zwei Stunden Alter gelten ebenfalls als veraltet. Fehlende Wetterintervalle machen betroffene Summen nicht verfügbar; die Datenvollständigkeit bleibt sichtbar, fehlende Werte zählen nicht als null. Deaktivierung, fehlender HA-Standort, erstes Laden und nicht verfügbare Daten werden angezeigt.
+
+Die Werte sind eine geschätzte Gleichstromreferenz für ein Modulfeld mit Bestrahlungsstärke in Modulebene und vereinfachtem NOCT-Temperaturmodell. Wechselrichterwirkungsgrad/Begrenzung, Schatten, Schnee, Schmutz und Systemverluste sind nicht enthalten; tatsächlicher Wechselstromertrag ist nicht garantiert. Die vier Prognoseentitäten haben kWh und Geräteklasse energy, aber keine `state_class`; sie können sinken und bleiben von kumulierten Zählern getrennt. Eine native HA-Prognose- oder Energie-Dashboard-Integration wird nicht bereitgestellt.
 
 ## Ergebnis-Sensoren
 
-| Ergebnis | Entitäts-ID | Einheit |
+| Messgröße | HA-Entitätsname | Einheit |
 | --- | --- | --- |
-| Erwartete Leistung | `sensor.pvyieldlens_estimated_power` | W |
-| Tatsächliche Leistung | `sensor.pvyieldlens_actual_power` | W |
-| PR | `sensor.pvyieldlens_pr` | % |
-| Erwartete Energie heute | `sensor.pvyieldlens_daily_estimated_energy` | kWh |
-| Erwartete Energie gesamt | `sensor.pvyieldlens_total_estimated_energy` | kWh |
-| Erwartete Live-Leistung | `sensor.pvyieldlens_realtime_estimated_power` | W |
-| Tatsächliche Live-Leistung | `sensor.pvyieldlens_realtime_actual_power` | W |
-| Live-PR | `sensor.pvyieldlens_realtime_pr` | % |
-| Live-Differenz | `sensor.pvyieldlens_realtime_optimizable_power` | W |
-| Prognose heute | `sensor.pvyieldlens_forecast_energy_today` | kWh |
-| Prognose heute verbleibend | `sensor.pvyieldlens_forecast_energy_remaining_today` | kWh |
-| Prognose morgen | `sensor.pvyieldlens_forecast_energy_tomorrow` | kWh |
-| Prognose für 7 Tage | `sensor.pvyieldlens_forecast_energy_7d` | kWh |
+| Abgeschlossene geschätzte Leistung | `settled_estimated_power` | W |
+| Abgeschlossene tatsächliche Leistung | `settled_actual_power` | W |
+| Abgeschlossener PR | `settled_pr` | % |
+| Geschätzte Energie heute | `estimated_energy_today` | kWh |
+| Geschätzte Energie seit Beginn | `estimated_energy_lifetime` | kWh |
+| Geschätzte Live-Leistung | `live_estimated_power` | W |
+| Tatsächliche Live-Leistung | `live_actual_power` | W |
+| Live-PR | `live_pr` | % |
+| Optimierbare Live-Leistung | `live_optimizable_power` | W |
+| Prognostizierte Energie heute | `forecast_energy_today` | kWh |
+| Prognostizierte verbleibende Energie heute | `forecast_energy_remaining_today` | kWh |
+| Prognostizierte Energie morgen | `forecast_energy_tomorrow` | kWh |
+| Prognostizierte Energie für 7 Tage | `forecast_energy_7d` | kWh |
+
+Der HA-Entitätsname ist der Anzeigename. Die vollständige Entitäts-ID besteht aus `sensor.pvyieldlens_` und diesem Namen, zum Beispiel `sensor.pvyieldlens_settled_estimated_power`.
 
 ## PR-Formel
 
-Die erwartete Leistung hängt von Modulgröße, Temperatur und Strahlung ab:
+Die geschätzte Leistung hängt von gesamter Maximalleistung unter STC, Modultemperatur und Bestrahlungsstärke ab:
 
 ```text
-P_expected = P_rated × [1 + (K / 100) × (T − 25)] × G / 1000
-PR = P_actual / P_expected × 100%
+P_estimated = P_stc × [1 + (K / 100) × (T − 25)] × G / 1000
+PR = P_actual / P_estimated × 100%
 ```
 
-`P_rated`: Nennleistung (W); `K`: Temperaturfaktor (%/°C); `T`: Modultemperatur (°C); `G`: Strahlung auf die Module (W/m²).
+`P_stc`: Gesamte Maximalleistung unter STC (W); `K`: Temperaturkoeffizient von Pmax (%/°C), als Prozentwert aus dem Datenblatt, z. B. `-0,35`; `T`: Modultemperatur (°C); `G`: Bestrahlungsstärke in Modulebene (W/m²). Die App teilt K genau einmal durch 100.
 
-PR vergleicht die tatsächliche mit der erwarteten Leistung. Die Differenz ist die erwartete minus die tatsächliche Leistung.
+Die Performance Ratio (PR) vergleicht die tatsächliche mit der geschätzten Leistung. Optimierbare Leistung ist geschätzte minus tatsächliche Leistung und kann negativ sein.
 
 ## Ergebnisse verstehen
 
-- PR kann über 100 % liegen. Bei erwarteter Leistung null wird kein PR angezeigt.
-- Eine negative Differenz heißt: Die tatsächliche Leistung ist höher als erwartet.
+- PR kann über 100 % liegen. Bei geschätzter Leistung null wird kein PR angezeigt.
+- Eine negative optimierbare Leistung heißt: Die tatsächliche Leistung ist höher als geschätzt.
 - Energie wird nur gezählt, wenn alle drei Sensoren Daten haben. Fehlende Zeiten werden ausgelassen.
 - Die Tagesenergie wird um Mitternacht in der Home-Assistant-Zeitzone auf null gesetzt. Die Gesamtenergie zählt seit der ersten Einrichtung.
 

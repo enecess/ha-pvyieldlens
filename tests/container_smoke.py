@@ -34,7 +34,6 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--image', default='pvyieldlens:dev')
     parser.add_argument('--platform', choices=('linux/amd64', 'linux/arm64'), default='linux/amd64')
-    parser.add_argument('--legacy-image', default='ghcr.io/enecess/pvyieldlens:0.1.0-beta.1-amd64')
     args = parser.parse_args()
     prefix = 'pvyieldlens-smoke-' + uuid.uuid4().hex[:8]
     network, volume, fake, app = (prefix + suffix for suffix in ('-net', '-data', '-ha', '-app'))
@@ -50,14 +49,11 @@ def main():
                'python', '-m', 'uvicorn', 'fake_ha:app', '--app-dir', '/fixture', '--host', '0.0.0.0',
                '--port', '8123', '--ws', 'websockets-sansio', '--log-level', 'critical')
         created.append(('container', fake))
-        def start(image):
-            docker('run', '-d', '--name', app, '--network', network, '--platform', args.platform,
-                   '-p', '127.0.0.1::8099', '-v', f'{volume}:/data', '-e', 'PVYL_WEB_PASSWORD=smoke-password',
-                   '-e', 'PVYL_HA_URL=http://fake-ha:8123', '-e', 'PVYL_HA_TOKEN=simulation-token', image)
-            port = json.loads(docker('inspect', app))[0]['NetworkSettings']['Ports']['8099/tcp'][0]['HostPort']
-            return f'http://127.0.0.1:{port}'
-
-        base = start(args.legacy_image)
+        docker('run', '-d', '--name', app, '--network', network, '--platform', args.platform,
+               '-p', '127.0.0.1::8099', '-v', f'{volume}:/data', '-e', 'PVYL_WEB_PASSWORD=smoke-password',
+               '-e', 'PVYL_HA_URL=http://fake-ha:8123', '-e', 'PVYL_HA_TOKEN=simulation-token', args.image)
+        port = json.loads(docker('inspect', app))[0]['NetworkSettings']['Ports']['8099/tcp'][0]['HostPort']
+        base = f'http://127.0.0.1:{port}'
         created.append(('container', app))
 
         def request(path, body=None):
@@ -99,13 +95,13 @@ def main():
                     assert b'simulation-token' not in response.read()
             return len(assets.urls)
 
-        def live_history():
-            before = request('/api/snapshot')['energy']
-            result = request('/api/live-history')
-            after = request('/api/snapshot')['energy']
+        def live_series():
+            before = request('/api/snapshot')['energy_totals']
+            result = request('/api/live-series')
+            after = request('/api/snapshot')['energy_totals']
             assert result['configured'] is True
             assert result['context']['revision'] >= 1
-            assert result['context']['settings']['update_seconds'] == result['step_seconds'] == 1
+            assert result['context']['monitoring_settings']['update_interval_seconds'] == result['step_seconds'] == 1
             points = result['points']
             assert 1 <= len(points) <= 601
             assert 0 <= result['range']['end'] - result['range']['start'] <= 600
@@ -114,55 +110,74 @@ def main():
             assert 'segments' not in json.dumps(result)
             assert 'simulation-token' not in json.dumps(result)
             if before['settled_until'] == after['settled_until']:
-                assert before['total_kwh'] == after['total_kwh']
-                assert before['total_valid_seconds'] == after['total_valid_seconds']
+                assert before['estimated_energy_lifetime_kwh'] == after['estimated_energy_lifetime_kwh']
+                assert before['lifetime_valid_seconds'] == after['lifetime_valid_seconds']
             else:
                 # Background settlement may advance between the surrounding reads.
                 assert after['settled_until'] > before['settled_until']
-                assert after['total_kwh'] >= before['total_kwh']
-                assert after['total_valid_seconds'] >= before['total_valid_seconds']
+                assert after['estimated_energy_lifetime_kwh'] >= before['estimated_energy_lifetime_kwh']
+                assert after['lifetime_valid_seconds'] >= before['lifetime_valid_seconds']
             return len(points)
 
+        def publication():
+            payloads = json.loads(docker('exec', app, 'python', '-c',
+                'import json, sys; from pvyieldlens.home_assistant import entity_payloads; '
+                'print(json.dumps(entity_payloads(json.loads(sys.argv[1]))))',
+                json.dumps(request('/api/snapshot'))))
+            expected = {
+                'settled_estimated_power': 'W', 'settled_actual_power': 'W', 'settled_pr': '%',
+                'estimated_energy_today': 'kWh', 'estimated_energy_lifetime': 'kWh',
+                'live_estimated_power': 'W', 'live_actual_power': 'W', 'live_pr': '%',
+                'live_optimizable_power': 'W', 'forecast_energy_today': 'kWh',
+                'forecast_energy_remaining_today': 'kWh', 'forecast_energy_tomorrow': 'kWh',
+                'forecast_energy_7d': 'kWh',
+            }
+            assert set(payloads) == {'sensor.pvyieldlens_' + name for name in expected}
+            for name, unit in expected.items():
+                attrs = payloads['sensor.pvyieldlens_' + name]['attributes']
+                assert attrs['friendly_name'] == name
+                assert attrs['unit_of_measurement'] == unit
+            return len(payloads)
+
         until(lambda: request('/health')['status'] == 'ok')
-        request('/api/config', {'settings':{
-            'rated_power_w':5000, 'temperature_coefficient_pct_per_c':-0.35,
-            'power_entity':'sensor.power', 'temperature_entity':'sensor.temp', 'irradiance_entity':'sensor.sun',
-            'interval_minutes':1, 'update_seconds':1, 'timezone':'Asia/Shanghai'}})
+        fresh = request('/api/config')
+        assert fresh['monitoring_settings'] is None
+        assert fresh['forecast_settings'] == {
+            'enabled': False, 'tilt_deg': None, 'azimuth_deg': None, 'noct_c': 45.0}
+        request('/api/config', {'monitoring_settings':{
+            'total_max_power_at_stc_w':5000, 'pmax_temperature_coefficient_pct_per_c':-0.35,
+            'actual_power_entity':'sensor.power', 'module_temperature_entity':'sensor.temp', 'irradiance_entity':'sensor.sun',
+            'settlement_interval_minutes':1, 'update_interval_seconds':1, 'home_timezone':'Asia/Shanghai'}, 'forecast_settings': fresh['forecast_settings']})
         until(lambda: request('/api/snapshot')['connected'])
-        until(lambda: request('/api/snapshot')['energy']['total_kwh'] > 0, timeout=75)
-        legacy_total = request('/api/snapshot')['energy']['total_kwh']
-        docker('stop', '--time', '10', app)
-        docker('rm', app)
-        base = start(args.image)
-        until(lambda: request('/api/snapshot')['connected'])
-        upgraded = request('/api/snapshot')
-        upgrade_live_points = live_history()
-        upgrade_assets = frontend_assets()
-        assert upgraded['energy']['total_kwh'] >= legacy_total > 0
-        assert upgraded['forecast']['status'] == 'disabled'
+        until(lambda: request('/api/snapshot')['energy_totals']['estimated_energy_lifetime_kwh'] > 0, timeout=75)
+        fresh_live_points = live_series()
+        fresh_assets = frontend_assets()
+        fresh_outputs = publication()
+        assert request('/api/snapshot')['forecast']['status'] == 'disabled'
         config = request('/api/config')
         assert config['forecast_settings'] == {
             'enabled': False, 'tilt_deg': None, 'azimuth_deg': None, 'noct_c': 45.0}
         assert config['location']['latitude'] == 31.23
         assert config['location']['longitude'] == 121.47
-        assert config['location']['timezone'] == 'Asia/Shanghai'
+        assert config['location']['home_timezone'] == 'Asia/Shanghai'
         forecast = request('/api/forecast')
         assert forecast['status'] == 'disabled' and forecast['fetched_at'] is None
         assert forecast['intervals'] == []
         config['forecast_settings'].update(tilt_deg=25.0, azimuth_deg=180.0, noct_c=47.0)
-        request('/api/config', {'settings': config['settings'], 'forecast_settings': config['forecast_settings']})
-        before = request('/api/snapshot')['energy']['total_kwh']
+        request('/api/config', {'monitoring_settings': config['monitoring_settings'], 'forecast_settings': config['forecast_settings']})
+        before = request('/api/snapshot')['energy_totals']['estimated_energy_lifetime_kwh']
         docker('stop', '--time', '10', app)
         docker('start', app)
         port = json.loads(docker('inspect', app))[0]['NetworkSettings']['Ports']['8099/tcp'][0]['HostPort']
         base = f'http://127.0.0.1:{port}'
         until(lambda: request('/api/snapshot')['connected'])
-        after = request('/api/snapshot')['energy']['total_kwh']
-        restart_live_points = live_history()
+        after = request('/api/snapshot')['energy_totals']['estimated_energy_lifetime_kwh']
+        restart_live_points = live_series()
         restart_assets = frontend_assets()
+        restart_outputs = publication()
         assert after >= before > 0
         retained = request('/api/config')
-        assert retained['settings']['temperature_coefficient_pct_per_c'] == -0.35
+        assert retained['monitoring_settings'] == config['monitoring_settings']
         assert retained['forecast_settings'] == {
             'enabled': False, 'tilt_deg': 25.0, 'azimuth_deg': 180.0, 'noct_c': 47.0}
         forecast = request('/api/forecast')
@@ -172,11 +187,11 @@ def main():
         subprocess.run(['docker','compose','-f',str(root/'compose.yaml'),'config','--quiet'], check=True,
                        env={**os.environ, 'PVYL_WEB_PASSWORD':'smoke-password'})
         print(json.dumps({'container':'passed', 'image':args.image, 'platform':args.platform,
-                          'legacy_image':args.legacy_image, 'upgrade_persistence':'passed',
-                          'upgrade_bundle_assets':upgrade_assets, 'restart_bundle_assets':restart_assets,
-                          'upgrade_live_points':upgrade_live_points, 'restart_live_points':restart_live_points,
+                          'fresh_setup':'passed', 'fresh_outputs':fresh_outputs, 'restart_outputs':restart_outputs,
+                          'fresh_bundle_assets':fresh_assets, 'restart_bundle_assets':restart_assets,
+                          'fresh_live_points':fresh_live_points, 'restart_live_points':restart_live_points,
                           'forecast_disabled_defaults':'passed', 'restart_persistence':'passed', 'compose':'passed',
-                          'legacy_energy_kwh':legacy_total, 'energy_before_kwh':before, 'energy_after_kwh':after}))
+                          'energy_before_kwh':before, 'energy_after_kwh':after}))
     finally:
         for kind, name in reversed(created):
             command = ['docker', 'rm', '-f', name] if kind == 'container' else ['docker', kind, 'rm', name]

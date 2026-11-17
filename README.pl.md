@@ -2,13 +2,13 @@
 
 # PVYieldLens
 
-Porównuj przewidywaną i rzeczywistą moc paneli. Sprawdzaj PR oraz przewidywaną energię dzisiaj i łącznie.
+Porównuj szacowaną i rzeczywistą moc paneli. Sprawdzaj PR oraz szacowaną energię dzisiaj i łącznie.
 
 ## Funkcje
 
 - Moc, PR i różnica mocy na żywo.
 - Historia mocy i PR co 1, 5 lub 10 minut.
-- Przewidywana energia dzisiaj i od pierwszego uruchomienia.
+- Szacowana energia dzisiaj i od pierwszego uruchomienia.
 - Wykresy z ostatnich 24 godzin, 7 dni lub 30 dni.
 - Sześć języków do wyboru w prawym górnym rogu.
 
@@ -52,20 +52,20 @@ Domyślnie strona działa na komputerze z Dockerem. Aby otworzyć ją na innym u
 
 ## Ustawienia
 
-**Na żywo** pokazuje bieżące średnie i diagnostykę, **Historia** zakończone okresy oraz energię/PR wybranego zakresu, a **Prognoza** szacunki na podstawie pogody. Sumy dzienne i całkowite nie zależą od zakresu. Osobny przycisk **Ustawienia** z kołem zębatym i tekstem znajduje się u góry po prawej; trzy karty danych pozostają dostępne. Spis kategorii przewija jeden ciągły formularz: Połączenie z Home Assistant, Panele słoneczne, Czujniki, Monitorowanie i Prognoza.
+**Na żywo** pokazuje bieżące średnie i diagnostykę, **Historia** zakończone okresy oraz energię/PR wybranego zakresu, a **Prognoza** szacunki na podstawie pogody. Osobny przycisk **Ustawienia** z kołem zębatym i tekstem znajduje się u góry po prawej; trzy karty danych pozostają dostępne. Spis kategorii przewija jeden ciągły formularz: Połączenie z Home Assistant, Moduły fotowoltaiczne, Czujniki, Monitorowanie i Prognoza.
 
-**Zapisz** pozostawia otwarte Ustawienia. **Anuluj** ponownie pobiera zapisaną konfigurację z serwera i zastępuje zmiany; jeśli odczyt się nie powiedzie, szkic pozostaje do ponowienia próby. Przy opuszczaniu strony ze zmianami możesz kontynuować edycję lub je odrzucić. Powrót do Ustawień ponownie pobiera zapisaną konfigurację.
+**Zapisz konfigurację** pozostawia otwarte Ustawienia. **Odrzuć zmiany** ponownie pobiera zapisaną konfigurację z serwera i zastępuje zmiany; jeśli odczyt się nie powiedzie, szkic pozostaje do ponowienia próby. Przy opuszczaniu strony ze zmianami możesz kontynuować edycję lub je odrzucić. Powrót do Ustawień ponownie pobiera zapisaną konfigurację.
 
 Menu **Tryb motywu** u góry po prawej oferuje Auto, Jasny i Ciemny. Auto śledzi tryb Home Assistant w jego interfejsie, a bez dostępnego kontekstu Home Assistant korzysta z ustawienia systemu. Jasny lub Ciemny zapisuje lokalne nadpisanie; Auto przywraca śledzenie. Zmiana języka lub motywu zachowuje szkic.
 
 | Ustawienie | Co wpisać |
 | --- | --- |
-| Łączna moc znamionowa | Suma mocy paneli w W, np. `5000`. |
-| Współczynnik temperatury K | Wartość z karty panelu w %/°C, np. `-0,35`. |
-| Moc fotowoltaiki | Czujnik mocy wytwarzanej przez panele (W lub kW). |
+| Łączna moc maksymalna w STC | Suma mocy maksymalnych modułów w standardowych warunkach testowych (STC) w W, np. `5000`. |
+| Współczynnik temperaturowy Pmax | Wartość z karty panelu w %/°C, np. `-0,35`. |
+| Moc rzeczywista | Czujnik mocy wytwarzanej przez panele (W lub kW). |
 | Temperatura modułów | Czujnik temperatury paneli (°C, °F lub K). |
-| Światło na panelach | Czujnik w tej samej płaszczyźnie co panele (W/m² lub kW/m²). |
-| Odstęp w historii | 1, 5 lub 10 minut. Domyślnie 5 minut. |
+| Natężenie promieniowania | Czujnik w tej samej płaszczyźnie co panele (W/m² lub kW/m²). |
+| Interwał rozliczenia | 1, 5 lub 10 minut. Domyślnie 5 minut. |
 | Średnia z | Czas do obliczenia średniej na żywo. Domyślnie 60 sekund. |
 | Odświeżaj co | Czas między aktualizacjami. Domyślnie 5 sekund. |
 
@@ -77,51 +77,55 @@ Wygładzone krzywe służą tylko wyświetlaniu. Wskazówki myszy, dotyku i klaw
 
 ## Prognoza produkcji
 
-Prognoza jest domyślnie wyłączona, również po aktualizacji. Włącz ją w **Ustawienia > Prognoza** i podaj nachylenie (0–90°), kierunek kompasowy (północ 0°, wschód 90°, południe 180°, zachód 270° lub własny azymut od 0° do mniej niż 360°) oraz NOCT z karty panelu (powyżej 20°C, do 80°C; domyślnie 45°C). Moc znamionowa i K są wspólne z monitorowaniem. Lokalizacja i strefa czasowa pochodzą automatycznie z zapisanego połączenia HA; zmieniaj je w HA.
+Prognoza jest domyślnie wyłączona przy pierwszej instalacji. Włącz ją w **Ustawienia > Prognoza** i podaj nachylenie (0–90°), kierunek kompasowy (północ 0°, wschód 90°, południe 180°, zachód 270° lub własny azymut od 0° do mniej niż 360°) oraz NOCT z karty panelu (powyżej 20°C, do 80°C; domyślnie 45°C). Łączna moc maksymalna w STC i współczynnik temperaturowy Pmax są wspólne z monitorowaniem. Lokalizacja i strefa czasowa pochodzą automatycznie z zapisanego połączenia HA; zmieniaj je w HA.
 
-Open-Meteo dostarcza pogodę co godzinę na dziś i sześć następnych lokalnych dni kalendarzowych. Wybierz datę, aby zobaczyć energię całego dnia, wykres godzinowy i tabelę przedziałów. Dzisiejsza prognoza obejmuje cały dzień, a **Pozostało dzisiaj** tylko czas od teraz do lokalnej północy. Obie korzystają z ostatniej poprawnie pobranej pogody i są odrębne od rozliczonej energii teoretycznej wyliczonej z danych czujników. Pozostała energia maleje z upływem czasu między pobraniami; nowe dane mogą też zmienić prognozę całego dnia.
+Monitorowanie wykorzystuje zmierzoną wartość **Temperatura modułów**. Prognoza oblicza **Szacowaną temperaturę ogniw** na podstawie **Temperatury powietrza** i **Nominalnej temperatury pracy ogniwa (NOCT)**. To różne wielkości fizyczne; monitorowanie nie przelicza temperatury modułów na temperaturę ogniw.
 
-Każda karta daty pokazuje pogodę, maksimum/minimum prognoz godzinowych, słupek energii i kWh. Ciepła etykieta **Dzisiaj** zmienia się o północy domu i pozostaje widoczna, gdy inna data jest zaznaczona na niebiesko. Temperatury to ekstrema surowych próbek godzinowych; pogoda reprezentatywna używa najwyższego znanego kodu WMO dnia. Każde pole wymaga wszystkich oczekiwanych próbek godzinowych UTC w dniu domu, również dla dni 23/25-godzinnych i stref ułamkowych. Niekompletne pole jest niedostępne, a drugie kompletne pozostaje widoczne. Zero jest poprawne; nieznana pogoda ma neutralną ikonę. Pogoda i moc współdzielą zapytanie, pamięć podręczną i czas pobrania, bez dodatkowego odświeżania. Stara pamięć zachowuje poprawną energię i otrzymuje pogodę przy następnym zwykłym odświeżeniu.
+Open-Meteo dostarcza pogodę co godzinę na dziś i sześć następnych lokalnych dni kalendarzowych. Wybierz datę, aby zobaczyć energię całego dnia, wykres godzinowy i tabelę przedziałów. Dzisiejsza prognoza obejmuje cały dzień, a **Pozostało dzisiaj** tylko czas od teraz do lokalnej północy. Obie korzystają z ostatniej poprawnie pobranej pogody i są odrębne od rozliczonej energii szacowanej wyliczonej z danych czujników. Pozostała energia maleje z upływem czasu między pobraniami; nowe dane mogą też zmienić prognozę całego dnia.
 
-Pogoda odświeża się co godzinę lub przyciskiem **Odśwież prognozę**. Pasująca pamięć podręczna przetrwa restart. Nieudane pobranie zachowuje pierwotny czas i oznacza dane jako nieaktualne; ponowienie następuje po 15 minutach. Dane mające co najmniej dwie godziny także są nieaktualne. Brakujące przedziały czynią odpowiednie sumy niedostępnymi; kompletność jest pokazywana osobno, a braków nie zastępuje zero. Widoczne są stany wyłączenia, braku lokalizacji HA, pierwszego ładowania i niedostępności.
+Każda karta daty pokazuje pogodę, maksimum/minimum prognoz godzinowych, słupek energii i kWh. Ciepła etykieta **Dzisiaj** zmienia się o północy domu i pozostaje widoczna, gdy inna data jest zaznaczona na niebiesko. Temperatury to ekstrema surowych próbek godzinowych; pogoda reprezentatywna używa najwyższego znanego kodu WMO dnia. Każde pole wymaga wszystkich oczekiwanych próbek godzinowych UTC w dniu domu, również dla dni 23/25-godzinnych i stref ułamkowych. Niekompletne pole jest niedostępne, a drugie kompletne pozostaje widoczne. Zero jest poprawne; nieznana pogoda ma neutralną ikonę. Pogoda i moc współdzielą zapytanie, pamięć podręczną i czas pobrania, bez dodatkowego odświeżania.
 
-To teoretyczna wartość odniesienia DC dla jednego pola paneli, z promieniowaniem w ich płaszczyźnie i uproszczonym modelem temperatury NOCT. Nie uwzględnia sprawności/ograniczeń falownika, cienia, śniegu, zabrudzeń ani strat systemowych i nie gwarantuje rzeczywistego uzysku AC. Cztery encje prognozy mają kWh i klasę urządzenia energy, bez `state_class`; mogą maleć i są oddzielone od liczników skumulowanych. Nie zapewniają natywnej integracji prognoz HA ani panelu Energia.
+Pogoda odświeża się co godzinę lub przyciskiem **Odśwież prognozę**. Pasująca pamięć podręczna przetrwa restart. Nieudane pobranie zachowuje pierwotny czas i oznacza dane jako nieaktualne; ponowienie następuje po 15 minutach. Dane mające co najmniej dwie godziny także są nieaktualne. Brakujące przedziały czynią odpowiednie sumy niedostępnymi; kompletność danych jest pokazywana osobno, a braków nie zastępuje zero. Widoczne są stany wyłączenia, braku lokalizacji HA, pierwszego ładowania i niedostępności.
+
+To szacowana wartość odniesienia DC dla jednego pola paneli, z natężeniem promieniowania w płaszczyźnie modułów i uproszczonym modelem temperatury NOCT. Nie uwzględnia sprawności/ograniczeń falownika, cienia, śniegu, zabrudzeń ani strat systemowych i nie gwarantuje rzeczywistego uzysku AC. Cztery encje prognozy mają kWh i klasę urządzenia energy, bez `state_class`; mogą maleć i są oddzielone od liczników skumulowanych. Nie zapewniają natywnej integracji prognoz HA ani panelu Energia.
 
 ## Czujniki wynikowe
 
-| Wynik | ID encji | Jednostka |
+| Wskaźnik | Nazwa encji HA | Jednostka |
 | --- | --- | --- |
-| Moc przewidywana | `sensor.pvyieldlens_estimated_power` | W |
-| Moc rzeczywista | `sensor.pvyieldlens_actual_power` | W |
-| PR | `sensor.pvyieldlens_pr` | % |
-| Energia przewidywana dzisiaj | `sensor.pvyieldlens_daily_estimated_energy` | kWh |
-| Energia przewidywana łącznie | `sensor.pvyieldlens_total_estimated_energy` | kWh |
-| Moc przewidywana na żywo | `sensor.pvyieldlens_realtime_estimated_power` | W |
-| Moc rzeczywista na żywo | `sensor.pvyieldlens_realtime_actual_power` | W |
-| PR na żywo | `sensor.pvyieldlens_realtime_pr` | % |
-| Różnica mocy na żywo | `sensor.pvyieldlens_realtime_optimizable_power` | W |
-| Prognoza na dzisiaj | `sensor.pvyieldlens_forecast_energy_today` | kWh |
-| Prognoza pozostała dzisiaj | `sensor.pvyieldlens_forecast_energy_remaining_today` | kWh |
-| Prognoza na jutro | `sensor.pvyieldlens_forecast_energy_tomorrow` | kWh |
-| Prognoza na 7 dni | `sensor.pvyieldlens_forecast_energy_7d` | kWh |
+| Rozliczona moc szacowana | `settled_estimated_power` | W |
+| Rozliczona moc rzeczywista | `settled_actual_power` | W |
+| Rozliczony PR | `settled_pr` | % |
+| Energia szacowana dzisiaj | `estimated_energy_today` | kWh |
+| Łączna energia szacowana | `estimated_energy_lifetime` | kWh |
+| Moc szacowana na żywo | `live_estimated_power` | W |
+| Moc rzeczywista na żywo | `live_actual_power` | W |
+| PR na żywo | `live_pr` | % |
+| Moc możliwa do optymalizacji na żywo | `live_optimizable_power` | W |
+| Prognozowana energia dzisiaj | `forecast_energy_today` | kWh |
+| Prognozowana pozostała energia dzisiaj | `forecast_energy_remaining_today` | kWh |
+| Prognozowana energia jutro | `forecast_energy_tomorrow` | kWh |
+| Prognozowana energia na 7 dni | `forecast_energy_7d` | kWh |
+
+Nazwa encji HA jest jej nazwą wyświetlaną. Pełny identyfikator encji to `sensor.pvyieldlens_` i ta nazwa, na przykład `sensor.pvyieldlens_settled_estimated_power`.
 
 ## Wzór PR
 
-Moc przewidywana zależy od mocy paneli, temperatury i światła słonecznego:
+Moc szacowana zależy od łącznej mocy maksymalnej w STC, temperatury modułów i natężenia promieniowania:
 
 ```text
-P_expected = P_rated × [1 + (K / 100) × (T − 25)] × G / 1000
-PR = P_actual / P_expected × 100%
+P_estimated = P_stc × [1 + (K / 100) × (T − 25)] × G / 1000
+PR = P_actual / P_estimated × 100%
 ```
 
-`P_rated`: moc znamionowa (W); `K`: współczynnik temperatury (%/°C); `T`: temperatura paneli (°C); `G`: promieniowanie padające na panele (W/m²).
+`P_stc`: łączna moc maksymalna w STC (W); `K`: współczynnik temperaturowy Pmax (%/°C), procent z karty modułu, np. `-0,35`; `T`: temperatura modułów (°C); `G`: natężenie promieniowania w płaszczyźnie modułów (W/m²). Aplikacja dzieli K przez 100 tylko raz.
 
-PR porównuje moc rzeczywistą z przewidywaną. Różnica mocy to moc przewidywana minus rzeczywista.
+Współczynnik wydajności (PR) porównuje moc rzeczywistą z szacowaną. Moc możliwa do optymalizacji to moc szacowana minus rzeczywista i może być ujemna.
 
 ## Jak czytać wyniki
 
-- PR może przekroczyć 100%. Gdy moc przewidywana wynosi zero, PR nie jest wyświetlany.
-- Ujemna różnica oznacza, że moc rzeczywista jest większa od przewidywanej.
+- PR może przekroczyć 100%. Gdy moc szacowana wynosi zero, PR nie jest wyświetlany.
+- Ujemna moc możliwa do optymalizacji oznacza, że moc rzeczywista jest większa od szacowanej.
 - Energia jest liczona tylko wtedy, gdy wszystkie trzy czujniki mają dane. Brakujące okresy są pomijane.
 - Energia dzienna zeruje się o północy według strefy Home Assistant. Suma jest liczona od pierwszej konfiguracji.
 

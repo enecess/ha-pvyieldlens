@@ -2,13 +2,13 @@
 
 # PVYieldLens
 
-Confronta la potenza prevista e quella effettiva dei pannelli. Segui il PR e l’energia prevista per oggi e in totale.
+Confronta la potenza stimata e quella effettiva dei pannelli. Segui il PR e l’energia stimata per oggi e in totale.
 
 ## Funzioni
 
-- Potenza, PR e differenza di potenza in tempo reale.
+- Potenza, PR e potenza ottimizzabile in tempo reale.
 - Storico di potenza e PR ogni 1, 5 o 10 minuti.
-- Energia prevista per oggi e dal primo avvio.
+- Energia stimata per oggi e dal primo avvio.
 - Grafici delle ultime 24 ore, 7 giorni o 30 giorni.
 - Sei lingue, da scegliere nel menu in alto a destra.
 
@@ -52,20 +52,20 @@ La pagina è accessibile dal computer con Docker. Per aprirla da un altro dispos
 
 ## Impostazioni
 
-**Tempo reale** mostra medie attuali e diagnostica, **Storico** i periodi conclusi e l’energia/PR dell’intervallo scelto, **Previsioni** le stime meteo. I totali del giorno e dall’avvio restano indipendenti dall’intervallo. La voce separata **Impostazioni**, con ingranaggio e testo, è in alto a destra; le tre schede dati restano disponibili. L’indice delle categorie scorre un unico modulo continuo: Connessione a Home Assistant, Pannelli solari, Sensori, Monitoraggio e Previsioni.
+**Tempo reale** mostra medie attuali e diagnostica, **Storico** i periodi conclusi e l’energia/PR dell’intervallo scelto, **Previsioni** le stime meteo. La voce separata **Impostazioni**, con ingranaggio e testo, è in alto a destra; le tre schede dati restano disponibili. L’indice delle categorie scorre un unico modulo continuo: Connessione a Home Assistant, Moduli fotovoltaici, Sensori, Monitoraggio e Previsioni.
 
-**Salva** mantiene aperte le Impostazioni. **Annulla** ricarica dal server la configurazione salvata e sostituisce le modifiche; se il caricamento fallisce, la bozza resta disponibile per riprovare. Uscendo con modifiche non salvate puoi continuare a modificarle o scartarle. Rientrare nelle Impostazioni ricarica la configurazione salvata.
+**Salva configurazione** mantiene aperte le Impostazioni. **Scarta modifiche** ricarica dal server la configurazione salvata e sostituisce le modifiche; se il caricamento fallisce, la bozza resta disponibile per riprovare. Uscendo con modifiche non salvate puoi continuare a modificarle o scartarle. Rientrare nelle Impostazioni ricarica la configurazione salvata.
 
 Il menu **Modalità tema**, in alto a destra, offre Auto, Chiaro e Scuro. Auto segue la modalità di Home Assistant nella sua interfaccia e usa la preferenza di sistema senza un contesto Home Assistant accessibile. Chiaro o Scuro imposta una scelta locale; Auto ripristina il comportamento automatico. Cambiare lingua o tema conserva la bozza.
 
 | Impostazione | Valore da inserire |
 | --- | --- |
-| Potenza nominale totale | Somma delle potenze dei pannelli in W, ad esempio `5000`. |
-| Coefficiente di temperatura K | Valore della scheda del pannello in %/°C, ad esempio `-0,35`. |
-| Potenza fotovoltaica | Sensore della potenza prodotta dai pannelli (W o kW). |
+| Potenza massima totale in STC | Somma delle potenze massime dei moduli in condizioni di prova standard (STC) in W, ad esempio `5000`. |
+| Coefficiente di temperatura di Pmax | Coefficiente Pmax della scheda del modulo in %/°C, ad esempio `-0,35`. |
+| Potenza effettiva | Sensore della potenza prodotta dai pannelli (W o kW). |
 | Temperatura dei moduli | Sensore della temperatura dei pannelli (°C, °F o K). |
-| Luce sui pannelli | Sensore sullo stesso piano dei pannelli (W/m² o kW/m²). |
-| Intervallo dello storico | 1, 5 o 10 minuti. Predefinito: 5 minuti. |
+| Irradianza | Sensore sullo stesso piano dei pannelli (W/m² o kW/m²). |
+| Intervallo di contabilizzazione | 1, 5 o 10 minuti. Predefinito: 5 minuti. |
 | Media su | Tempo usato per la media in tempo reale. Predefinito: 60 secondi. |
 | Aggiorna ogni | Tempo tra gli aggiornamenti. Predefinito: 5 secondi. |
 
@@ -77,51 +77,55 @@ Le curve smussate servono solo alla visualizzazione. I dettagli con mouse, tocco
 
 ## Previsioni di produzione
 
-Le previsioni sono disattivate per impostazione predefinita, anche dopo un aggiornamento. In **Impostazioni > Previsioni**, attivale e inserisci inclinazione (0–90°), direzione (nord 0°, est 90°, sud 180°, ovest 270° o azimut personalizzato da 0° a meno di 360°) e NOCT della scheda tecnica (oltre 20°C, massimo 80°C; predefinito 45°C). Potenza nominale e K sono condivisi con il monitoraggio. Posizione e fuso provengono automaticamente dalla connessione HA salvata; modificali in HA.
+Le previsioni sono disattivate per impostazione predefinita alla prima installazione. In **Impostazioni > Previsioni**, attivale e inserisci inclinazione (0–90°), direzione (nord 0°, est 90°, sud 180°, ovest 270° o azimut personalizzato da 0° a meno di 360°) e NOCT della scheda tecnica (oltre 20°C, massimo 80°C; predefinito 45°C). Potenza massima totale in STC e coefficiente di temperatura di Pmax sono condivisi con il monitoraggio. Posizione e fuso provengono automaticamente dalla connessione HA salvata; modificali in HA.
 
-Open-Meteo fornisce il meteo orario per oggi e i sei giorni di calendario locali successivi. Scegli una data per energia giornaliera, curva oraria e tabella degli intervalli. La previsione di oggi comprende tutto il giorno; **Rimanente oggi** solo il tempo da adesso alla mezzanotte locale. Entrambe usano l’ultimo meteo scaricato correttamente e sono distinte dall’energia teorica consolidata calcolata dai sensori. L’energia rimanente diminuisce con il tempo tra i download; nuovi dati possono anche modificare la stima dell’intera giornata.
+Il monitoraggio usa la **Temperatura dei moduli** misurata. Le previsioni usano la **Temperatura dell’aria** e la **Temperatura nominale di funzionamento della cella (NOCT)** per calcolare la **Temperatura stimata delle celle**. Sono grandezze distinte; il monitoraggio non converte la temperatura dei moduli in temperatura delle celle.
 
-Ogni scheda mostra meteo, massima/minima delle previsioni orarie, barra energetica e kWh. L’etichetta calda **Oggi** segue la mezzanotte domestica e rimane visibile quando un’altra data è selezionata in blu. Le temperature usano gli estremi dei campioni orari grezzi; il meteo rappresentativo usa il massimo codice WMO noto del giorno. Ogni campo richiede tutti i campioni UTC orari attesi nel giorno domestico, anche con giornate di 23/25 ore e fusi frazionari. Un campo incompleto è indisponibile, mentre l’altro completo rimane visibile. Zero è valido; il meteo sconosciuto ha un’icona neutra. Meteo e potenza condividono richiesta, cache e ora di download, senza ulteriori aggiornamenti. Le vecchie cache mantengono l’energia valida e ricevono il meteo al prossimo aggiornamento normale.
+Open-Meteo fornisce il meteo orario per oggi e i sei giorni di calendario locali successivi. Scegli una data per energia giornaliera, curva oraria e tabella degli intervalli. La previsione di oggi comprende tutto il giorno; **Rimanente oggi** solo il tempo da adesso alla mezzanotte locale. Entrambe usano l’ultimo meteo scaricato correttamente e sono distinte dall’energia stimata consolidata calcolata dai sensori. L’energia rimanente diminuisce con il tempo tra i download; nuovi dati possono anche modificare la stima dell’intera giornata.
 
-Il meteo si aggiorna ogni ora o con **Aggiorna previsione**. La cache corrispondente resta dopo il riavvio. Un errore conserva l’ora del download e segnala dati obsoleti; nuovo tentativo dopo 15 minuti. Anche i dati vecchi di almeno due ore sono obsoleti. Gli intervalli mancanti rendono indisponibili i totali interessati; la completezza è mostrata separatamente e i dati mancanti non valgono zero. Sono indicati disattivazione, posizione HA assente, primo caricamento e indisponibilità.
+Ogni scheda mostra meteo, massima/minima delle previsioni orarie, barra energetica e kWh. L’etichetta calda **Oggi** segue la mezzanotte domestica e rimane visibile quando un’altra data è selezionata in blu. Le temperature usano gli estremi dei campioni orari grezzi; il meteo rappresentativo usa il massimo codice WMO noto del giorno. Ogni campo richiede tutti i campioni UTC orari attesi nel giorno domestico, anche con giornate di 23/25 ore e fusi frazionari. Un campo incompleto è indisponibile, mentre l’altro completo rimane visibile. Zero è valido; il meteo sconosciuto ha un’icona neutra. Meteo e potenza condividono richiesta, cache e ora di download, senza ulteriori aggiornamenti.
 
-Sono riferimenti teorici in corrente continua per un solo campo di pannelli, con irraggiamento sul loro piano e modello termico NOCT semplificato. Non includono efficienza/limitazione dell’inverter, ombre, neve, sporco o perdite e non garantiscono la produzione reale in corrente alternata. Le quattro entità hanno kWh e classe energy, senza `state_class`; possono diminuire e restano separate dai contatori cumulativi. Non forniscono un’integrazione nativa con previsioni HA o dashboard Energia.
+Il meteo si aggiorna ogni ora o con **Aggiorna previsione**. La cache corrispondente resta dopo il riavvio. Un errore conserva l’ora del download e segnala dati obsoleti; nuovo tentativo dopo 15 minuti. Anche i dati vecchi di almeno due ore sono obsoleti. Gli intervalli mancanti rendono indisponibili i totali interessati; la completezza dei dati è mostrata separatamente e i dati mancanti non valgono zero. Sono indicati disattivazione, posizione HA assente, primo caricamento e indisponibilità.
+
+Sono riferimenti stimati in corrente continua per un solo campo di pannelli, con irradianza sul loro piano e modello termico NOCT semplificato. Non includono efficienza/limitazione dell’inverter, ombre, neve, sporco o perdite e non garantiscono la produzione reale in corrente alternata. Le quattro entità hanno kWh e classe energy, senza `state_class`; possono diminuire e restano separate dai contatori cumulativi. Non forniscono un’integrazione nativa con previsioni HA o dashboard Energia.
 
 ## Sensori di uscita
 
-| Risultato | ID entità | Unità |
+| Indicatore | Nome entità HA | Unità |
 | --- | --- | --- |
-| Potenza prevista | `sensor.pvyieldlens_estimated_power` | W |
-| Potenza effettiva | `sensor.pvyieldlens_actual_power` | W |
-| PR | `sensor.pvyieldlens_pr` | % |
-| Energia prevista oggi | `sensor.pvyieldlens_daily_estimated_energy` | kWh |
-| Energia prevista totale | `sensor.pvyieldlens_total_estimated_energy` | kWh |
-| Potenza prevista in tempo reale | `sensor.pvyieldlens_realtime_estimated_power` | W |
-| Potenza effettiva in tempo reale | `sensor.pvyieldlens_realtime_actual_power` | W |
-| PR in tempo reale | `sensor.pvyieldlens_realtime_pr` | % |
-| Differenza di potenza in tempo reale | `sensor.pvyieldlens_realtime_optimizable_power` | W |
-| Previsione oggi | `sensor.pvyieldlens_forecast_energy_today` | kWh |
-| Previsione restante oggi | `sensor.pvyieldlens_forecast_energy_remaining_today` | kWh |
-| Previsione domani | `sensor.pvyieldlens_forecast_energy_tomorrow` | kWh |
-| Previsione per 7 giorni | `sensor.pvyieldlens_forecast_energy_7d` | kWh |
+| Potenza stimata consolidata | `settled_estimated_power` | W |
+| Potenza effettiva consolidata | `settled_actual_power` | W |
+| PR consolidato | `settled_pr` | % |
+| Energia stimata oggi | `estimated_energy_today` | kWh |
+| Energia stimata cumulativa | `estimated_energy_lifetime` | kWh |
+| Potenza stimata in tempo reale | `live_estimated_power` | W |
+| Potenza effettiva in tempo reale | `live_actual_power` | W |
+| PR in tempo reale | `live_pr` | % |
+| Potenza ottimizzabile in tempo reale | `live_optimizable_power` | W |
+| Energia prevista oggi | `forecast_energy_today` | kWh |
+| Energia prevista rimanente oggi | `forecast_energy_remaining_today` | kWh |
+| Energia prevista domani | `forecast_energy_tomorrow` | kWh |
+| Energia prevista per 7 giorni | `forecast_energy_7d` | kWh |
+
+Il nome entità HA è il nome visualizzato. L’ID completo è `sensor.pvyieldlens_` seguito da questo nome, ad esempio `sensor.pvyieldlens_settled_estimated_power`.
 
 ## Formula del PR
 
-La potenza prevista tiene conto della potenza nominale, della temperatura e della luce solare:
+La potenza stimata tiene conto della potenza massima totale in STC, della temperatura dei moduli e dell’irradianza:
 
 ```text
-P_expected = P_rated × [1 + (K / 100) × (T − 25)] × G / 1000
-PR = P_actual / P_expected × 100%
+P_estimated = P_stc × [1 + (K / 100) × (T − 25)] × G / 1000
+PR = P_actual / P_estimated × 100%
 ```
 
-`P_rated`: potenza nominale (W); `K`: coefficiente di temperatura (%/°C); `T`: temperatura dei pannelli (°C); `G`: radiazione ricevuta dai pannelli (W/m²).
+`P_stc`: potenza massima totale in STC (W); `K`: coefficiente di temperatura di Pmax (%/°C), percentuale della scheda tecnica, ad esempio `-0,35`; `T`: temperatura dei moduli (°C); `G`: irradianza sul piano dei moduli (W/m²). L’app divide K per 100 una sola volta.
 
-Il PR confronta la potenza effettiva con quella prevista. La differenza è la potenza prevista meno quella effettiva.
+Il rapporto di prestazione (PR) confronta la potenza effettiva con quella stimata. La potenza ottimizzabile è la potenza stimata meno quella effettiva e può essere negativa.
 
 ## Leggere i risultati
 
-- Il PR può superare il 100%. Quando la potenza prevista è zero, il PR non è mostrato.
-- Una differenza negativa indica che la potenza effettiva è maggiore di quella prevista.
+- Il PR può superare il 100%. Quando la potenza stimata è zero, il PR non è mostrato.
+- Una potenza ottimizzabile negativa indica che la potenza effettiva è maggiore di quella stimata.
 - L’energia è contata solo quando tutti e tre i sensori hanno dati. I periodi mancanti sono esclusi.
 - L’energia del giorno si azzera a mezzanotte nel fuso di Home Assistant. Il totale parte dalla prima configurazione.
 

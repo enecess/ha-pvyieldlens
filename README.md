@@ -2,13 +2,13 @@
 
 # PVYieldLens
 
-Compare your solar panels’ expected and actual output, follow PR, and see expected energy for today and in total.
+Compare your PV modules’ estimated and actual output, follow PR, and see estimated energy for today and in total.
 
 ## Features
 
-- Live power, PR and power gap.
+- Live power, PR and optimizable power.
 - Power and PR history at 1, 5 or 10 minute intervals.
-- Expected energy for today and since setup.
+- Estimated energy for today and since setup.
 - Charts for the last 24 hours, 7 days or 30 days.
 - Six languages, with a language menu at the top right.
 
@@ -22,7 +22,7 @@ For Home Assistant OS.
 
 1. Click the button above and confirm **Add** in Home Assistant.
 2. Find **PVYieldLens** in the App store, then install and start it.
-3. Open the Web UI and go to **Settings** to choose your sensors and enter your panel details.
+3. Open the Web UI and go to **Settings** to choose your sensors and enter your PV module details.
 
 If the button does not open Home Assistant, go to **Settings > Apps > Install app > top-right menu > Repositories** and add:
 
@@ -52,20 +52,20 @@ The default address works on the Docker host. To open the page from another devi
 
 ## Settings
 
-Use **Live** for current sensor averages and diagnostics, **History** for settled periods and the selected range's energy/PR, and **Forecast** for weather-based generation estimates. History's today/lifetime totals remain separate from its selected range. The separate gear-and-text **Settings** entry is at the top right; all three data tabs remain available. Its category directory scrolls one continuous form: Home Assistant connection, Solar panels, Sensors, Monitoring, and Forecast.
+Use **Live** for current sensor averages and diagnostics, **History** for settled periods and the selected range's energy/PR, and **Forecast** for weather-based generation estimates. The separate gear-and-text **Settings** entry is at the top right; all three data tabs remain available. Its category directory scrolls one continuous form: Home Assistant connection, PV modules, Sensors, Monitoring, and Forecast.
 
-**Save** keeps you in Settings. **Cancel** reloads the saved configuration from the server and replaces your edits; if loading fails, your draft remains available to retry. Leaving with unsaved changes asks you to keep editing or discard them. Returning to Settings loads the saved configuration again.
+**Save configuration** keeps you in Settings. **Discard changes** reloads the saved configuration from the server and replaces your edits; if loading fails, your draft remains available to retry. Leaving with unsaved changes asks you to keep editing or discard them. Returning to Settings loads the saved configuration again.
 
 The top-right **Theme mode** menu offers Auto, Light and Dark. Auto follows Home Assistant's Theme mode inside its Web UI and uses the system preference outside a usable Home Assistant context. Light or Dark overrides Auto locally; selecting Auto resumes following the host. Language and theme changes preserve your settings draft.
 
 | Setting | What to enter |
 | --- | --- |
-| Total rated power | Total panel power in W, e.g. `5000`. |
-| Temperature coefficient K | The value from the panel datasheet, in %/°C, e.g. `-0.35`. |
-| Actual Power | Your solar generation power sensor (W or kW). |
-| Module Temperature | Your panel temperature sensor (°C, °F or K). |
-| Irradiance | A sunlight sensor in the same plane as the panels (W/m² or kW/m²). |
-| History interval | 1, 5 or 10 minutes. Default: 5 minutes. |
+| Total max power at STC | Sum of module maximum powers under standard test conditions (STC), in W, e.g. `5000`. |
+| Temperature coefficient of Pmax | The Pmax coefficient from the module datasheet, in %/°C, e.g. `-0.35`. |
+| Actual power | Your solar generation power sensor (W or kW). |
+| Module temperature | Your module temperature sensor (°C, °F or K). |
+| Irradiance | An irradiance sensor in the same plane as the modules (W/m² or kW/m²). |
+| Settlement interval | 1, 5 or 10 minutes. Default: 5 minutes. |
 | Average over | Time used to average live readings. Default: 60 seconds. |
 | Update every | How often live results refresh. Default: 5 seconds. |
 
@@ -77,51 +77,55 @@ Charts use smooth paths for display only. Pointer, touch and keyboard tooltips s
 
 ## Generation forecast
 
-Forecast is disabled by default, including after an upgrade. Under **Settings > Forecast**, enable it, enter panel tilt (0–90°), compass direction (north 0°, east 90°, south 180°, west 270°, or a custom value from 0° to below 360°), and NOCT from the datasheet (above 20°C, at most 80°C; default 45°C). Rated power and K are shared with monitoring. Location and time zone come automatically from the saved Home Assistant connection; change them in HA.
+Forecast is disabled by default on first installation. Under **Settings > Forecast**, enable it, enter module tilt (0–90°), compass direction (north 0°, east 90°, south 180°, west 270°, or a custom value from 0° to below 360°), and NOCT from the datasheet (above 20°C, at most 80°C; default 45°C). Total max power at STC and Temperature coefficient of Pmax are shared with monitoring. Location and time zone come automatically from the saved Home Assistant connection; change them in HA.
 
-Open-Meteo supplies hourly weather for today and the following six local calendar days. Select a date for full-day energy, the hourly power curve and numeric interval details. Today's forecast includes all of today, while **Remaining today** counts only from now to local midnight. Both use the latest successful weather fetch and are separate from settled theoretical energy calculated from sensor readings. Remaining energy decreases as time passes between fetches; a new forecast can also revise the full-day estimate.
+Monitoring uses the measured **Module temperature**. Forecast uses **Air temperature** and **Nominal operating cell temperature (NOCT)** to calculate **Estimated cell temperature**. These are separate physical quantities; the monitoring model does not convert module temperature to cell temperature.
 
-Each date card shows weather, hourly-forecast high/low air temperatures, its energy bar and kWh. The warm **Today** label follows household midnight and remains visible when a different date is selected in blue. Daily temperatures use raw hourly samples, and representative weather uses the day's maximum known WMO code. Each field requires every expected UTC hourly sample inside that household day, including 23/25-hour days and fractional time zones; an incomplete field is unavailable while a complete companion field stays visible. Zero values remain valid. Unknown weather uses a neutral icon. Weather uses the same hourly request, cache and fetch time as power, with no additional refresh cadence. Old caches keep valid energy and gain weather on the next normal refresh.
+Open-Meteo supplies hourly weather for today and the following six local calendar days. Select a date for full-day energy, the hourly power curve and numeric interval details. Today's forecast includes all of today, while **Remaining today** counts only from now to local midnight. Both use the latest successful weather fetch and are separate from settled estimated energy calculated from sensor readings. Remaining energy decreases as time passes between fetches; a new forecast can also revise the full-day estimate.
 
-Weather normally refreshes hourly; **Refresh forecast** requests an update. Matching cached data survives restart. A failed refresh retains its original fetch time and shows stale data; retries occur after 15 minutes. Data at least two hours old is also stale. Missing weather intervals make affected totals unavailable, with completeness shown separately; missing data is never assumed to be zero. Disabled, missing HA location, initial loading and unavailable states are shown explicitly.
+Each date card shows weather, hourly-forecast high/low air temperatures, its energy bar and kWh. The warm **Today** label follows household midnight and remains visible when a different date is selected in blue. Daily temperatures use raw hourly samples, and representative weather uses the day's maximum known WMO code. Each field requires every expected UTC hourly sample inside that household day, including 23/25-hour days and fractional time zones; an incomplete field is unavailable while a complete companion field stays visible. Zero values remain valid. Unknown weather uses a neutral icon. Weather uses the same hourly request, cache and fetch time as power, with no additional refresh cadence.
 
-These are theoretical DC reference values for one panel array, using plane-of-array irradiance and a simplified NOCT temperature model. They do not model inverter efficiency/clipping, shading, snow, soiling or system losses and do not guarantee actual AC yield. The four forecast entities are kWh energy values without `state_class`; they can decrease after refresh and are separate from cumulative monitoring energy. They do not provide native HA forecast or Energy dashboard integration.
+Weather normally refreshes hourly; **Refresh forecast** requests an update. Matching cached data survives restart. A failed refresh retains its original fetch time and shows stale data; retries occur after 15 minutes. Data at least two hours old is also stale. Missing weather intervals make affected totals unavailable, with data completeness shown separately; missing data is never assumed to be zero. Disabled, missing HA location, initial loading and unavailable states are shown explicitly.
+
+These are estimated DC reference values for one PV module array, using plane-of-array irradiance and a simplified NOCT temperature model. They do not model inverter efficiency/clipping, shading, snow, soiling or system losses and do not guarantee actual AC yield. The four forecast entities are kWh energy values without `state_class`; they can decrease after refresh and are separate from cumulative monitoring energy. They do not provide native HA forecast or Energy dashboard integration.
 
 ## Output sensors
 
-| Result | Entity ID | Unit |
+| Metric | HA entity name | Unit |
 | --- | --- | --- |
-| Expected power | `sensor.pvyieldlens_estimated_power` | W |
-| Actual power | `sensor.pvyieldlens_actual_power` | W |
-| PR | `sensor.pvyieldlens_pr` | % |
-| Expected energy today | `sensor.pvyieldlens_daily_estimated_energy` | kWh |
-| Total expected energy | `sensor.pvyieldlens_total_estimated_energy` | kWh |
-| Live expected power | `sensor.pvyieldlens_realtime_estimated_power` | W |
-| Live actual power | `sensor.pvyieldlens_realtime_actual_power` | W |
-| Live PR | `sensor.pvyieldlens_realtime_pr` | % |
-| Live power gap | `sensor.pvyieldlens_realtime_optimizable_power` | W |
-| Forecast today | `sensor.pvyieldlens_forecast_energy_today` | kWh |
-| Forecast remaining today | `sensor.pvyieldlens_forecast_energy_remaining_today` | kWh |
-| Forecast tomorrow | `sensor.pvyieldlens_forecast_energy_tomorrow` | kWh |
-| Forecast for 7 days | `sensor.pvyieldlens_forecast_energy_7d` | kWh |
+| Settled estimated power | `settled_estimated_power` | W |
+| Settled actual power | `settled_actual_power` | W |
+| Settled PR | `settled_pr` | % |
+| Estimated energy today | `estimated_energy_today` | kWh |
+| Lifetime estimated energy | `estimated_energy_lifetime` | kWh |
+| Live estimated power | `live_estimated_power` | W |
+| Live actual power | `live_actual_power` | W |
+| Live PR | `live_pr` | % |
+| Live optimizable power | `live_optimizable_power` | W |
+| Forecast energy today | `forecast_energy_today` | kWh |
+| Forecast energy remaining today | `forecast_energy_remaining_today` | kWh |
+| Forecast energy tomorrow | `forecast_energy_tomorrow` | kWh |
+| Forecast energy for 7 days | `forecast_energy_7d` | kWh |
+
+The HA entity name is its display name. The full entity ID is `sensor.pvyieldlens_<HA entity name>`; for example, `sensor.pvyieldlens_settled_estimated_power`.
 
 ## PR formula
 
-Expected power takes panel size, temperature and sunlight into account:
+Estimated power takes Total max power at STC, module temperature and irradiance into account:
 
 ```text
-P_expected = P_rated × [1 + (K / 100) × (T − 25)] × G / 1000
-PR = P_actual / P_expected × 100%
+P_estimated = P_stc × [1 + (K / 100) × (T − 25)] × G / 1000
+PR = P_actual / P_estimated × 100%
 ```
 
-`P_rated`: rated power (W); `K`: temperature coefficient (%/°C); `T`: panel temperature (°C); `G`: sunlight on the panels (W/m²).
+`P_stc`: Total max power at STC (W); `K`: Temperature coefficient of Pmax (%/°C), entered as the datasheet percentage, e.g. `-0.35`; `T`: Module temperature (°C); `G`: Irradiance in the module plane (W/m²). The app divides K by 100 once.
 
-PR compares actual power with expected power. The power gap is expected power minus actual power.
+Performance ratio (PR) compares actual power with estimated power. Optimizable power is estimated power minus actual power and can be negative.
 
 ## Reading the results
 
-- PR can be above 100%. When expected power is zero, PR is not shown.
-- A negative power gap means actual power is higher than expected.
+- PR can be above 100%. When estimated power is zero, PR is not shown.
+- A negative optimizable power means actual power is higher than estimated.
 - Energy is counted only while all three sensors have data. Missing periods are left out.
 - Today’s energy resets at midnight in your Home Assistant time zone. Total energy starts from your first setup.
 
