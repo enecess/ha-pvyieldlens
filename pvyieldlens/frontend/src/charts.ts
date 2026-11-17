@@ -8,6 +8,7 @@ export interface ChartPoint {
   actual_power_w?: number | null;
   pr?: number | null;
   forecast_power_w?: number | null;
+  corrected_forecast_power_w?: number | null;
   irradiance_w_m2?: number | null;
   module_temperature_c?: number | null;
   interval?: ForecastInterval;
@@ -15,7 +16,7 @@ export interface ChartPoint {
   breakBefore?: boolean;
 }
 export interface ChartSeries {
-  key: 'estimated_power_w' | 'actual_power_w' | 'pr' | 'forecast_power_w' | 'irradiance_w_m2' | 'module_temperature_c';
+  key: 'estimated_power_w' | 'actual_power_w' | 'pr' | 'forecast_power_w' | 'corrected_forecast_power_w' | 'irradiance_w_m2' | 'module_temperature_c';
   label: string;
   color: string;
 }

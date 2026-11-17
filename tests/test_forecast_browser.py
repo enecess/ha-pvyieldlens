@@ -15,21 +15,24 @@ def forecast_payload(day='2026-11-01', home_timezone='UTC'):
     dates = [datetime.fromisoformat(day).replace(tzinfo=zone) + timedelta(days=i) for i in range(8)]
     boundaries = [date.timestamp() for date in dates]
     def total(start, end):
-        return {'start': start, 'end': end, 'forecast_energy_kwh': 89.28, 'data_completeness_percent': 100, 'quality': 'complete'}
+        return {'start': start, 'end': end, 'forecast_energy_kwh': 3720 * (end-start) / 3600000,
+                'corrected_forecast_energy_kwh': 3348 * (end-start) / 3600000, 'data_completeness_percent': 100, 'quality': 'complete'}
     rows = []
-    start = boundaries[0] // 3600 * 3600
+    start = boundaries[0] // 900 * 900
     while start < boundaries[-1]:
-        left, right = max(start, boundaries[0]), min(start + 3600, boundaries[-1])
+        left, right = max(start, boundaries[0]), min(start + 900, boundaries[-1])
         rows.append({'start': left, 'end': right, 'irradiance_w_m2': 800, 'air_temperature_c': 20,
-                     'cell_temperature_c': 45, 'forecast_power_w': 3720, 'forecast_energy_kwh': 3720 * (right-left) / 3600000,
+                     'cell_temperature_c': 45, 'forecast_power_w': 3720, 'corrected_forecast_power_w': 3348,
+                     'corrected_forecast_energy_kwh': 3348 * (right-left) / 3600000, 'forecast_energy_kwh': 3720 * (right-left) / 3600000,
                      'quality': 'complete'})
-        start += 3600
-    return {'status': 'ready', 'refreshing': False, 'fetched_at': boundaries[0] + 3600,
+        start += 900
+    return {'correction': {'pr': 90, 'history_days': 14, 'start': boundaries[0]-14*86400, 'end': boundaries[0]},
+            'status': 'ready', 'refreshing': False, 'fetched_at': boundaries[0] + 3600,
             'calculated_at': boundaries[0] + 48000, 'last_error': None, 'home_timezone': home_timezone,
             'today': total(boundaries[0], boundaries[1]),
-            'remaining_today': {**total(boundaries[0]+48000, boundaries[1]), 'forecast_energy_kwh': 39.68},
+            'remaining_today': {**total(boundaries[0]+48000, boundaries[1]), 'forecast_energy_kwh': 39.68, 'corrected_forecast_energy_kwh': 35.712},
             'tomorrow': total(boundaries[1], boundaries[2]),
-            'seven_days': {**total(boundaries[0], boundaries[-1]), 'forecast_energy_kwh': 624.96},
+            'seven_days': {**total(boundaries[0], boundaries[-1]), 'forecast_energy_kwh': 624.96, 'corrected_forecast_energy_kwh': 562.464},
             'days': [{**total(left, right), 'day': dates[i].date().isoformat(),
                       'weather': {'weather_code': [0, 3, 61, 71, 95, None, 48][i],
                                   'air_temperature_min_c': 0 if i == 0 else 10 + i,
@@ -60,7 +63,7 @@ async def forecast_page(browser_workspace):
     return page, state, web
 
 
-async def test_forecast_days_select_hourly_details_and_preserve_selection(forecast_page):
+async def test_forecast_days_select_quarter_hour_details_and_preserve_selection(forecast_page):
     from playwright.async_api import expect
     page, state, _ = forecast_page
     await page.locator('#forecast-tab').click()
@@ -73,18 +76,18 @@ async def test_forecast_days_select_hourly_details_and_preserve_selection(foreca
     await expect(page.locator('#forecast-day-heading')).to_contain_text('Nov 3')
     await expect(page.locator('#forecast-day-total')).to_have_text('89.28 kWh')
     await page.locator('#forecast-details summary').click()
-    await expect(page.locator('#forecast-rows tr')).to_have_count(24)
+    await expect(page.locator('#forecast-rows tr')).to_have_count(96)
     await expect(page.locator('#forecast-rows tr').first).to_contain_text('3,720')
-    await expect(page.locator('#forecast-rows tr').first).to_contain_text('3.72')
+    await expect(page.locator('#forecast-rows tr').first).to_contain_text('0.93')
     await expect(page.locator('#forecast-rows tr').first).to_contain_text('800')
     await expect(page.locator('#forecast-rows tr').first).to_contain_text('20')
     await expect(page.locator('#forecast-rows tr').first).to_contain_text('45')
     await expect(page.locator('#forecast-details th')).to_contain_text([
-        'Interval', 'Irradiance', 'Air temperature', 'Estimated cell temperature', 'Forecast power', 'Interval energy'])
-    await expect(page.locator('#forecast-chart svg')).to_have_attribute('aria-label', 'Forecast power')
+        'Interval', 'Irradiance', 'Air temperature', 'Estimated cell temperature', 'Original forecast power', 'Corrected forecast power', 'Original forecast energy', 'Corrected forecast energy'])
+    await expect(page.locator('#forecast-chart svg')).to_have_attribute('aria-label', 'Original forecast power / Corrected forecast power')
     await page.locator('#forecast-chart .chart-hit-area').focus()
     await page.keyboard.press('ArrowRight')
-    await expect(page.locator('#forecast-chart .chart-tooltip')).to_contain_text('3.72 kWh')
+    await expect(page.locator('#forecast-chart .chart-tooltip')).to_contain_text('0.93 kWh')
     await expect(page.locator('#forecast-chart .chart-tooltip')).to_contain_text('3,720 W')
     await expect(page.locator('#forecast-fetched')).to_contain_text('Nov 1')
     await page.locator('#settings-button').click()
@@ -106,26 +109,34 @@ async def test_forecast_states_are_truthful(forecast_page, status):
     if status in ('disabled', 'location_unavailable', 'unavailable', 'loading'):
         view.update(fetched_at=None, days=[], intervals=[], today=None, remaining_today=None, tomorrow=None, seven_days=None)
     if status in ('partial', 'stale'):
-        view['days'][1].update(forecast_energy_kwh=None, quality='partial', data_completeness_percent=50)
-        view['seven_days'].update(forecast_energy_kwh=None, quality='partial', data_completeness_percent=92.85)
+        view['days'][1].update(forecast_energy_kwh=None, corrected_forecast_energy_kwh=None, quality='partial', data_completeness_percent=50)
+        view['seven_days'].update(forecast_energy_kwh=None, corrected_forecast_energy_kwh=None, quality='partial', data_completeness_percent=92.85)
         view['tomorrow'] = view['days'][1]
-        view['intervals'][36].update(forecast_power_w=None, forecast_energy_kwh=None, quality='unavailable')
+        view['intervals'][144].update(forecast_power_w=None, corrected_forecast_power_w=None,
+                                      forecast_energy_kwh=None, corrected_forecast_energy_kwh=None, quality='unavailable')
     if status in ('unavailable', 'stale'):
         view['last_error'] = 'forecast_request_failed'
     await page.locator('#forecast-tab').click()
-    await expect(page.locator('#forecast-status')).to_have_attribute('data-status', status)
+    if status in ('disabled', 'location_unavailable', 'unavailable', 'loading'):
+        await expect(page.locator('#forecast-status')).to_have_attribute('data-status', status)
+    else:
+        await expect(page.locator('#forecast-status')).to_have_count(0)
     if status in ('partial', 'stale'):
         await expect(page.locator('#forecast-seven-days')).to_have_text('— kWh')
         await expect(page.locator('#forecast-days button').first).to_contain_text('89.28')
         await page.locator('#forecast-days button').nth(1).click()
         await expect(page.locator('#forecast-day-total')).to_have_text('— kWh')
-        await expect(page.locator('#forecast-day-data-completeness')).to_contain_text('50%')
-        assert await page.locator('#forecast-chart path.series').evaluate("node => (node.getAttribute('d').match(/M/g) || []).length") == 2
+        await expect(page.locator('#forecast-day-data-completeness')).to_have_count(0)
+        content = (await page.locator('#forecast-page').inner_text()).lower()
+        assert not any(word in content for word in ('completeness', 'quality', 'coverage', 'partial', 'stale'))
+        for label in await page.locator('#forecast-days button').evaluate_all("nodes => nodes.map(node => node.getAttribute('aria-label'))"):
+            assert not any(word in label.lower() for word in ('complete', 'quality', 'coverage', 'partial'))
+        assert await page.locator('#forecast-chart path.series').first.evaluate("node => (node.getAttribute('d').match(/M/g) || []).length") == 2
         geometry = await page.locator('#forecast-chart').evaluate('''host => {
             const path = host.querySelector('path.series'), width = host.clientWidth - 60;
             return {left: path.getPointAtLength(0).x,
                 right: path.getPointAtLength(path.getTotalLength()).x,
-                edge: host.clientWidth - 12, gapStart: 48 + width / 2, gapEnd: 48 + width * 13 / 24,
+                edge: host.clientWidth - 12, gapStart: 48 + width / 2, gapEnd: 48 + width * 49 / 96,
                 samples: Array.from({length: 2001}, (_, index) => path.getPointAtLength(path.getTotalLength() * index / 2000).x)};
         }''')
         assert geometry['left'] == pytest.approx(48, abs=0.05)
@@ -133,7 +144,6 @@ async def test_forecast_states_are_truthful(forecast_page, status):
         assert all(x <= geometry['gapStart'] + 0.05 or x >= geometry['gapEnd'] - 0.05 for x in geometry['samples'])
         await expect(page.locator('#forecast-fetched')).to_contain_text('Nov 1')
         if status == 'stale':
-            await expect(page.locator('#forecast-status')).to_contain_text('older')
             await expect(page.locator('#forecast-error')).not_to_be_empty()
     else:
         await expect(page.locator('#forecast-remaining')).to_have_text('—')
@@ -142,7 +152,7 @@ async def test_forecast_states_are_truthful(forecast_page, status):
     await expect(page.locator('[data-settings-section=forecast]')).to_be_visible()
 
 
-async def test_scalar_poll_does_not_redraw_or_refetch_hourly_forecast(forecast_page):
+async def test_scalar_poll_does_not_redraw_or_refetch_forecast_detail(forecast_page):
     from playwright.async_api import expect
     page, state, _ = forecast_page
     await page.locator('#forecast-tab').click()
@@ -203,7 +213,7 @@ async def test_forecast_ingress_mobile_and_language(forecast_page, width):
         await page.locator('#forecast-tab').click()
         await expect(page.locator('#forecast-days button')).to_have_count(7)
         await page.locator('#forecast-details summary').click()
-        await expect(page.locator('#forecast-rows tr')).to_have_count(25)
+        await expect(page.locator('#forecast-rows tr')).to_have_count(100)
         rows = await page.locator('#forecast-rows').inner_text()
         assert 'GMT-4' in rows and 'GMT-5' in rows
         await expect(page.locator('#forecast-details-help')).to_be_visible()
@@ -219,7 +229,7 @@ async def test_forecast_ingress_mobile_and_language(forecast_page, width):
         await expect(page.locator('#forecast-rows time').first).to_have_attribute('datetime', '2026-11-01T04:00:00.000Z')
         await expect(page.locator('#forecast-rows time').first).to_have_attribute('aria-label', 'Nov 1, 2026, 00:00')
         await page.locator('#language-select').select_option('fr')
-        await expect(page.locator('#forecast-chart svg')).to_have_attribute('aria-label', 'Puissance prévue')
+        await expect(page.locator('#forecast-chart svg')).to_have_attribute('aria-label', 'Puissance prévue originale / Puissance prévue corrigée')
         assert await page.evaluate('document.documentElement.scrollWidth <= innerWidth')
         for button in await page.locator('#forecast-days button').all():
             box = await button.bounding_box()
@@ -234,11 +244,11 @@ async def test_non_hour_timezone_clips_both_daily_interval_portions(forecast_pag
     await expect(page.locator('#forecast-days button')).to_have_count(7)
     await page.locator('#forecast-days button').nth(1).click()
     await page.locator('#forecast-details summary').click()
-    await expect(page.locator('#forecast-rows tr')).to_have_count(25)
+    await expect(page.locator('#forecast-rows tr')).to_have_count(96)
     first, last = page.locator('#forecast-rows tr').first, page.locator('#forecast-rows tr').last
     await expect(first).to_contain_text('00:00')
-    await expect(first).to_contain_text('00:45')
-    await expect(first).to_contain_text('2.79')
+    await expect(first).to_contain_text('00:15')
+    await expect(first).to_contain_text('0.837')
     await expect(last).to_contain_text('23:45')
     await expect(last).to_contain_text('00:00')
     await expect(last).to_contain_text('0.93')
@@ -248,7 +258,8 @@ async def test_non_hour_timezone_clips_both_daily_interval_portions(forecast_pag
 async def test_shared_plot_keeps_gaps_and_readable_responsive_ticks(forecast_page):
     from playwright.async_api import expect
     page, state, _ = forecast_page
-    state['view']['intervals'][12].update(forecast_power_w=None, forecast_energy_kwh=None, quality='unavailable')
+    state['view']['intervals'][12].update(forecast_power_w=None, corrected_forecast_power_w=None,
+                                         forecast_energy_kwh=None, corrected_forecast_energy_kwh=None, quality='unavailable')
     await page.locator('#forecast-tab').click()
     await expect(page.locator('#forecast-chart svg')).to_be_visible()
     result = await page.locator('#forecast-chart').evaluate("""host => {
@@ -298,67 +309,65 @@ async def test_forecast_refresh_and_rollover_keep_valid_selected_day(forecast_pa
     await expect(page.locator('#forecast-chart svg')).not_to_have_attribute('data-original', 'hidden')
 
 
-async def test_forecast_and_monitoring_layout_evidence(forecast_page, browser_workspace, monkeypatch):
-    from types import SimpleNamespace
-    import pvyieldlens.web as web_module
-    import pvyieldlens.service as service_module
+async def test_forecast_layout_evidence(forecast_page):
+    from math import pi, sin
     from playwright.async_api import expect
-    from test_engine import samples
-    from pvyieldlens.engine import calculate
-    from pvyieldlens.forecast import ForecastBatch, WeatherSample, calculate_forecast, forecast_view
-    from pvyieldlens.settings import ForecastSettings
-    from forecast_fixtures import forecast_input
     page, state, _ = forecast_page
-    _, service, _ = browser_workspace
-    start = service.store.cursor
-    now = start + 1800
-    clock = SimpleNamespace(time=lambda: now)
-    monkeypatch.setattr(web_module, 'time', clock)
-    monkeypatch.setattr(service_module, 'time', clock)
-    await page.evaluate('now => Date.now = () => now', now*1000)
-    inputs = forecast_input()
-    midnight = datetime.fromtimestamp(now, ZoneInfo('UTC')).replace(hour=0, minute=0, second=0, microsecond=0).timestamp()
-    weather = tuple(WeatherSample(at=midnight+i*3600, irradiance_w_m2=[0,0,0,0,0,0,20,100,300,500,650,800,850,700,500,300,100,20,0,0,0,0,0,0][i % 24], air_temperature_c=20, weather_code=0)
-                    for i in range(7*24+1))
-    state['view'] = forecast_view(ForecastBatch(inputs=inputs, fetched_at=now-1800,
-        intervals=calculate_forecast(inputs, weather), weather_samples=weather), inputs,
-        ForecastSettings(enabled=True, tilt_deg=25, azimuth_deg=180), now).model_dump(mode='json')
-    for offset in range(0,1800,60):
-        values = samples(power=2500 + offset/3, at=start+offset)
-        service.store.settle(calculate(service.monitoring_settings, values, start+offset, start+offset+60), 1, 'UTC')
-    service.store.add_observations(samples(at=now-60))
-    await service.tick(now)
-    await expect(page.locator('#live-actual')).to_have_text('3,348')
-    path = Path('artifacts/task-7-layout')
-    path.mkdir(parents=True, exist_ok=True)
-    for size, width in [('desktop',1440),('mobile',390)]:
-        await page.set_viewport_size({'width':width,'height':900 if width>600 else 844})
-        for name, control in [('live','live-tab'),('history','history-tab'),('forecast','forecast-tab'),('settings','settings-button')]:
-            await page.locator(f'#{control}').click()
-            if name == 'settings':
-                await page.emulate_media(reduced_motion='reduce')
-                await page.locator('[data-settings-category=forecast]').click()
-            if name == 'forecast':
-                await expect(page.locator('#forecast-days button')).to_have_count(7)
-                await expect(page.locator('#forecast-chart path')).to_be_visible()
-            if name == 'history':
-                await expect(page.locator('#history-chart path')).to_have_count(2)
+    view = state['view']
+    energies = [24.8, 29.1, 22.3, 19.5, 27.9, 30.4, 26.0]
+    shape = [max(0, sin((slot / 4 + .125 - 6) / 12 * pi)) for slot in range(96)]
+    for index, row in enumerate(view['intervals']):
+        energy = shape[index % 96] / sum(shape) * energies[index // 96]
+        row.update(forecast_power_w=energy * 4000, corrected_forecast_power_w=energy * 3600,
+                   forecast_energy_kwh=energy, corrected_forecast_energy_kwh=energy * .9,
+                   irradiance_w_m2=shape[index % 96] * 850,
+                   air_temperature_c=15 + shape[index % 96] * 8,
+                   cell_temperature_c=15 + shape[index % 96] * 33)
+    for day, energy in zip(view['days'], energies):
+        day.update(forecast_energy_kwh=energy, corrected_forecast_energy_kwh=energy * .9)
+    view['today'] = view['days'][0]
+    view['tomorrow'] = view['days'][1]
+    remaining = sum(row['forecast_energy_kwh'] * max(0, row['end'] - max(row['start'], view['calculated_at'])) / (row['end']-row['start'])
+                    for row in view['intervals'][:96] if row['end'] > view['calculated_at'])
+    view['remaining_today'].update(forecast_energy_kwh=remaining, corrected_forecast_energy_kwh=remaining * .9)
+    view['seven_days'].update(forecast_energy_kwh=sum(energies), corrected_forecast_energy_kwh=sum(energies) * .9)
+    await page.locator('#forecast-tab').click()
+    await expect(page.locator('#forecast-days button')).to_have_count(7)
+    await page.locator('#language-select').select_option('zh')
+    evidence = Path('artifacts/task-6-forecast')
+    evidence.mkdir(parents=True, exist_ok=True)
+    for size, width, height in [('desktop', 1440, 1100), ('mobile', 390, 1000)]:
+        await page.set_viewport_size({'width': width, 'height': height})
+        for theme in ('light', 'dark'):
+            await page.locator('#theme-select').select_option(theme)
+            await expect(page.locator('#forecast-chart path.series')).to_have_count(2)
+            await page.locator('#content-scroll').evaluate('node => node.scrollTo(0, 0)')
             assert await page.evaluate('document.documentElement.scrollWidth <= innerWidth')
-            await page.screenshot(path=str(path/f'{name}-{size}.png'))
-            if name == 'forecast':
-                await page.locator('.forecast-hourly').scroll_into_view_if_needed()
-                chart = await page.locator('#forecast-chart').bounding_box()
-                assert chart['width'] > 0 and chart['x'] >= 0 and chart['x'] + chart['width'] <= width
-                await page.screenshot(path=str(path/f'forecast-hourly-{size}.png'))
-                await page.locator('#forecast-details summary').click()
-                await page.locator('#forecast-details').evaluate('''details => {
-                    const scroll = document.querySelector('#content-scroll');
-                    scroll.scrollTo(0, scroll.scrollTop + details.getBoundingClientRect().top - scroll.getBoundingClientRect().top - 16);
-                }''')
-                assert (await page.locator('#forecast-details').bounding_box())['y'] >= (await page.locator('.app-header').bounding_box())['height']
-                await page.screenshot(path=str(path/f'forecast-details-{size}.png'))
-                await page.locator('#forecast-details summary').click()
-        await page.locator('#forecast-tab').click()
+            colors = await page.locator('#forecast-chart path.series').evaluate_all("nodes => nodes.map(node => getComputedStyle(node).stroke)")
+            assert colors == (['rgb(184, 120, 36)', 'rgb(37, 133, 120)'] if theme == 'light'
+                              else ['rgb(233, 181, 110)', 'rgb(113, 203, 185)'])
+            await page.screenshot(path=str(evidence / f'forecast-{size}-{theme}.png'))
+            await page.locator('#forecast-data > .panel').first.screenshot(path=str(evidence / f'forecast-calendar-{size}-{theme}.png'))
+            await page.locator('#forecast-chart').scroll_into_view_if_needed()
+            await page.locator('#forecast-chart .chart-hit-area').focus()
+            for _ in range(43):
+                await page.keyboard.press('ArrowRight')
+            await expect(page.locator('#forecast-chart .chart-tooltip')).to_contain_text('修正预测电量')
+            await page.locator('.forecast-hourly').screenshot(path=str(evidence / f'forecast-tooltip-{size}-{theme}.png'))
+            await page.keyboard.press('Escape')
+            await page.locator('#forecast-details summary').click()
+            await expect(page.locator('#forecast-rows tr')).to_have_count(96)
+            await page.locator('#forecast-details').evaluate("""details => {
+                const scroll = document.querySelector('#content-scroll');
+                scroll.scrollTo(0, scroll.scrollTop + details.getBoundingClientRect().top - scroll.getBoundingClientRect().top - 16);
+            }""")
+            await page.screenshot(path=str(evidence / f'forecast-details-{size}-{theme}.png'))
+            if size == 'mobile':
+                await page.locator('#forecast-details .table-scroll').evaluate('node => node.scrollLeft = node.scrollWidth')
+                await page.screenshot(path=str(evidence / f'forecast-details-corrected-{size}-{theme}.png'))
+                await page.locator('#forecast-details .table-scroll').evaluate('node => node.scrollLeft = 0')
+            await page.locator('#forecast-details summary').click()
+    assert state['hourly'] == 1
 
 
 async def test_new_batch_keeps_selected_date_with_an_older_light_snapshot(forecast_page):
@@ -433,4 +442,68 @@ async def test_missing_daily_weather_keeps_energy_and_neutral_cards(forecast_pag
     await expect(page.locator('#forecast-days .day-temperature').first).to_have_text('— / —')
     await expect(page.locator('#forecast-days .day-temperature').nth(1)).to_have_text('0° / 0°')
     await expect(page.locator('#forecast-day-total')).to_have_text('89.28 kWh')
-    await expect(page.locator('#forecast-status')).to_have_attribute('data-status', 'ready')
+    await expect(page.locator('#forecast-status')).to_have_count(0)
+
+
+async def test_updates_corrected_detail_without_refetching_weather(forecast_page):
+    from playwright.async_api import expect
+    page, state, _ = forecast_page
+    await page.locator('#forecast-tab').click()
+    await expect(page.locator('#forecast-days button')).to_have_count(7)
+    await page.locator('[data-day="2026-11-03"]').click()
+    fetched_at = state['view']['fetched_at']
+    requests = state['hourly']
+    state['view']['correction']['pr'] = 120
+    for row in state['view']['intervals']:
+        row.update(corrected_forecast_power_w=row['forecast_power_w'] * 1.2,
+                   corrected_forecast_energy_kwh=row['forecast_energy_kwh'] * 1.2)
+    for day in state['view']['days']:
+        day['corrected_forecast_energy_kwh'] = day['forecast_energy_kwh'] * 1.2
+    for key in ('today', 'remaining_today', 'tomorrow', 'seven_days'):
+        state['view'][key]['corrected_forecast_energy_kwh'] = state['view'][key]['forecast_energy_kwh'] * 1.2
+    state['view']['calculated_at'] += 1
+    await expect(page.locator('#forecast-day-total-corrected')).to_have_text('107.136 kWh')
+    await expect(page.locator('#forecast-days [aria-pressed=true]')).to_have_attribute('data-day', '2026-11-03')
+    assert state['view']['fetched_at'] == fetched_at
+    assert state['hourly'] == requests + 1
+    assert state['refresh'] == 0
+    await page.locator('#forecast-details summary').click()
+    await expect(page.locator('#forecast-rows tr').first).to_contain_text('4,464')
+
+
+@pytest.mark.parametrize(('day', 'count'), [('2026-03-29', 92), ('2026-10-25', 100)])
+async def test_quarter_hour_dst_day_lengths(forecast_page, day, count):
+    from playwright.async_api import expect
+    page, state, _ = forecast_page
+    state['view'] = forecast_payload(day, 'Europe/Berlin')
+    await page.locator('#forecast-tab').click()
+    await expect(page.locator('#forecast-days button')).to_have_count(7)
+    await page.locator('#forecast-details summary').click()
+    await expect(page.locator('#forecast-rows tr')).to_have_count(count)
+    await expect(page.locator('#forecast-rows td').nth(7)).to_have_text('0.837')
+
+
+@pytest.mark.parametrize('pr', [None, 0, 120])
+async def test_missing_zero_and_above_100_correction_bars(forecast_page, pr):
+    from playwright.async_api import expect
+    page, state, _ = forecast_page
+    view = state['view']
+    view['correction']['pr'] = pr
+    for row in view['intervals']:
+        row.update(corrected_forecast_power_w=None if pr is None else row['forecast_power_w'] * pr / 100,
+                   corrected_forecast_energy_kwh=None if pr is None else row['forecast_energy_kwh'] * pr / 100)
+    for total in [*view['days'], *(view[key] for key in ('today', 'remaining_today', 'tomorrow', 'seven_days'))]:
+        total['corrected_forecast_energy_kwh'] = None if pr is None else total['forecast_energy_kwh'] * pr / 100
+    await page.locator('#forecast-tab').click()
+    await expect(page.locator('#forecast-days button')).to_have_count(7)
+    await expect(page.locator('#forecast-remaining')).to_have_text('39.68')
+    await expect(page.locator('#forecast-remaining-corrected')).to_have_text('—' if pr is None else '0' if pr == 0 else '47.616')
+    bar = page.locator('#forecast-days .day-bar.corrected').first
+    if pr is None:
+        assert 'linear-gradient' in await bar.evaluate('node => getComputedStyle(node).backgroundImage')
+    elif pr == 0:
+        assert await bar.evaluate('node => node.getBoundingClientRect().height') == 0
+    else:
+        assert await bar.evaluate('node => node.getBoundingClientRect().height') == 70
+    await page.locator('#forecast-details summary').click()
+    await expect(page.locator('#forecast-rows tr').first.locator('td').nth(5)).to_have_text('—' if pr is None else '0' if pr == 0 else '4,464')

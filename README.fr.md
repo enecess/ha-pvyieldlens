@@ -6,11 +6,12 @@ Comparez la puissance estimée et réelle de vos panneaux. Suivez le PR et l’�
 
 ## Fonctions
 
-- Puissance, PR et puissance optimisable en direct.
-- Historique de puissance et de PR par périodes de 1, 5 ou 10 minutes.
-- Énergie estimée pour aujourd’hui et depuis la mise en service.
-- Courbes sur 24 heures, 7 jours ou 30 jours.
-- Six langues, à choisir dans le menu en haut à droite.
+- Tableau de bord : puissance, PR et production clôturée du jour.
+- Comparaisons d’efficacité sur les règlements originaux de 1, 5 ou 10 minutes.
+- Énergie estimée du jour et depuis la configuration.
+- Énergie quotidienne comparée sur 7/30 jours ou une période personnalisée de 90 dates maximum.
+- Prévisions originales et corrigées par 15 minutes.
+- Six langues, avec un menu en haut à droite.
 
 ## Démarrage rapide
 
@@ -52,7 +53,7 @@ Par défaut, la page est accessible sur la machine Docker. Pour y accéder depui
 
 ## Réglages
 
-**Temps réel** affiche les moyennes actuelles et les diagnostics ; **Historique**, les périodes clôturées et l’énergie/PR de la plage choisie ; **Prévisions**, les estimations météo. L’entrée **Paramètres**, avec roue dentée et texte, est séparée en haut à droite ; les trois onglets de données restent accessibles. Le répertoire fait défiler un formulaire continu : Connexion Home Assistant, Modules photovoltaïques, Capteurs, Surveillance et Prévisions.
+Le **Tableau de bord** présente la puissance actuelle et la production du jour ; **Efficacité** compare l’énergie clôturée et le PR ; **Prévisions** compare les valeurs originales et corrigées. Les **Paramètres** restent en haut à droite et les trois vues restent accessibles. Le répertoire couvre la connexion HA, les modules, les capteurs, la surveillance et les prévisions.
 
 **Enregistrer la configuration** vous laisse dans les Paramètres. **Abandonner les modifications** recharge la configuration enregistrée sur le serveur et remplace vos modifications ; en cas d’échec, le brouillon est conservé pour réessayer. Quitter avec des modifications demande de poursuivre l’édition ou de les abandonner. Revenir aux Paramètres recharge la configuration enregistrée.
 
@@ -69,11 +70,13 @@ Le menu **Mode du thème**, en haut à droite, propose Auto, Clair et Sombre. Au
 | Moyenne sur | Durée utilisée pour la moyenne en direct. Par défaut : 60 secondes. |
 | Mise à jour toutes les | Délai entre deux mises à jour. Par défaut : 5 secondes. |
 
-Enregistrez, puis ouvrez **Temps réel**. Le premier résultat clôturé apparaît dans **Historique** à la fin de la période en cours. Sous **Délai sans données**, réglez le temps d’attente pour chaque capteur.
+Enregistrez, puis ouvrez **Tableau de bord**. Le premier résultat clôturé apparaît dans **Efficacité** à la fin de la période en cours. Sous **Délai sans données**, réglez le temps d’attente pour chaque capteur.
 
-Le direct précharge une fenêtre fixe de dix minutes à l’ouverture ou à la reconnexion. Chaque point utilise toujours **Moyenne sur** et la collecte suit **Mise à jour toutes les**. La tendance est reconstruite à partir des observations conservées et des paramètres actuels ; ce n’est pas un journal des instantanés publiés. Les observations absentes ou expirées et le point actuellement hors ligne restent des lacunes. Les anciennes coupures sans lacune identifiable ne peuvent pas être reconstituées précisément. L’Historique conserve les résultats clôturés originaux. Lorsque les diagnostics sont dépliés sur la page Temps réel visible, les trois capteurs configurés sont lus dans Home Assistant environ une fois par seconde. Replier les diagnostics, changer de page ou masquer l’onglet du navigateur suspend ces requêtes. L’âge utilise l’heure de Home Assistant et avance localement entre les lectures ; l’intervalle de surveillance et les mises à jour du graphique restent inchangés.
+Le Tableau de bord précharge les dix dernières minutes à l’ouverture ou à la reconnexion. Les données de production montrent aujourd’hui les puissances estimée/réelle clôturées, l’irradiance et la température des modules. Le graphique d’énergie propose 7 jours par défaut, 30 jours ou une période personnalisée inclusive de 90 dates du foyer au maximum, sans dépasser aujourd’hui. Une absence reste vide et zéro reste zéro ; les règlements et cumuls conservés ne changent pas.
 
-Les courbes lissées servent uniquement à l’affichage. Les infobulles à la souris, au toucher et au clavier donnent les valeurs originales ; les prévisions donnent l’intervalle horaire original. Énergie et PR utilisent les données originales. L’heure du domicile détermine les totaux journaliers, dates de prévision, météo, Aujourd’hui et intervalles horaires. Les horodatages du direct/de l’historique et les heures de mise à jour/récupération suivent la préférence HA server/local du lecteur ; Docker autonome utilise l’heure du navigateur. Une préférence HA illisible entraîne un repli sur l’heure du domicile. Une note signale les fuseaux différents ; les décalages UTC ne servent qu’à distinguer les heures répétées ou un changement de décalage dans un intervalle.
+Efficacité montre le PR de la période, sa variation en points par rapport à la période précédente comparable et l’énergie estimée moins l’énergie réelle. Aujourd’hui se compare à hier jusqu’à la même heure locale ; 24 heures aux 24 heures précédentes ; 7/30 jours au même intervalle décalé de 7/30 dates du foyer. Les deux graphiques partagent le choix du résumé quotidien ou de chaque intervalle de règlement configuré.
+
+Le lissage concerne seulement le dessin. Souris, toucher et clavier inspectent les enregistrements originaux, y compris les intervalles de prévision de 15 minutes. Énergie et PR utilisent les valeurs non lissées. Les dates et prévisions suivent l’heure du foyer ; les horodatages de surveillance et de récupération suivent la préférence HA server/local du lecteur, ou le navigateur sous Docker autonome. Les décalages UTC distinguent au besoin les heures répétées.
 
 ## Prévisions de production
 
@@ -81,11 +84,15 @@ Les prévisions sont désactivées par défaut à la première installation. Dan
 
 La surveillance utilise la **Température des modules** mesurée. Les prévisions utilisent la **Température de l’air** et la **Température nominale de fonctionnement des cellules (NOCT)** pour calculer la **Température estimée des cellules**. Ces grandeurs sont distinctes ; la surveillance ne convertit pas la température des modules en température des cellules.
 
-Open-Meteo fournit la météo horaire pour aujourd’hui et les six jours calendaires locaux suivants. Choisissez une date pour l’énergie de la journée, la courbe horaire et le tableau des intervalles. La prévision du jour couvre toute la journée ; **Reste aujourd’hui** couvre seulement maintenant jusqu’à minuit local. Ces valeurs utilisent la dernière météo obtenue avec succès et sont distinctes de l’énergie estimée clôturée calculée à partir des capteurs. L’énergie restante diminue avec le temps entre deux téléchargements ; une nouvelle météo peut aussi réviser le total du jour.
+Open-Meteo fournit des entrées de modèle toutes les 15 minutes pour aujourd’hui et les six jours calendaires suivants du foyer. Certaines régions ou variables interpolent des modèles horaires ; ce pas ne garantit pas une meilleure précision. Choisissez une date pour les énergies originale/corrigée, les courbes de puissance et les détails. Le jour couvre toute la journée ; **Reste aujourd’hui** va de maintenant à minuit du foyer et diminue entre téléchargements. Un jour normal comporte 96 intervalles, contre 92 ou 100 lors d’un changement d’heure.
 
-Chaque carte présente météo, maximum/minimum des prévisions horaires, barre d’énergie et kWh. Le libellé chaud **Aujourd’hui** suit minuit au domicile et reste visible lorsqu’une autre date est sélectionnée en bleu. Les températures sont les extrêmes des relevés horaires bruts ; la météo représentative utilise le code WMO connu maximal du jour. Chaque champ exige tous les échantillons horaires UTC attendus dans la journée du domicile, y compris les journées de 23/25 heures et les fuseaux fractionnaires. Un champ incomplet est indisponible, l’autre reste visible s’il est complet. Zéro est valide ; une météo inconnue reçoit une icône neutre. Météo et puissance partagent requête, cache et heure de récupération, sans cadence supplémentaire.
+Les cartes conservent la météo et les températures maximale/minimale des prévisions horaires, avec deux barres d’énergie et les kWh. Le repère chaud **Aujourd’hui** suit minuit du foyer indépendamment de la sélection bleue. Les résumés météo gardent les échantillons horaires de la même requête, du même cache et de la même heure de récupération. Météo et énergie peuvent être indisponibles séparément ; zéro reste valide.
 
-La météo est actualisée chaque heure, ou avec **Actualiser les prévisions**. Le cache correspondant est conservé au redémarrage. Un échec conserve l’heure d’origine et signale des données anciennes ; nouvelle tentative après 15 minutes. Les données datant d’au moins deux heures sont également anciennes. Des intervalles manquants rendent les totaux concernés indisponibles ; la complétude des données reste affichée et les valeurs manquantes ne deviennent pas zéro. L’interface distingue désactivation, lieu HA absent, chargement initial et indisponibilité.
+La météo s’actualise normalement chaque heure ou avec **Actualiser les prévisions**. Le cache correspondant survit au redémarrage. Un échec conserve l’heure de récupération, affiche l’erreur et réessaie après 15 minutes. Des entrées manquantes rendent les totaux concernés indisponibles (**—**). Les états désactivé, lieu absent, chargement et absence de données restent affichés.
+
+La **Prévision originale** garde le modèle météo/NOCT ; la **Prévision corrigée** le multiplie par le PR récent pondéré par l’énergie et la récence des dates terminées du foyer. Dans **Paramètres > Prévisions**, les jours historiques du PR valent n=14 par défaut, entier de 3 à 90 ; la demi-vie vaut n/2 jours. Il faut au moins 3 dates admissibles à énergie estimée positive. Les énergies réelle et estimée couvrent les mêmes périodes valides après la dernière configuration de surveillance comparable. Une production réelle nulle reste admissible ; un PR supérieur à 100 % n’est pas plafonné. Sans assez d’historique, les valeurs corrigées affichent **—**, les originales restent disponibles. Modifier n recalcule la correction sans nouvelle requête météo.
+
+La correction concerne seulement la page et l’API applicative. Les 13 identifiants et significations des sorties HA restent inchangés ; les quatre entités de prévision gardent l’énergie originale intégrée à partir des intervalles de 15 minutes.
 
 Il s’agit d’une référence estimée en courant continu pour un seul champ de panneaux, avec irradiance dans leur plan et modèle thermique NOCT simplifié. Rendement/écrêtage de l’onduleur, ombrage, neige, salissures et pertes ne sont pas modélisés ; la production réelle en courant alternatif n’est pas garantie. Les quatre entités météo sont en kWh, de classe energy, sans `state_class` ; elles peuvent diminuer et restent séparées des compteurs cumulés. Elles ne fournissent pas d’intégration native aux prévisions HA ni au tableau de bord Énergie.
 

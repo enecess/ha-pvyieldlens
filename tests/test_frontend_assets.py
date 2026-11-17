@@ -110,6 +110,8 @@ async def test_installed_frontend_browser_under_ingress(installed_frontend):
                              ('forecast-tab', 'forecast-page'), ('settings-button', 'settings-page')]:
             await page.locator('#' + button).click()
             await expect(page.locator('#' + view)).to_be_visible()
+        await expect(page.locator('#forecast-details-label')).to_have_text('15-minute details')
+        await expect(page.locator('#forecast-remaining-corrected')).to_have_text('—')
         assert errors == []
         assert failed == []
         await browser.close()

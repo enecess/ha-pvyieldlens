@@ -195,17 +195,19 @@ it('inspects_raw_points_omitted_by_thinning', () => {
 });
 
 it('uses_half_open_forecast_intervals', () => {
-  const points = [0, 3600].map(start => ({ at: start + 1800, forecast_power_w: start ? 200 : 100,
-    interval: { start, end: start + 3600, forecast_power_w: start ? 200 : 100, forecast_energy_kwh: 0.1,
+  const points = [0, 900].map(start => ({ at: start + 450, forecast_power_w: start ? 200 : 100,
+    corrected_forecast_power_w: start ? 180 : 90,
+    interval: { start, end: start + 900, forecast_power_w: start ? 200 : 100, forecast_energy_kwh: 0.025,
+      corrected_forecast_power_w: start ? 180 : 90, corrected_forecast_energy_kwh: 0.0225,
       irradiance_w_m2: 800, air_temperature_c: 20, cell_temperature_c: 45, quality: 'complete' as const } }));
   let intervalAtBoundary: ChartPoint | undefined;
-  const { host } = chart(points, { range: { start: 0, end: 7200 }, selection: 'interval',
+  const { host } = chart(points, { range: { start: 0, end: 1800 }, selection: 'interval',
     tooltip: (point: ChartPoint) => { intervalAtBoundary = point; return { title: String(point.at), rows: [] }; } },
   [{ key: 'forecast_power_w', label: 'Forecast power', color: 'blue' }]);
-  inspect(host, 3600, 0, 7200);
-  expect(intervalAtBoundary?.interval?.start).toBe(3600);
-  inspect(host, 7200, 0, 7200);
-  expect(intervalAtBoundary?.interval?.start).toBe(3600);
+  inspect(host, 900, 0, 1800);
+  expect(intervalAtBoundary?.interval?.start).toBe(900);
+  inspect(host, 1800, 0, 1800);
+  expect(intervalAtBoundary?.interval?.start).toBe(900);
   const missing = chart([{ at: 50, actual_power_w: null }], { range: { start: 0, end: 100 },
     tooltip: () => ({ title: 'Unavailable', rows: [{ label: 'Power', value: '—' }] }) });
   inspect(missing.host, 50, 0, 100);
@@ -353,4 +355,17 @@ it('keeps negative module temperatures inside the plotted domain and preserves n
   host.querySelector('.chart-hit-area')!.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight' }));
   expect(host.querySelector('.chart-tooltip')?.textContent).toContain('-20');
   expect(points[0].module_temperature_c).toBe(-20);
+});
+
+it('plots original and corrected forecasts with independent null gaps and uncapped values', () => {
+  const { host } = chart([
+    { at: 0, forecast_power_w: 100, corrected_forecast_power_w: 120 },
+    { at: 900, forecast_power_w: 100, corrected_forecast_power_w: null },
+    { at: 1800, forecast_power_w: 0, corrected_forecast_power_w: 0 },
+  ], {}, [{ key: 'forecast_power_w', label: 'Original forecast power', color: 'orange' },
+    { key: 'corrected_forecast_power_w', label: 'Corrected forecast power', color: 'green' }]);
+  expect(host.querySelectorAll('path.series')).toHaveLength(2);
+  expect(host.querySelectorAll('path.series')[1].getAttribute('d')!.match(/M/g)).toHaveLength(2);
+  host.querySelector('.chart-hit-area')!.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight' }));
+  expect(host.querySelector('.chart-tooltip')?.textContent).toContain('Corrected forecast power120 W');
 });

@@ -6,11 +6,12 @@ Porównuj szacowaną i rzeczywistą moc paneli. Sprawdzaj PR oraz szacowaną ene
 
 ## Funkcje
 
-- Moc, PR i moc możliwa do optymalizacji na żywo.
-- Historia mocy i PR co 1, 5 lub 10 minut.
-- Szacowana energia dzisiaj i od pierwszego uruchomienia.
-- Wykresy z ostatnich 24 godzin, 7 dni lub 30 dni.
-- Sześć języków do wyboru w prawym górnym rogu.
+- Pulpit z mocą, PR i dzisiejszą rozliczoną produkcją.
+- Porównania sprawności z oryginalnych rozliczeń co 1, 5 lub 10 minut.
+- Szacowana energia dzisiaj i od konfiguracji.
+- Dzienna energia porównana dla 7/30 dni lub własnego zakresu do 90 dat.
+- Oryginalne i skorygowane prognozy produkcji co 15 minut.
+- Sześć języków z menu w prawym górnym rogu.
 
 ## Szybki start
 
@@ -52,7 +53,7 @@ Domyślnie strona działa na komputerze z Dockerem. Aby otworzyć ją na innym u
 
 ## Ustawienia
 
-**Na żywo** pokazuje bieżące średnie i diagnostykę, **Historia** zakończone okresy oraz energię/PR wybranego zakresu, a **Prognoza** szacunki na podstawie pogody. Osobny przycisk **Ustawienia** z kołem zębatym i tekstem znajduje się u góry po prawej; trzy karty danych pozostają dostępne. Spis kategorii przewija jeden ciągły formularz: Połączenie z Home Assistant, Moduły fotowoltaiczne, Czujniki, Monitorowanie i Prognoza.
+**Pulpit** pokazuje bieżącą moc i dzisiejszą produkcję, **Sprawność** porównuje rozliczoną energię i PR, a **Prognoza** zestawia prognozę oryginalną i skorygowaną. **Ustawienia** pozostają w prawym górnym rogu, a trzy widoki danych są dostępne. Kategorie obejmują połączenie HA, moduły PV, czujniki, monitorowanie i prognozę.
 
 **Zapisz konfigurację** pozostawia otwarte Ustawienia. **Odrzuć zmiany** ponownie pobiera zapisaną konfigurację z serwera i zastępuje zmiany; jeśli odczyt się nie powiedzie, szkic pozostaje do ponowienia próby. Przy opuszczaniu strony ze zmianami możesz kontynuować edycję lub je odrzucić. Powrót do Ustawień ponownie pobiera zapisaną konfigurację.
 
@@ -69,11 +70,13 @@ Menu **Tryb motywu** u góry po prawej oferuje Auto, Jasny i Ciemny. Auto śledz
 | Średnia z | Czas do obliczenia średniej na żywo. Domyślnie 60 sekund. |
 | Odświeżaj co | Czas między aktualizacjami. Domyślnie 5 sekund. |
 
-Zapisz ustawienia i otwórz **Na żywo**. Pierwszy rozliczony wynik pojawi się w widoku **Historia** po zakończeniu bieżącego okresu. W sekcji **Limit czasu bez danych** ustaw czas oczekiwania na każdy czujnik.
+Zapisz ustawienia i otwórz **Pulpit**. Pierwszy rozliczony wynik pojawi się w widoku **Sprawność** po zakończeniu bieżącego okresu. W sekcji **Limit czasu bez danych** ustaw czas oczekiwania na każdy czujnik.
 
-Widok na żywo wczytuje stałe ostatnie dziesięć minut przy otwarciu lub ponownym połączeniu. Każdy punkt nadal używa ustawienia **Średnia z**, a zbieranie danych — **Odświeżaj co**. Trend jest odtwarzany z zapisanych obserwacji według bieżących parametrów; nie jest dziennikiem opublikowanych migawek. Brakujące lub przeterminowane obserwacje i bieżący punkt offline pozostają lukami. Dawnych rozłączeń bez rozpoznawalnej luki obserwacji nie da się dokładnie odtworzyć. Historia zachowuje oryginalne rozliczenia. Gdy diagnostyka jest rozwinięta na widocznej stronie Na żywo, trzy skonfigurowane czujniki są odczytywane z Home Assistant mniej więcej co sekundę. Zwijanie diagnostyki, zmiana strony lub ukrycie karty przeglądarki wstrzymuje te zapytania. Wiek opiera się na czasie Home Assistant i rośnie lokalnie między odczytami; interwał monitorowania i aktualizacje wykresu pozostają bez zmian.
+Pulpit wczytuje ostatnie dziesięć minut przy otwarciu lub ponownym połączeniu. Dane produkcji pokazują dzisiejszą rozliczoną moc szacowaną/rzeczywistą, natężenie promieniowania i temperaturę modułów. Wykres energii domyślnie obejmuje 7 dni, także 30 dni lub własny zakres do 90 domowych dat kalendarzowych włącznie z obiema granicami, najwyżej do dzisiaj. Braki pozostają puste, zmierzone zero pozostaje zerem; zapisane rozliczenia i energia skumulowana nie zmieniają się.
 
-Wygładzone krzywe służą tylko wyświetlaniu. Wskazówki myszy, dotyku i klawiatury pokazują oryginalne wartości; prognoza pokazuje oryginalny przedział godzinowy. Energia i PR używają oryginalnych danych. Czas domu określa sumy dzienne, daty prognozy, pogodę, Dzisiaj i przedziały godzinowe. Znaczniki czasu na żywo/historii oraz czasy aktualizacji/pobrania śledzą preferencję HA server/local użytkownika; samodzielny Docker używa czasu przeglądarki. Nieczytelna preferencja HA oznacza czas domu. Krótka uwaga wskazuje różne strefy; przesunięcia UTC rozróżniają tylko powtórzone godziny lub przedziały ze zmianą przesunięcia.
+Sprawność pokazuje PR okresu, zmianę wobec porównywalnego poprzedniego okresu w punktach procentowych oraz energię szacowaną minus rzeczywistą. Dzisiaj porównuje się z wczoraj do tej samej godziny lokalnej, 24 godziny z poprzednimi 24 godzinami, a 7/30 dni z takim samym zakresem przesuniętym o 7/30 domowych dat. Oba wykresy współdzielą podsumowanie dzienne lub skonfigurowany interwał rozliczenia.
+
+Wygładzanie dotyczy tylko rysunku. Mysz, dotyk i klawiatura pokazują oryginalne rekordy, w tym interwały prognozy co 15 minut. Energia i PR używają niewygładzonych wartości. Daty i prognozy stosują czas domu; znaczniki monitorowania i pobierania stosują preferencję HA server/local użytkownika lub czas przeglądarki w samodzielnym Dockerze. Przesunięcia UTC rozróżniają w razie potrzeby powtarzające się godziny.
 
 ## Prognoza produkcji
 
@@ -81,11 +84,15 @@ Prognoza jest domyślnie wyłączona przy pierwszej instalacji. Włącz ją w **
 
 Monitorowanie wykorzystuje zmierzoną wartość **Temperatura modułów**. Prognoza oblicza **Szacowaną temperaturę ogniw** na podstawie **Temperatury powietrza** i **Nominalnej temperatury pracy ogniwa (NOCT)**. To różne wielkości fizyczne; monitorowanie nie przelicza temperatury modułów na temperaturę ogniw.
 
-Open-Meteo dostarcza pogodę co godzinę na dziś i sześć następnych lokalnych dni kalendarzowych. Wybierz datę, aby zobaczyć energię całego dnia, wykres godzinowy i tabelę przedziałów. Dzisiejsza prognoza obejmuje cały dzień, a **Pozostało dzisiaj** tylko czas od teraz do lokalnej północy. Obie korzystają z ostatniej poprawnie pobranej pogody i są odrębne od rozliczonej energii szacowanej wyliczonej z danych czujników. Pozostała energia maleje z upływem czasu między pobraniami; nowe dane mogą też zmienić prognozę całego dnia.
+Open-Meteo dostarcza dane modelu co 15 minut na dzisiaj i sześć kolejnych domowych dni kalendarzowych. Niektóre regiony lub pola interpolują modele godzinowe; krok wyjściowy nie gwarantuje większej dokładności. Wybierz datę dla energii oryginalnej/skorygowanej, krzywych mocy i szczegółów. Dzisiejsza prognoza obejmuje cały dzień; **Pozostało dzisiaj** czas od teraz do domowej północy i maleje między pobraniami. Zwykły dzień ma 96 interwałów, a dzień zmiany czasu 92 lub 100.
 
-Każda karta daty pokazuje pogodę, maksimum/minimum prognoz godzinowych, słupek energii i kWh. Ciepła etykieta **Dzisiaj** zmienia się o północy domu i pozostaje widoczna, gdy inna data jest zaznaczona na niebiesko. Temperatury to ekstrema surowych próbek godzinowych; pogoda reprezentatywna używa najwyższego znanego kodu WMO dnia. Każde pole wymaga wszystkich oczekiwanych próbek godzinowych UTC w dniu domu, również dla dni 23/25-godzinnych i stref ułamkowych. Niekompletne pole jest niedostępne, a drugie kompletne pozostaje widoczne. Zero jest poprawne; nieznana pogoda ma neutralną ikonę. Pogoda i moc współdzielą zapytanie, pamięć podręczną i czas pobrania, bez dodatkowego odświeżania.
+Karty dat zachowują pogodę oraz godzinowe maksymalne/minimalne temperatury obok par słupków energii i kWh. Ciepły znacznik **Dzisiaj** zmienia się o domowej północy niezależnie od niebieskiego zaznaczenia. Podsumowania pogody nadal używają próbek godzinowych z tego samego zapytania, pamięci podręcznej i czasu pobrania. Pogoda i energia mogą być niedostępne niezależnie; zero jest poprawne.
 
-Pogoda odświeża się co godzinę lub przyciskiem **Odśwież prognozę**. Pasująca pamięć podręczna przetrwa restart. Nieudane pobranie zachowuje pierwotny czas i oznacza dane jako nieaktualne; ponowienie następuje po 15 minutach. Dane mające co najmniej dwie godziny także są nieaktualne. Brakujące przedziały czynią odpowiednie sumy niedostępnymi; kompletność danych jest pokazywana osobno, a braków nie zastępuje zero. Widoczne są stany wyłączenia, braku lokalizacji HA, pierwszego ładowania i niedostępności.
+Pogoda odświeża się zwykle co godzinę lub przyciskiem **Odśwież prognozę**. Pasująca pamięć podręczna przetrwa restart. Błąd zachowuje czas pobrania, jest widoczny i powoduje ponowienie po 15 minutach. Brak danych wejściowych oznacza niedostępne sumy (**—**). Widoczne pozostają wyłączenie, brak lokalizacji, ładowanie i brak danych.
+
+**Oryginalna prognoza** zachowuje model pogody/NOCT. **Skorygowana prognoza** mnoży go przez ostatni PR ważony energią, z większą wagą nowszych zakończonych dat domowych. W **Ustawienia > Prognoza** domyślnie n=14 dni historii PR, liczba całkowita 3–90; okres półtrwania to n/2 dni. Potrzeba co najmniej 3 kwalifikujących się dat z dodatnią energią szacowaną. Energia rzeczywista i szacowana obejmują te same poprawne okresy od ostatniej porównywalnej konfiguracji monitorowania. Zerowa produkcja rzeczywista jest poprawna, PR ponad 100% nie jest ograniczany. Bez dostatecznej historii korekta pokazuje **—**, a wartości oryginalne pozostają dostępne. Zmiana n przelicza korektę bez ponownego pobrania pogody.
+
+Korekta dotyczy tylko strony i API aplikacji. Identyfikatory i znaczenie wszystkich 13 wyjść HA pozostają bez zmian; cztery encje prognozy nadal podają oryginalną energię całkowaną z interwałów 15 minut.
 
 To szacowana wartość odniesienia DC dla jednego pola paneli, z natężeniem promieniowania w płaszczyźnie modułów i uproszczonym modelem temperatury NOCT. Nie uwzględnia sprawności/ograniczeń falownika, cienia, śniegu, zabrudzeń ani strat systemowych i nie gwarantuje rzeczywistego uzysku AC. Cztery encje prognozy mają kWh i klasę urządzenia energy, bez `state_class`; mogą maleć i są oddzielone od liczników skumulowanych. Nie zapewniają natywnej integracji prognoz HA ani panelu Energia.
 

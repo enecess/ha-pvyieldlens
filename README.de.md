@@ -6,11 +6,12 @@ Vergleichen Sie die geschätzte und die tatsächliche Leistung Ihrer Solarmodule
 
 ## Funktionen
 
-- Leistung, PR und optimierbare Leistung in Echtzeit.
-- Verlauf für Leistung und PR in 1, 5 oder 10 Minuten.
-- Geschätzte Energie für heute und seit dem Start.
-- Diagramme für 24 Stunden, 7 Tage oder 30 Tage.
-- Sechs Sprachen, wählbar oben rechts.
+- Übersicht mit Leistung, PR und heutiger abgeschlossener Erzeugung.
+- Effizienzvergleiche mit ursprünglichen 1-, 5- oder 10-Minuten-Abrechnungen.
+- Geschätzte Energie für heute und seit der Einrichtung.
+- Täglicher Energievergleich für 7/30 Tage oder bis zu 90 eigene Kalenderdaten.
+- Ursprüngliche und korrigierte 15-Minuten-Ertragsprognosen.
+- Sechs Sprachen mit Auswahl oben rechts.
 
 ## Schnellstart
 
@@ -52,7 +53,7 @@ Die Seite ist zunächst nur auf dem Docker-Rechner erreichbar. Für andere Gerä
 
 ## Einstellungen
 
-**Live** zeigt aktuelle Sensormittelwerte und Diagnosen, **Verlauf** abgeschlossene Zeiträume samt Energie/PR im gewählten Bereich und **Prognose** wetterbasierte Erträge. Der separate Eintrag **Einstellungen** mit Zahnrad und Text liegt oben rechts; alle drei Datenreiter bleiben erreichbar. Das Kategorienverzeichnis scrollt durch ein zusammenhängendes Formular: Home-Assistant-Verbindung, PV-Module, Sensoren, Überwachung und Prognose.
+Die **Übersicht** zeigt aktuelle Leistung und heutige Erzeugung, **Effizienz** vergleicht abgeschlossene Energie und PR, **Prognose** zeigt ursprüngliche und korrigierte Wetterprognosen. **Einstellungen** bleibt oben rechts; alle drei Datenansichten sind erreichbar. Die Kategorien umfassen HA-Verbindung, PV-Module, Sensoren, Überwachung und Prognose.
 
 **Konfiguration speichern** lässt die Einstellungen geöffnet. **Änderungen verwerfen** lädt die gespeicherte Konfiguration vom Server neu und ersetzt Ihre Änderungen; bei einem Ladefehler bleibt der Entwurf zum erneuten Versuch erhalten. Beim Verlassen mit Änderungen können Sie weiterbearbeiten oder die Änderungen verwerfen. Erneutes Öffnen lädt die gespeicherte Konfiguration.
 
@@ -69,11 +70,13 @@ Der **Darstellungsmodus** oben rechts bietet Auto, Hell und Dunkel. Auto folgt d
 | Mittelwert über | Zeitraum für den aktuellen Mittelwert. Standard: 60 Sekunden. |
 | Update alle | Abstand zwischen Updates. Standard: 5 Sekunden. |
 
-Speichern Sie die Werte und öffnen Sie **Live**. Der erste abgeschlossene Eintrag erscheint unter **Verlauf** am Ende des laufenden Zeitraums. Unter **Zeit ohne neue Daten** legen Sie die Wartezeit für jeden Sensor fest.
+Speichern Sie die Werte und öffnen Sie **Übersicht**. Der erste abgeschlossene Eintrag erscheint unter **Effizienz** am Ende des laufenden Zeitraums. Unter **Zeit ohne neue Daten** legen Sie die Wartezeit für jeden Sensor fest.
 
-Live lädt beim Öffnen oder Wiederverbinden feste zehn Minuten vor. Jeder Punkt nutzt weiterhin **Mittelwert über**, die Erfassung folgt **Update alle**. Der Trend wird mit aktuellen Überwachungsparametern aus gespeicherten Beobachtungen rekonstruiert und ist kein Protokoll veröffentlichter Momentaufnahmen. Fehlende oder veraltete Beobachtungen und der aktuelle Offline-Endpunkt bleiben Lücken. Frühere Verbindungsabbrüche ohne erkennbare Beobachtungslücke lassen sich zeitlich nicht genau rekonstruieren. Der Verlauf behält die ursprünglichen abgeschlossenen Ergebnisse. Wenn die Diagnose auf einer sichtbaren Live-Seite geöffnet ist, werden die drei konfigurierten Sensoren etwa einmal pro Sekunde von Home Assistant gelesen. Beim Schließen der Diagnose, Seitenwechsel oder Ausblenden des Browser-Tabs pausieren diese Abfragen. Das Alter basiert auf der Zeit von Home Assistant und läuft zwischen den Abfragen lokal weiter; Überwachungsintervall und Diagrammaktualisierung bleiben unverändert.
+Die Übersicht lädt beim Öffnen oder Wiederverbinden die letzten zehn Minuten. Die Erzeugungsdaten zeigen heute abgeschlossene geschätzte/tatsächliche Leistung, Bestrahlungsstärke und Modultemperatur. Das Energiediagramm bietet standardmäßig 7 Tage, außerdem 30 Tage oder einen eigenen Zeitraum mit einschließlich beider Grenzen höchstens 90 Hauskalendertagen bis maximal heute. Fehlende Werte bleiben leer, gemessene Null bleibt Null; gespeicherte Abrechnungen und kumulierte Energie bleiben erhalten.
 
-Geglättete Kurven dienen nur der Anzeige. Maus-, Touch- und Tastaturdetails zeigen ursprüngliche Messwerte; Prognosedetails das ursprüngliche Stundenintervall. Energie und PR verwenden Originaldaten. Hauszeit bestimmt Tagessummen, Prognosedaten, Wetter, Heute und Stundenintervalle. Live-/Verlaufszeiten und Aktualisierungen/Abrufe folgen der HA-Benutzereinstellung server/local; eigenständiges Docker nutzt Browserzeit. Ohne lesbare HA-Präferenz gilt Hauszeit. Ein Hinweis erscheint nur bei unterschiedlichen Zeitzonen; UTC-Versätze unterscheiden wiederholte Sommerzeit-Uhrzeiten oder Intervalle mit Versatzwechsel.
+Effizienz zeigt Zeitraum-PR, die Änderung gegenüber dem vergleichbaren Vorzeitraum in Prozentpunkten sowie geschätzte minus tatsächliche Energie. Heute wird mit gestern bis zur gleichen Ortszeit verglichen, 24 Stunden mit den vorangehenden 24 Stunden, 7/30 Tage mit dem um 7/30 Hauskalendertage verschobenen Bereich. Beide Diagramme teilen die Umschaltung zwischen Tageszusammenfassung und dem eingestellten Abrechnungsintervall.
+
+Die Glättung betrifft nur die Zeichnung. Maus, Touch und Tastatur zeigen Originaldatensätze, auch die 15-Minuten-Prognoseintervalle. Energie und PR nutzen ungeglättete Werte. Hauszeit definiert Kalenderdaten und Prognosen; Überwachungs- und Abrufzeiten folgen der HA-Benutzerpräferenz server/local oder bei eigenständigem Docker der Browserzeit. UTC-Versätze unterscheiden bei Bedarf wiederholte Uhrzeiten.
 
 ## Ertragsprognose
 
@@ -81,11 +84,15 @@ Die Prognose ist bei der ersten Installation standardmäßig deaktiviert. Aktivi
 
 Die Überwachung nutzt die gemessene **Modultemperatur**. Die Prognose berechnet aus **Lufttemperatur** und **Nominaler Zellbetriebstemperatur (NOCT)** die **Geschätzte Zelltemperatur**. Diese Größen sind verschieden; die Überwachung rechnet Modultemperatur nicht in Zelltemperatur um.
 
-Open-Meteo liefert stündliches Wetter für heute und die folgenden sechs lokalen Kalendertage. Wählen Sie ein Datum für Tagesenergie, stündliche Leistungskurve und Intervalltabelle. Die heutige Prognose umfasst den ganzen Tag, **Heute verbleibend** nur die Zeit ab jetzt bis zur lokalen Mitternacht. Beide beruhen auf dem letzten erfolgreichen Wetterabruf und sind von der abgeschlossenen, aus Sensorwerten berechneten geschätzten Energie getrennt. Die verbleibende Energie sinkt zwischen Abrufen mit der Zeit; neue Wetterdaten können auch die Tagesprognose ändern.
+Open-Meteo liefert 15-Minuten-Modelleingaben für heute und die nächsten sechs Hauskalendertage. Manche Regionen oder Felder interpolieren Stundenmodelle; der Ausgabeschritt garantiert keine höhere Genauigkeit. Ein Datum öffnet ursprüngliche/korrigierte Energie, Leistungskurven und Intervalldetails. Heute umfasst den ganzen Tag; **Heute verbleibend** reicht von jetzt bis zur Hausmitternacht und sinkt zwischen Wetterabrufen. Normale Tage haben 96 Intervalle, Sommerzeitwechseltage 92 oder 100.
 
-Jede Datumskarte zeigt Wetter, Höchst-/Tiefsttemperatur der Stundenprognosen, Energiebalken und kWh. Das warme Label **Heute** folgt Mitternacht der Hauszeit und bleibt bei einer anderen, blau markierten Auswahl sichtbar. Tagestemperaturen stammen aus unvermittelten Stundenwerten, das repräsentative Wetter aus dem höchsten bekannten WMO-Code des Tages. Jedes Feld benötigt alle erwarteten UTC-Stundenwerte innerhalb des Haustages, auch bei 23/25 Stunden oder nicht ganzstündigen Zeitzonen. Unvollständige Felder sind nicht verfügbar, vollständige andere Felder bleiben sichtbar. Nullwerte sind gültig; unbekanntes Wetter erhält ein neutrales Symbol. Wetter und Leistung teilen Abruf, Cache und Abrufzeit ohne zusätzliche Aktualisierungen.
+Datumskarten behalten Wetter und stündlich prognostizierte Höchst-/Tiefsttemperaturen neben zwei Energiebalken und kWh-Werten. Die warme Markierung **Heute** folgt der Hausmitternacht unabhängig von der blauen Auswahl. Wetterzusammenfassungen verwenden weiterhin Stundensamples derselben Anfrage, desselben Caches und Abrufzeitpunkts. Wetter und Energie können unabhängig fehlen; Null bleibt gültig.
 
-Das Wetter wird stündlich oder über **Prognose aktualisieren** abgerufen. Passende Cache-Daten bleiben nach Neustart erhalten. Bei Fehlern bleiben Abrufzeit und ältere Werte sichtbar; ein neuer Versuch folgt nach 15 Minuten. Daten ab zwei Stunden Alter gelten ebenfalls als veraltet. Fehlende Wetterintervalle machen betroffene Summen nicht verfügbar; die Datenvollständigkeit bleibt sichtbar, fehlende Werte zählen nicht als null. Deaktivierung, fehlender HA-Standort, erstes Laden und nicht verfügbare Daten werden angezeigt.
+Wetter wird normalerweise stündlich oder über **Prognose aktualisieren** abgerufen. Passende Caches überstehen Neustarts. Ein Fehler erhält die Abrufzeit, wird angezeigt und nach 15 Minuten erneut versucht. Fehlende Eingaben machen betroffene Summen unverfügbar (**—**). Deaktivierung, fehlender Standort, Laden und fehlende Daten bleiben sichtbar.
+
+Die **Ursprüngliche Prognose** behält das Wetter-/NOCT-Modell. Die **Korrigierte Prognose** multipliziert es mit dem aktuellen energiegewichteten PR, wobei jüngere abgeschlossene Hauskalendertage stärker zählen. Unter **Einstellungen > Prognose** gilt standardmäßig n=14 historische PR-Tage, ganzzahlig 3–90; die Halbwertszeit ist n/2 Tage. Mindestens 3 geeignete Tage mit positiver geschätzter Energie sind erforderlich. Tatsächliche und geschätzte Energie nutzen dieselben gültigen Zeiträume seit der letzten vergleichbaren Überwachungskonfiguration. Tatsächliche Nullerträge zählen, PR über 100 % wird nicht begrenzt. Ohne genug Historie erscheint die Korrektur als **—**, die Originalprognose bleibt verfügbar. Eine Änderung von n berechnet die Korrektur ohne neuen Wetterabruf.
+
+Die Korrektur gilt nur für Seite und Anwendungs-API. Alle 13 HA-Ausgabe-IDs und Bedeutungen bleiben unverändert; die vier Prognoseentitäten melden weiterhin die aus 15-Minuten-Intervallen integrierte ursprüngliche Energie.
 
 Die Werte sind eine geschätzte Gleichstromreferenz für ein Modulfeld mit Bestrahlungsstärke in Modulebene und vereinfachtem NOCT-Temperaturmodell. Wechselrichterwirkungsgrad/Begrenzung, Schatten, Schnee, Schmutz und Systemverluste sind nicht enthalten; tatsächlicher Wechselstromertrag ist nicht garantiert. Die vier Prognoseentitäten haben kWh und Geräteklasse energy, aber keine `state_class`; sie können sinken und bleiben von kumulierten Zählern getrennt. Eine native HA-Prognose- oder Energie-Dashboard-Integration wird nicht bereitgestellt.
 

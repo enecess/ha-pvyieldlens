@@ -121,12 +121,12 @@ it('refreshes calendar boundaries at midnight while retaining a still-valid sele
   expect(requests).toHaveLength(3);
 });
 
-it('shows partial and unavailable totals as unavailable even when a numeric partial sum exists', async () => {
+it('keeps incomplete totals unavailable while omitting quality and coverage presentation', async () => {
   view.status = 'partial';
-  view.remaining_today = { ...view.remaining_today!, quality: 'partial', forecast_energy_kwh: 12.34 };
-  view.tomorrow = { ...view.tomorrow!, quality: 'unavailable', forecast_energy_kwh: 0 };
-  view.seven_days = { ...view.seven_days!, quality: 'partial', forecast_energy_kwh: 100 };
-  view.days[2] = { ...view.days[2], quality: 'partial', forecast_energy_kwh: 40, data_completeness_percent: 50 };
+  view.remaining_today = { ...view.remaining_today!, quality: 'partial', forecast_energy_kwh: null, corrected_forecast_energy_kwh: null };
+  view.tomorrow = { ...view.tomorrow!, quality: 'unavailable', forecast_energy_kwh: null, corrected_forecast_energy_kwh: null };
+  view.seven_days = { ...view.seven_days!, quality: 'partial', forecast_energy_kwh: null, corrected_forecast_energy_kwh: null };
+  view.days[2] = { ...view.days[2], quality: 'partial', forecast_energy_kwh: null, corrected_forecast_energy_kwh: null, data_completeness_percent: 50 };
   const { host } = mount(view);
   await flush();
   select(host);
@@ -135,10 +135,14 @@ it('shows partial and unavailable totals as unavailable even when a numeric part
   expect(text(host, '#forecast-tomorrow')).toBe('—');
   expect(text(host, '#forecast-seven-days')).toBe('— kWh');
   expect(text(host, '#forecast-day-total')).toBe('— kWh');
-  expect(text(host, '#forecast-day-data-completeness')).toContain('50%');
+  expect(host.textContent).not.toMatch(/partial|stale|completeness|coverage|quality/i);
+  expect(host.querySelector('#forecast-day-data-completeness')).toBeNull();
+  [...host.querySelectorAll('#forecast-days button')].forEach(card => {
+    expect(card.getAttribute('aria-label')).not.toMatch(/complete|partial|quality|coverage/i);
+  });
 });
 
-it('inspects one original hourly row at a time without changing daily energy', async () => {
+it('inspects one original quarter-hour row at a time without changing daily energy', async () => {
   view.intervals[0].forecast_power_w = 0;
   view.intervals[0].forecast_energy_kwh = 0;
   const { host } = mount();
@@ -146,10 +150,10 @@ it('inspects one original hourly row at a time without changing daily energy', a
   const beforeTotals = text(host, '#forecast-day-total');
   const hit = host.querySelector('.chart-hit-area')!;
   hit.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true }));
-  expect(host.querySelector('.chart-tooltip')?.textContent).toContain('Forecast power0 W');
+  expect(host.querySelector('.chart-tooltip')?.textContent).toContain('Original forecast power0 W');
   hit.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true }));
-  expect(host.querySelector('.chart-tooltip')?.textContent).toContain('Forecast power3,720 W');
-  expect(host.querySelector('.chart-tooltip')?.textContent).toContain('3.72 kWh');
+  expect(host.querySelector('.chart-tooltip')?.textContent).toContain('Original forecast power3,720 W');
+  expect(host.querySelector('.chart-tooltip')?.textContent).toContain('0.93 kWh');
   expect(host.querySelector('.chart-tooltip')?.textContent).toContain('Irradiance800 W/m²');
   expect(host.querySelector('.chart-tooltip')?.textContent).toContain('Air temperature20 °C');
   expect(host.querySelector('.chart-tooltip')?.textContent).toContain('Estimated cell temperature45 °C');
@@ -243,4 +247,132 @@ it('shows neutral missing weather and preserves complete zero temperatures', asy
   expect(cards[1].querySelector('.day-temperature')?.textContent).toBe('— / —');
   expect(cards[2].querySelector('.day-temperature')?.textContent).toBe('0° / 0°');
   expect(text(host, '#forecast-day-total')).toBe('89.28 kWh');
+});
+
+function applyCorrection(pr: number | null) {
+  view.correction = { ...view.correction!, pr };
+  view.intervals = view.intervals.map(row => ({ ...row,
+    corrected_forecast_power_w: pr === null || row.forecast_power_w === null ? null : row.forecast_power_w * pr / 100,
+    corrected_forecast_energy_kwh: pr === null || row.forecast_energy_kwh === null ? null : row.forecast_energy_kwh * pr / 100 }));
+  view.days = view.days.map(day => ({ ...day,
+    corrected_forecast_energy_kwh: pr === null || day.forecast_energy_kwh === null ? null : day.forecast_energy_kwh * pr / 100 }));
+  (['today', 'remaining_today', 'tomorrow', 'seven_days'] as const).forEach(key => {
+    const total = view[key]!;
+    view[key] = { ...total, corrected_forecast_energy_kwh: pr === null || total.forecast_energy_kwh === null
+      ? null : total.forecast_energy_kwh * pr / 100 };
+  });
+}
+
+it('pairs original and corrected fifteen-minute values without quality wording', async () => {
+  useI18n().setLanguage('zh');
+  const rawInterval = view.intervals[0];
+  const correctedInterval = view.intervals[0];
+  expect(rawInterval.forecast_energy_kwh).toBeCloseTo(0.93);
+  expect(correctedInterval.corrected_forecast_energy_kwh).toBeCloseTo(0.837);
+  const { host } = mount(view);
+  await flush();
+  expect(host.textContent).toContain('每 15 分钟预测');
+  expect(host.textContent).toContain('修正预测');
+  expect(host.textContent).not.toContain('PR 修正');
+  expect(host.querySelectorAll('#forecast-rows tr')).toHaveLength(96);
+  expect(text(host, '#forecast-remaining-corrected')).toBe('35.712');
+  expect(text(host, '#forecast-tomorrow-corrected')).toBe('80.352');
+  expect(text(host, '#forecast-seven-days-corrected')).toBe('562.464 kWh');
+  expect(text(host, '#forecast-day-total-corrected')).toBe('80.352 kWh');
+  expect(host.querySelectorAll('#forecast-chart path.series')).toHaveLength(2);
+  const hit = host.querySelector('.chart-hit-area')!;
+  hit.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true }));
+  expect(host.querySelector('.chart-tooltip')?.textContent).toContain('修正预测电量0.837 kWh');
+  expect(host.querySelector('.chart-tooltip')?.textContent).not.toMatch(/质量|完整率/);
+});
+
+it.each([null, 0, 120])('keeps correction %s distinct from raw values', async pr => {
+  applyCorrection(pr);
+  const { host } = mount(view);
+  await flush();
+  expect(text(host, '#forecast-remaining')).toBe('39.68');
+  expect(text(host, '#forecast-remaining-corrected')).toBe(pr === null ? '—' : pr === 0 ? '0' : '47.616');
+  expect(text(host, '#forecast-day-total-corrected')).toBe(pr === null ? '— kWh' : pr === 0 ? '0 kWh' : '107.136 kWh');
+  expect(host.querySelectorAll('#forecast-days .day-bar.corrected')).toHaveLength(7);
+  expect(host.querySelector('#forecast-rows tr')?.textContent).toContain(pr === null ? '—' : pr === 0 ? '0' : '4,464');
+});
+
+it('updates_corrected_detail_without_refetching_weather', async () => {
+  const { props, host } = mount();
+  await flush();
+  select(host);
+  await flush();
+  const fetchedAt = view.fetched_at;
+  applyCorrection(80);
+  view.calculated_at += 1;
+  props.summary = structuredClone(view);
+  await flush();
+  expect(view.fetched_at).toBe(fetchedAt);
+  expect(text(host, '#forecast-day-total-corrected')).toBe('71.424 kWh');
+  expect(host.querySelector('#forecast-rows tr')?.textContent).toContain('2,976');
+  expect(host.querySelector('[data-day="2026-11-03"]')?.getAttribute('aria-pressed')).toBe('true');
+  expect(requests).toEqual(['GET api/forecast', 'GET api/forecast']);
+});
+
+it('does_not_trust_reset_revision_for_correction_identity', async () => {
+  Object.assign(view.correction!, { revision: 1 });
+  const { props, host } = mount();
+  await flush();
+  select(host);
+  await flush();
+  applyCorrection(110);
+  Object.assign(view.correction!, { revision: 1 });
+  props.summary = structuredClone(view);
+  await flush();
+  expect(text(host, '#forecast-day-total-corrected')).toBe('98.208 kWh');
+  expect(host.querySelector('[data-day="2026-11-03"]')?.getAttribute('aria-pressed')).toBe('true');
+  expect(requests).toHaveLength(2);
+  view.correction!.history_days = 30;
+  view.correction!.start -= 16 * 86400;
+  props.summary = structuredClone(view);
+  await flush();
+  expect(requests).toHaveLength(3);
+  view.correction!.end += 86400;
+  props.summary = structuredClone(view);
+  await flush();
+  expect(requests).toHaveLength(4);
+});
+
+it('keeps weather available when energy is missing independently', async () => {
+  view.days[0].forecast_energy_kwh = null;
+  view.days[0].corrected_forecast_energy_kwh = null;
+  view.intervals[0].forecast_power_w = null;
+  view.intervals[0].corrected_forecast_power_w = null;
+  view.intervals[0].forecast_energy_kwh = null;
+  view.intervals[0].corrected_forecast_energy_kwh = null;
+  const { host } = mount(view);
+  await flush();
+  expect(text(host, '#forecast-days .day-weather')).toBe('Clear sky');
+  expect(text(host, '#forecast-day-total')).toBe('— kWh');
+  expect(text(host, '#forecast-day-total-corrected')).toBe('— kWh');
+  expect(host.querySelector('#forecast-rows tr')?.textContent).toContain('—');
+});
+
+it.each([92, 100])('retains all %s quarter-hour intervals on a DST day', async count => {
+  const start = view.today!.start;
+  const end = start + count * 900;
+  view.days = [{ ...view.days[0], end }];
+  view.intervals = Array.from({ length: count }, (_, index) => ({
+    ...view.intervals[0], start: start + index * 900, end: start + (index + 1) * 900 }));
+  const { host } = mount(view);
+  await flush();
+  expect(host.querySelectorAll('#forecast-rows tr')).toHaveLength(count);
+  expect(host.querySelector('#forecast-rows tr:last-child time:last-child')?.getAttribute('datetime'))
+    .toBe(new Date(end * 1000).toISOString());
+});
+
+it('clips both energies at non-grid household boundaries', async () => {
+  const start = view.today!.start + 100;
+  view.days = [{ ...view.days[0], start, end: start + 900 }];
+  const { host } = mount(view);
+  await flush();
+  const rows = [...host.querySelectorAll('#forecast-rows tr')];
+  expect(rows).toHaveLength(2);
+  expect(rows[0].lastElementChild?.textContent).toBe('0.744');
+  expect(rows[1].lastElementChild?.textContent).toBe('0.093');
 });

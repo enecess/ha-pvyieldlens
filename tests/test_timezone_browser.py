@@ -107,9 +107,8 @@ async def test_viewer_timezone_keeps_household_forecast_day(timezone_page):
     assert monitoring_clock == '21:00'
 
     await app.locator('#history-tab').click()
-    await app.locator('#history-range').select_option('7d')
-    await expect(app.locator('#history-boundaries')).to_contain_text('Nov 15, 2026, 21:00')
-    await expect(app.locator('#last-settled')).to_contain_text('21:00')
+    await app.locator('#history-range [data-value="7d"]').click()
+    await expect(app.locator('#history-range-caption')).to_contain_text('Nov 16, 2026')
     await expect(app.locator('#history-home-timezone')).to_contain_text('Asia/Shanghai')
     await expect(app.locator('#daily-energy-chart [aria-current=date]')).to_have_attribute('data-day', '2026-11-16')
     totals_before = [await app.locator(selector).inner_text() for selector in ('#history-actual-energy', '#history-energy')]
@@ -118,8 +117,8 @@ async def test_viewer_timezone_keeps_household_forecast_day(timezone_page):
     forecast_selected_day = await app.locator('#forecast-days [aria-pressed=true]').get_attribute('data-day')
     assert forecast_selected_day == '2026-11-16'
     await app.locator('#forecast-details summary').click()
-    forecast_hour_clock = await app.locator('#forecast-rows tr').nth(13).locator('time').first.inner_text()
-    assert forecast_hour_clock == '13:00'
+    forecast_interval_clock = await app.locator('#forecast-rows tr').nth(52).locator('time').first.inner_text()
+    assert forecast_interval_clock == '13:00'
     fetched = re.search(r'[A-Z][a-z]{2} \d{1,2}, \d{4}', await app.locator('#forecast-fetched').inner_text()).group()
     fetched_date = datetime.strptime(fetched, '%b %d, %Y').date().isoformat()
     assert fetched_date == '2026-11-15'
@@ -133,7 +132,7 @@ async def test_viewer_timezone_keeps_household_forecast_day(timezone_page):
     await app.locator('#forecast-page').screenshot(path=str(evidence / 'timezone-shanghai-los-angeles.png'))
     await expect(app.locator('#forecast-timezone, #timezone-note')).to_have_count(0)
     assert 'GMT' not in await app.locator('#forecast-rows').inner_text()
-    assert 'Asia/Shanghai' not in await app.locator('#live-page').inner_text()
+    assert 'Asia/Shanghai' not in await app.locator('#updated').inner_text()
     await app.locator('[data-day="2026-11-18"]').click()
     await app.locator('#settings-button').click()
     await app.locator('[data-settings-category=modules]').click()
@@ -146,11 +145,10 @@ async def test_viewer_timezone_keeps_household_forecast_day(timezone_page):
     async with page.expect_response('**/api/snapshot'):
         pass
     await expect(app.locator('#updated')).to_contain_text('13:00')
-    await expect(app.locator('#history-boundaries')).to_contain_text('Nov 16, 2026, 13:00')
-    await expect(app.locator('#last-settled')).to_contain_text('13:00')
+    await expect(app.locator('#history-range-caption')).to_contain_text('Nov 16, 2026')
     await expect(app.locator('#forecast-home-time-note')).to_have_count(0)
     await expect(app.locator('[name=total_max_power_at_stc_w]')).to_have_value('6100')
-    await expect(app.locator('#history-range')).to_have_value('7d')
+    await expect(app.locator('#history-range [data-value="7d"]')).to_have_attribute('aria-pressed', 'true')
     await expect(app.locator('[data-day="2026-11-18"]')).to_have_attribute('aria-pressed', 'true')
     totals_after = [await app.locator(selector).inner_text() for selector in ('#history-actual-energy', '#history-energy')]
     forecast_fetch_count_after = state['forecast']
@@ -172,4 +170,4 @@ async def test_timezone_fallback_keeps_household_context(timezone_page, destinat
     await app.locator('#forecast-tab').click()
     await expect(app.locator('#forecast-days [aria-pressed=true]')).to_have_attribute('data-day', '2026-11-16')
     await app.locator('#forecast-details summary').click()
-    await expect(app.locator('#forecast-rows tr').nth(13).locator('time').first).to_have_text('13:00')
+    await expect(app.locator('#forecast-rows tr').nth(52).locator('time').first).to_have_text('13:00')

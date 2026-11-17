@@ -6,10 +6,11 @@ Compare your PV modules’ estimated and actual output, follow PR, and see estim
 
 ## Features
 
-- Live power, PR and optimizable power.
-- Power and PR history at 1, 5 or 10 minute intervals.
+- Dashboard power, PR and today’s settled generation.
+- Efficiency comparisons using original 1, 5 or 10 minute settlements.
 - Estimated energy for today and since setup.
-- Charts for the last 24 hours, 7 days or 30 days.
+- Paired daily energy for 7/30 days or a custom range up to 90 dates.
+- Original and corrected 15-minute generation forecasts.
 - Six languages, with a language menu at the top right.
 
 ## Quick start
@@ -52,7 +53,7 @@ The default address works on the Docker host. To open the page from another devi
 
 ## Settings
 
-Use **Live** for current sensor averages and diagnostics, **History** for settled periods and the selected range's energy/PR, and **Forecast** for weather-based generation estimates. The separate gear-and-text **Settings** entry is at the top right; all three data tabs remain available. Its category directory scrolls one continuous form: Home Assistant connection, PV modules, Sensors, Monitoring, and Forecast.
+Use **Dashboard** for current power and today’s generation, **Efficiency** for settled energy and PR comparisons, and **Forecast** for original and corrected weather forecasts. **Settings** stays at the top right, with all three data tabs available. Its directory covers the HA connection, PV modules, Sensors, Monitoring and Forecast.
 
 **Save configuration** keeps you in Settings. **Discard changes** reloads the saved configuration from the server and replaces your edits; if loading fails, your draft remains available to retry. Leaving with unsaved changes asks you to keep editing or discard them. Returning to Settings loads the saved configuration again.
 
@@ -69,11 +70,13 @@ The top-right **Theme mode** menu offers Auto, Light and Dark. Auto follows Home
 | Average over | Time used to average live readings. Default: 60 seconds. |
 | Update every | How often live results refresh. Default: 5 seconds. |
 
-Save your settings, then open **Live**. The first settled result appears in **History** when the current period ends. Under **Data timeout**, you can set how long to wait for each sensor before marking its data missing.
+Save your settings, then open **Dashboard**. The first settled result appears in **Efficiency** when the current period ends. Under **Data timeout**, you can set how long to wait for each sensor before marking its data missing.
 
-Live preloads a fixed rolling ten minutes when opened or reconnected. Each point still uses **Average over**, and collection follows **Update every**. This recent trend is reconstructed from stored observations using the current monitoring parameters; it is not a log of previously published snapshots. Missing or timed-out observations and the current offline endpoint remain gaps. Earlier connection outages without an identifiable observation gap cannot be reconstructed precisely. History keeps the original settled results. While diagnostics are expanded on a visible Live page, the three configured sensors are read from Home Assistant about once a second. Closing diagnostics, switching pages or hiding the browser tab pauses these requests. Ages use Home Assistant time and advance locally between reads; the monitoring interval and chart updates are unchanged.
+Dashboard preloads the last ten minutes of live readings. **Generation data** shows today’s settled estimated/actual power, irradiance and module temperature. Its energy chart defaults to 7 days and also offers 30 days or an inclusive custom range of at most 90 home calendar dates ending no later than today. Missing values stay empty; measured zero stays zero. Historical settlements and cumulative energy are preserved.
 
-Charts use smooth paths for display only. Pointer, touch and keyboard tooltips show original sample values; Forecast tooltips show the original hourly interval. Energy and PR use the original data. Household time controls daily totals, Forecast dates, weather, Today and hourly periods. Live/History timestamps and update/fetch times follow the HA viewer's server/local time preference; standalone Docker uses browser time. Unreadable HA preferences fall back to household time. A short note appears when these time zones differ; UTC offsets appear only to distinguish repeated daylight-saving times or a period spanning an offset change.
+Efficiency shows range PR, the change from the comparable previous period in percentage points, and estimated minus actual energy. Today compares with yesterday through the same local clock time; 24 hours compares with the preceding 24 hours; 7/30 days shift the same home calendar range back 7/30 dates. The PR and generation charts share **Daily summary** or **Every {minutes} minutes**, using the configured settlement interval.
+
+Charts smooth only the drawing. Mouse, touch and keyboard inspection shows original records, including each 15-minute forecast interval. Energy and PR use unsmoothed values. Home time defines calendar dates and forecasts; monitoring and fetch timestamps follow the HA viewer’s server/local preference, or browser time in standalone Docker. UTC offsets distinguish repeated daylight-saving times when needed.
 
 ## Generation forecast
 
@@ -81,11 +84,15 @@ Forecast is disabled by default on first installation. Under **Settings > Foreca
 
 Monitoring uses the measured **Module temperature**. Forecast uses **Air temperature** and **Nominal operating cell temperature (NOCT)** to calculate **Estimated cell temperature**. These are separate physical quantities; the monitoring model does not convert module temperature to cell temperature.
 
-Open-Meteo supplies hourly weather for today and the following six local calendar days. Select a date for full-day energy, the hourly power curve and numeric interval details. Today's forecast includes all of today, while **Remaining today** counts only from now to local midnight. Both use the latest successful weather fetch and are separate from settled estimated energy calculated from sensor readings. Remaining energy decreases as time passes between fetches; a new forecast can also revise the full-day estimate.
+Open-Meteo supplies 15-minute model inputs for today and the next six home calendar days. Some regions or fields interpolate hourly models; a 15-minute output step does not guarantee greater accuracy. Select a date for paired original/corrected energy, power curves and interval details. Today covers the full day; **Remaining today** runs from now to home midnight and decreases between weather fetches. Normal days have 96 intervals, while daylight-saving days can have 92 or 100.
 
-Each date card shows weather, hourly-forecast high/low air temperatures, its energy bar and kWh. The warm **Today** label follows household midnight and remains visible when a different date is selected in blue. Daily temperatures use raw hourly samples, and representative weather uses the day's maximum known WMO code. Each field requires every expected UTC hourly sample inside that household day, including 23/25-hour days and fractional time zones; an incomplete field is unavailable while a complete companion field stays visible. Zero values remain valid. Unknown weather uses a neutral icon. Weather uses the same hourly request, cache and fetch time as power, with no additional refresh cadence.
+Each date card keeps weather and hourly-forecast high/low temperatures alongside paired energy bars and kWh values. The warm **Today** marker follows home midnight independently of the blue selection. Weather summaries continue to use hourly samples from the same weather request, cache and fetch time. Weather and energy can be unavailable independently; zero remains valid.
 
-Weather normally refreshes hourly; **Refresh forecast** requests an update. Matching cached data survives restart. A failed refresh retains its original fetch time and shows stale data; retries occur after 15 minutes. Data at least two hours old is also stale. Missing weather intervals make affected totals unavailable, with data completeness shown separately; missing data is never assumed to be zero. Disabled, missing HA location, initial loading and unavailable states are shown explicitly.
+Weather normally refreshes hourly; **Refresh forecast** requests an update. Matching caches survive restart. A failed request keeps the original fetch time, reports the error and retries after 15 minutes. Missing inputs leave affected totals unavailable as **—**. The page retains disabled, missing-location, loading and no-data states.
+
+**Original forecast** is the unchanged weather/NOCT model. **Corrected forecast** multiplies it by recent energy-weighted PR with greater weight on recent completed home dates. In **Settings > Forecast**, **Historical PR days** defaults to n=14 and accepts integers 3–90; the half-life is n/2 days. At least 3 eligible dates with positive estimated energy are required. Actual and estimated energy use the same valid periods after the latest comparable monitoring configuration. A true zero actual yield is eligible, and PR above 100% is retained. Without enough history, corrected values show **—** while original values remain available. Changing n recalculates correction without fetching weather again.
+
+Correction applies to the page and application API only. All 13 HA output IDs and meanings remain unchanged; the four forecast entities continue to report original forecast energy integrated from the 15-minute intervals.
 
 These are estimated DC reference values for one PV module array, using plane-of-array irradiance and a simplified NOCT temperature model. They do not model inverter efficiency/clipping, shading, snow, soiling or system losses and do not guarantee actual AC yield. The four forecast entities are kWh energy values without `state_class`; they can decrease after refresh and are separate from cumulative monitoring energy. They do not provide native HA forecast or Energy dashboard integration.
 

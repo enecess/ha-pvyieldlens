@@ -6,11 +6,12 @@ Confronta la potenza stimata e quella effettiva dei pannelli. Segui il PR e l’
 
 ## Funzioni
 
-- Potenza, PR e potenza ottimizzabile in tempo reale.
-- Storico di potenza e PR ogni 1, 5 o 10 minuti.
-- Energia stimata per oggi e dal primo avvio.
-- Grafici delle ultime 24 ore, 7 giorni o 30 giorni.
-- Sei lingue, da scegliere nel menu in alto a destra.
+- Panoramica con potenza, PR e produzione consolidata di oggi.
+- Confronti di efficienza con contabilizzazioni originali di 1, 5 o 10 minuti.
+- Energia stimata di oggi e dalla configurazione.
+- Confronto energetico giornaliero per 7/30 giorni o un intervallo personalizzato fino a 90 date.
+- Previsioni originali e corrette ogni 15 minuti.
+- Sei lingue, con menu in alto a destra.
 
 ## Avvio rapido
 
@@ -52,7 +53,7 @@ La pagina è accessibile dal computer con Docker. Per aprirla da un altro dispos
 
 ## Impostazioni
 
-**Tempo reale** mostra medie attuali e diagnostica, **Storico** i periodi conclusi e l’energia/PR dell’intervallo scelto, **Previsioni** le stime meteo. La voce separata **Impostazioni**, con ingranaggio e testo, è in alto a destra; le tre schede dati restano disponibili. L’indice delle categorie scorre un unico modulo continuo: Connessione a Home Assistant, Moduli fotovoltaici, Sensori, Monitoraggio e Previsioni.
+Il **Panoramica** mostra potenza attuale e produzione di oggi, **Efficienza** confronta energia consolidata e PR, e **Previsioni** affianca valori originali e corretti. Le **Impostazioni** restano in alto a destra, con le tre viste dati disponibili. Le categorie coprono connessione HA, moduli PV, sensori, monitoraggio e previsioni.
 
 **Salva configurazione** mantiene aperte le Impostazioni. **Scarta modifiche** ricarica dal server la configurazione salvata e sostituisce le modifiche; se il caricamento fallisce, la bozza resta disponibile per riprovare. Uscendo con modifiche non salvate puoi continuare a modificarle o scartarle. Rientrare nelle Impostazioni ricarica la configurazione salvata.
 
@@ -69,11 +70,13 @@ Il menu **Modalità tema**, in alto a destra, offre Auto, Chiaro e Scuro. Auto s
 | Media su | Tempo usato per la media in tempo reale. Predefinito: 60 secondi. |
 | Aggiorna ogni | Tempo tra gli aggiornamenti. Predefinito: 5 secondi. |
 
-Salva e apri **Tempo reale**. Il primo risultato consolidato appare nello **Storico** alla fine del periodo in corso. In **Tempo senza nuovi dati**, imposta quanto attendere un aggiornamento da ogni sensore.
+Salva e apri **Panoramica**. Il primo risultato consolidato appare nello **Efficienza** alla fine del periodo in corso. In **Tempo senza nuovi dati**, imposta quanto attendere un aggiornamento da ogni sensore.
 
-La vista dal vivo precarica dieci minuti fissi all’apertura o alla riconnessione. Ogni punto usa ancora **Media su** e la raccolta segue **Aggiorna ogni**. Il trend è ricostruito dalle osservazioni salvate con i parametri attuali; non è un registro delle istantanee pubblicate. Osservazioni mancanti o scadute e il punto attualmente offline rimangono lacune. Le disconnessioni precedenti senza una lacuna riconoscibile non sono ricostruibili con precisione. Lo Storico conserva i risultati consolidati originali. Quando la diagnostica è aperta nella pagina Tempo reale visibile, i tre sensori configurati vengono letti da Home Assistant circa una volta al secondo. Chiudere la diagnostica, cambiare pagina o nascondere la scheda del browser sospende queste richieste. L’età usa l’ora di Home Assistant e avanza localmente tra le letture; l’intervallo di monitoraggio e gli aggiornamenti del grafico restano invariati.
+Il Panoramica precarica gli ultimi dieci minuti all’apertura o alla riconnessione. I dati di produzione mostrano oggi potenza stimata/effettiva consolidata, irradianza e temperatura dei moduli. Il grafico energetico propone 7 giorni predefiniti, 30 giorni o un intervallo personalizzato inclusivo di massimo 90 date domestiche, non oltre oggi. I dati mancanti restano vuoti e lo zero misurato rimane zero; contabilizzazioni e energia cumulativa non cambiano.
 
-Le curve smussate servono solo alla visualizzazione. I dettagli con mouse, tocco e tastiera mostrano i valori originali; le previsioni mostrano l’intervallo orario originale. Energia e PR usano i dati originali. L’ora domestica determina totali giornalieri, date delle previsioni, meteo, Oggi e intervalli orari. Gli orari dal vivo/dello storico e di aggiornamento/download seguono la preferenza HA server/local del lettore; Docker autonomo usa il fuso del browser. Una preferenza HA illeggibile ripiega sull’ora domestica. Una nota indica fusi diversi; gli scostamenti UTC distinguono solo ore ripetute o intervalli con un cambio di scostamento.
+Efficienza mostra PR del periodo, variazione dal periodo precedente comparabile in punti percentuali ed energia stimata meno effettiva. Oggi si confronta con ieri fino alla stessa ora locale, 24 ore con le 24 precedenti, 7/30 giorni con lo stesso intervallo spostato di 7/30 date domestiche. I due grafici condividono riepilogo giornaliero o intervallo di contabilizzazione configurato.
+
+Lo smussamento riguarda solo il disegno. Mouse, tocco e tastiera mostrano i record originali, anche gli intervalli di previsione di 15 minuti. Energia e PR usano valori non smussati. Date e previsioni seguono l’ora domestica; gli orari di monitoraggio e download seguono la preferenza HA server/local del lettore o il browser con Docker autonomo. Gli scostamenti UTC distinguono, quando necessario, gli orari ripetuti.
 
 ## Previsioni di produzione
 
@@ -81,11 +84,15 @@ Le previsioni sono disattivate per impostazione predefinita alla prima installaz
 
 Il monitoraggio usa la **Temperatura dei moduli** misurata. Le previsioni usano la **Temperatura dell’aria** e la **Temperatura nominale di funzionamento della cella (NOCT)** per calcolare la **Temperatura stimata delle celle**. Sono grandezze distinte; il monitoraggio non converte la temperatura dei moduli in temperatura delle celle.
 
-Open-Meteo fornisce il meteo orario per oggi e i sei giorni di calendario locali successivi. Scegli una data per energia giornaliera, curva oraria e tabella degli intervalli. La previsione di oggi comprende tutto il giorno; **Rimanente oggi** solo il tempo da adesso alla mezzanotte locale. Entrambe usano l’ultimo meteo scaricato correttamente e sono distinte dall’energia stimata consolidata calcolata dai sensori. L’energia rimanente diminuisce con il tempo tra i download; nuovi dati possono anche modificare la stima dell’intera giornata.
+Open-Meteo fornisce dati del modello ogni 15 minuti per oggi e i sei giorni domestici successivi. Alcune regioni o variabili interpolano modelli orari; il passo di uscita non garantisce maggiore accuratezza. Seleziona una data per energia originale/corretta, curve di potenza e dettagli. Oggi comprende tutto il giorno; **Rimanente oggi** va da adesso alla mezzanotte domestica e diminuisce tra i download. Un giorno normale ha 96 intervalli, uno con cambio dell’ora 92 o 100.
 
-Ogni scheda mostra meteo, massima/minima delle previsioni orarie, barra energetica e kWh. L’etichetta calda **Oggi** segue la mezzanotte domestica e rimane visibile quando un’altra data è selezionata in blu. Le temperature usano gli estremi dei campioni orari grezzi; il meteo rappresentativo usa il massimo codice WMO noto del giorno. Ogni campo richiede tutti i campioni UTC orari attesi nel giorno domestico, anche con giornate di 23/25 ore e fusi frazionari. Un campo incompleto è indisponibile, mentre l’altro completo rimane visibile. Zero è valido; il meteo sconosciuto ha un’icona neutra. Meteo e potenza condividono richiesta, cache e ora di download, senza ulteriori aggiornamenti.
+Le schede mantengono meteo e massima/minima delle previsioni orarie accanto a coppie di barre energetiche e kWh. Il segno caldo **Oggi** segue la mezzanotte domestica indipendentemente dalla selezione blu. I riepiloghi meteo usano ancora campioni orari della stessa richiesta, cache e ora di download. Meteo ed energia possono mancare indipendentemente; zero resta valido.
 
-Il meteo si aggiorna ogni ora o con **Aggiorna previsione**. La cache corrispondente resta dopo il riavvio. Un errore conserva l’ora del download e segnala dati obsoleti; nuovo tentativo dopo 15 minuti. Anche i dati vecchi di almeno due ore sono obsoleti. Gli intervalli mancanti rendono indisponibili i totali interessati; la completezza dei dati è mostrata separatamente e i dati mancanti non valgono zero. Sono indicati disattivazione, posizione HA assente, primo caricamento e indisponibilità.
+Il meteo si aggiorna normalmente ogni ora o con **Aggiorna previsione**. La cache corrispondente sopravvive al riavvio. Un errore conserva l’ora di download, viene mostrato e comporta un nuovo tentativo dopo 15 minuti. Dati mancanti rendono indisponibili i totali interessati (**—**). Restano indicati disattivazione, posizione assente, caricamento e nessun dato.
+
+La **Previsione originale** conserva il modello meteo/NOCT. La **Previsione corretta** lo moltiplica per il PR recente ponderato per energia, con più peso alle date domestiche completate più recenti. In **Impostazioni > Previsioni**, i giorni storici PR sono n=14 per default, intero 3–90; l’emivita è n/2 giorni. Servono almeno 3 date idonee con energia stimata positiva. Energia effettiva e stimata usano gli stessi periodi validi dopo l’ultima configurazione di monitoraggio comparabile. Lo zero effettivo è valido e il PR oltre 100% non è limitato. Senza abbastanza storico, la correzione mostra **—**, mentre i valori originali restano disponibili. Cambiare n ricalcola la correzione senza richiedere di nuovo il meteo.
+
+La correzione riguarda solo pagina e API applicativa. I 13 identificatori e significati delle uscite HA restano invariati; le quattro entità di previsione conservano l’energia originale integrata dagli intervalli di 15 minuti.
 
 Sono riferimenti stimati in corrente continua per un solo campo di pannelli, con irradianza sul loro piano e modello termico NOCT semplificato. Non includono efficienza/limitazione dell’inverter, ombre, neve, sporco o perdite e non garantiscono la produzione reale in corrente alternata. Le quattro entità hanno kWh e classe energy, senza `state_class`; possono diminuire e restano separate dai contatori cumulativi. Non forniscono un’integrazione nativa con previsioni HA o dashboard Energia.
 
