@@ -53,7 +53,7 @@ La pagina è accessibile dal computer con Docker. Per aprirla da un altro dispos
 
 ## Impostazioni
 
-Il **Panoramica** mostra potenza attuale e produzione di oggi, **Efficienza** confronta energia consolidata e PR, e **Previsioni** affianca valori originali e corretti. Le **Impostazioni** restano in alto a destra, con le tre viste dati disponibili. Le categorie coprono connessione HA, moduli PV, sensori, monitoraggio e previsioni.
+La **Panoramica** mostra potenza attuale e produzione di oggi, **Efficienza** confronta energia consolidata e PR, e **Previsioni** affianca valori originali e corretti. Le **Impostazioni** restano in alto a destra, con le tre viste dati disponibili. Le categorie coprono connessione HA, moduli PV, sensori, monitoraggio e previsioni.
 
 **Salva configurazione** mantiene aperte le Impostazioni. **Scarta modifiche** ricarica dal server la configurazione salvata e sostituisce le modifiche; se il caricamento fallisce, la bozza resta disponibile per riprovare. Uscendo con modifiche non salvate puoi continuare a modificarle o scartarle. Rientrare nelle Impostazioni ricarica la configurazione salvata.
 
@@ -70,9 +70,9 @@ Il menu **Modalità tema**, in alto a destra, offre Auto, Chiaro e Scuro. Auto s
 | Media su | Tempo usato per la media in tempo reale. Predefinito: 60 secondi. |
 | Aggiorna ogni | Tempo tra gli aggiornamenti. Predefinito: 5 secondi. |
 
-Salva e apri **Panoramica**. Il primo risultato consolidato appare nello **Efficienza** alla fine del periodo in corso. In **Tempo senza nuovi dati**, imposta quanto attendere un aggiornamento da ogni sensore.
+Salva e apri **Panoramica**. Il primo risultato consolidato appare in **Efficienza** alla fine del periodo in corso. In **Tempo senza nuovi dati**, imposta quanto attendere un aggiornamento da ogni sensore.
 
-Il Panoramica precarica gli ultimi dieci minuti all’apertura o alla riconnessione. I dati di produzione mostrano oggi potenza stimata/effettiva consolidata, irradianza e temperatura dei moduli. Il grafico energetico propone 7 giorni predefiniti, 30 giorni o un intervallo personalizzato inclusivo di massimo 90 date domestiche, non oltre oggi. I dati mancanti restano vuoti e lo zero misurato rimane zero; contabilizzazioni e energia cumulativa non cambiano.
+La Panoramica precarica gli ultimi dieci minuti all’apertura o alla riconnessione. I dati di produzione mostrano oggi potenza stimata/effettiva consolidata, irradianza e temperatura dei moduli. Il grafico energetico propone 7 giorni predefiniti, 30 giorni o un intervallo personalizzato inclusivo di massimo 90 date domestiche, non oltre oggi. I dati mancanti restano vuoti e lo zero misurato rimane zero; contabilizzazioni e energia cumulativa non cambiano.
 
 Efficienza mostra PR del periodo, variazione dal periodo precedente comparabile in punti percentuali ed energia stimata meno effettiva. Oggi si confronta con ieri fino alla stessa ora locale, 24 ore con le 24 precedenti, 7/30 giorni con lo stesso intervallo spostato di 7/30 date domestiche. I due grafici condividono riepilogo giornaliero o intervallo di contabilizzazione configurato.
 

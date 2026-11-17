@@ -73,6 +73,7 @@ watch([() => props.active, visible, context, () => props.snapshot], async ([acti
   const rollingWindowExpired = selection.value.period === '24h' && points.value.some(point =>
     point.start < Date.now() / 1000 - 86400);
   if (pendingRequest?.key === key) return;
+  pendingRequest = null;
   if (key === lastKey && (error.value ? previous?.[0] && previous?.[1] : !rollingWindowExpired)) return;
   const request = { key };
   pendingRequest = request;

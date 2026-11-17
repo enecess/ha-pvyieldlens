@@ -36,6 +36,18 @@ def test_input_averages_survive_missing_actual_power(store):
     assert view.requested_range.model_dump() == {'start': 0, 'end': 60}
 
 
+def test_independent_input_average_weights_unequal_durations_in_a_startup_window(store):
+    observations = samples(power=None, at=20, temp=20, sun=100) + [Observation('sensor.temp', 30, 40)]
+    commit_windows(store, settings(settlement_interval_minutes=1), observations, [20, 60])
+
+    view = generation_view(store, now=60, home_timezone='UTC')
+
+    assert len(view.windows) == len(view.inputs) == 1
+    assert view.windows[0]['actual_power_w'] is None
+    assert (view.inputs[0].start, view.inputs[0].end) == (20, 60)
+    assert view.inputs[0].module_temperature_c == 35
+
+
 def test_source_timeout_does_not_zero_fill_other_inputs(store):
     observations = samples(temp=20, sun=100) + [Observation('sensor.temp', 90, 40)]
     commit_windows(store, settings(irradiance_max_age_seconds=30), observations, [0, 60, 120])

@@ -106,6 +106,60 @@ it('keeps daily empty slots, zero bars, PR gaps and removes tooltip quality and 
   expect(host.querySelector('.chart-tooltip')?.textContent).not.toMatch(/completeness|quality|included|allocated/i);
 });
 
+it('breaks daily PR paths at null dates instead of connecting across missing days', async () => {
+  vi.stubGlobal('fetch', async (url: string) => {
+    const result = view(new URL(url, 'http://test/').searchParams.get('period')!);
+    result.days = result.days.map((day, index) => ({ ...day,
+      summary: [1, 3, 4].includes(index) ? summary : empty }));
+    return new Response(JSON.stringify(result));
+  });
+  await mount(); await select('7d');
+  expect(host.querySelector('#daily-pr-chart path.series')?.getAttribute('d')?.trim()).toMatch(/^M[^M]+M[^M]+L[^M]+$/);
+  expect(host.querySelectorAll('#daily-pr-chart .daily-pr-point')).toHaveLength(3);
+});
+
+it('retires daily chart scroll callbacks across repeated daily and settlement renderer transitions', async () => {
+  host.id = 'content-scroll';
+  const add = host.addEventListener.bind(host);
+  const remove = host.removeEventListener.bind(host);
+  const listeners = new Map<EventListenerOrEventListenerObject, EventListener>();
+  let scrollCalls = 0;
+  vi.spyOn(host, 'addEventListener').mockImplementation((type, listener, options) => {
+    if (type !== 'scroll') { add(type, listener, options); return; }
+    const wrapped: EventListener = event => {
+      scrollCalls++;
+      if (typeof listener === 'function') listener.call(host, event);
+      else listener.handleEvent(event);
+    };
+    listeners.set(listener, wrapped);
+    add(type, wrapped, options);
+  });
+  vi.spyOn(host, 'removeEventListener').mockImplementation((type, listener, options) => {
+    remove(type, type === 'scroll' ? listeners.get(listener) ?? listener : listener, options);
+  });
+  await mount();
+  for (const [selector, expected] of [
+    ['#history-range [data-value="7d"]', 2],
+    ['#history-aggregation [data-value=settlement]', 0],
+    ['#history-aggregation [data-value=day]', 2],
+    ['#history-range [data-value=today]', 0],
+    ['#history-range [data-value="30d"]', 2],
+    ['#history-aggregation [data-value=settlement]', 0],
+    ['#history-aggregation [data-value=day]', 2],
+    ['#history-range [data-value="24h"]', 0],
+    ['#history-range [data-value="7d"]', 2],
+    ['#history-aggregation [data-value=settlement]', 0],
+    ['#history-range [data-value="30d"]', 2],
+    ['#history-range [data-value=today]', 0],
+  ] as const) {
+    await click(selector);
+    scrollCalls = 0;
+    host.dispatchEvent(new Event('scroll'));
+    await flush();
+    expect(scrollCalls, `scroll callbacks after selecting ${selector}`).toBe(expected);
+  }
+});
+
 it('keeps_new_history_range_when_old_request_finishes', async () => {
   let resolve!: (value: Response) => void;
   vi.mocked(fetch).mockReturnValueOnce(new Promise<Response>(done => { resolve = done; }));
@@ -114,6 +168,45 @@ it('keeps_new_history_range_when_old_request_finishes', async () => {
   expect(host.querySelector('#history-pr')?.textContent).toBe('112.5');
   expect(host.querySelector('#daily-energy-chart .daily-cutoff')?.textContent).toContain('Asia/Shanghai');
   expect(host.querySelectorAll('#daily-energy-chart .daily-column')).toHaveLength(7);
+});
+
+it.each(['success', 'error'] as const)('keeps cached Today when a pending 7d request ends in %s', async outcome => {
+  await mount();
+  let resolve!: (value: Response) => void;
+  let reject!: (reason: Error) => void;
+  vi.mocked(fetch).mockReturnValueOnce(new Promise<Response>((done, fail) => { resolve = done; reject = fail; }));
+  await select('7d'); await select('today');
+  expect(fetch).toHaveBeenCalledTimes(2);
+  expect(vi.mocked(fetch).mock.calls.map(([url]) => url)).toEqual([
+    'api/history?period=today&compare=true', 'api/history?period=7d&compare=true']);
+  if (outcome === 'success') resolve(new Response(JSON.stringify({ ...view('7d'),
+    summary: { ...summary, estimated_energy_kwh: 2, actual_energy_kwh: 1, pr: 50 },
+    comparison: { ...view('7d').comparison, pr_change_pp: -20 },
+    windows: [{ ...window, start: window.start - 86400, actual_power_w: 400, pr: 50 }],
+    requested_range: { start: window.start - 86400, end: window.end },
+  })));
+  else reject(new TypeError('Offline'));
+  await flush();
+  expect(host.querySelector('#history-range [data-value=today]')?.getAttribute('aria-pressed')).toBe('true');
+  expect(host.querySelector('#history-range [data-value="7d"]')?.getAttribute('aria-pressed')).toBe('false');
+  expect(host.querySelector('#history-aggregation')).toBeNull();
+  expect(host.querySelectorAll('.daily-history-chart')).toHaveLength(0);
+  expect(host.querySelector('#history-pr')?.textContent).toBe('112.5');
+  expect(host.querySelector('#history-pr-change')?.textContent).toBe('+12.5');
+  expect(host.querySelector('#history-energy-gap')?.textContent).toBe('-0.01');
+  expect(host.querySelector('#history-actual-energy')?.textContent).toBe('0.09');
+  expect(host.querySelector('#history-energy')?.textContent).toBe('0.08');
+  expect(host.querySelector('#history-chart .chart-hit-area')?.getAttribute('aria-valuemin')).toBe('1794326400');
+  expect(host.querySelector('#history-chart .chart-hit-area')?.getAttribute('aria-valuemax')).toBe('1794326580');
+  host.querySelector('#history-chart .chart-hit-area')!.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true }));
+  await flush();
+  expect(host.querySelector('#history-chart .chart-tooltip')?.textContent).toContain('1,800 W');
+  host.querySelector('#pr-chart .chart-hit-area')!.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true }));
+  await flush();
+  expect(host.querySelector('#pr-chart .chart-tooltip')?.textContent).toContain('112.5 %');
+  expect(host.querySelector('#history-page > .banner[role=status]')).toBeNull();
+  props.snapshot = { ...props.snapshot, calculated_at: 999 }; await flush();
+  expect(fetch).toHaveBeenCalledTimes(2);
 });
 
 it('refreshes only on visible settlement, configuration and household-date changes', async () => {
