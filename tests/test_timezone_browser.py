@@ -137,7 +137,7 @@ async def test_viewer_timezone_keeps_household_forecast_day(timezone_page):
     await app.locator('#settings-button').click()
     await app.locator('[data-settings-category=modules]').click()
     await app.locator('[name=total_max_power_at_stc_w]').fill('6100')
-    await expect(app.locator('#home-timezone')).to_contain_text('Home time zone')
+    await expect(app.locator('#forecast-location dt').last).to_have_text('Home time zone')
     forecast_fetch_count_before = state['forecast']
     requests_before = len(state['requests'])
     snapshot_count_before = state['snapshots']

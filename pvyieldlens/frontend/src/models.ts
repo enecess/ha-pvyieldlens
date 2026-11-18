@@ -14,7 +14,6 @@ export interface MonitoringSettings {
 }
 
 export interface ForecastSettings {
-  enabled: boolean;
   tilt_deg: number | null;
   azimuth_deg: number | null;
   tilt_entity: string | null;
@@ -152,7 +151,7 @@ export interface ForecastCorrection {
 }
 export interface ForecastView {
   correction: ForecastCorrection | null;
-  status: 'disabled' | 'location_unavailable' | 'loading' | 'ready' | 'partial' | 'stale' | 'unavailable';
+  status: 'configuration_required' | 'location_unavailable' | 'loading' | 'ready' | 'partial' | 'stale' | 'unavailable';
   refreshing: boolean;
   fetched_at: number | null;
   calculated_at: number;

@@ -15,11 +15,13 @@ async def layout_page(tmp_path):
     from test_engine import settings
     from test_integration import fake_server
     from pvyieldlens.service import Service
+    from pvyieldlens.settings import ForecastSettings
     from pvyieldlens.storage import Store
     from pvyieldlens.web import Runtime, create_app
 
     service = Service(Store(tmp_path / 'data.sqlite'))
     await service.configure(settings(settlement_interval_minutes=1, update_interval_seconds=1), now=int(time.time())-86430)
+    service.forecast.configure(service.monitoring_settings, ForecastSettings(tilt_deg=25.0, azimuth_deg=180.0), service.origin, None)
     async with fake_server() as ha_url:
         web = create_app(service, Runtime(web_password='browser-test', ha_url=ha_url,
                                          ha_token='simulation-token'), run_background=False)
@@ -676,18 +678,6 @@ async def test_settings_scrollspy_and_bottom_actions(layout_page, layout_artifac
                 - node.getBoundingClientRect().top''', category)
         assert 0 <= heading_top <= 24 if category == 'connection' else heading_top == pytest.approx(20, abs=1), {'category': category, 'heading_top': heading_top}
     await page.locator('[data-settings-category=forecast]').click()
-    checkbox = await page.locator('.checkbox-row').evaluate('''node => {
-        const text = node.querySelector('span').getBoundingClientRect();
-        const input = node.querySelector('input').getBoundingClientRect();
-        return {gap: input.left - text.right, textMiddle: (text.top + text.bottom) / 2,
-            inputMiddle: (input.top + input.bottom) / 2};
-    }''')
-    assert 0 <= checkbox['gap'] <= 12, checkbox
-    assert checkbox['textMiddle'] == pytest.approx(checkbox['inputMiddle'], abs=1)
-    enabled = await page.locator('[name=forecast_enabled]').is_checked()
-    await page.locator('.checkbox-row span').click()
-    assert await page.locator('[name=forecast_enabled]').is_checked() is not enabled
-    await page.locator('.checkbox-row span').click()
     for theme in ['light', 'dark']:
         await page.locator('#theme-select').select_option(theme)
         await page.screenshot(path=str(layout_artifacts / f'settings-{width}-{height}-{theme}.png'))
@@ -818,3 +808,47 @@ async def test_sensor_labels_and_clear_buttons_fit_narrow_settings(layout_page, 
         assert control['top'] <= clear['top'] < clear['bottom'] <= control['bottom']
         assert clear['width'] >= 24 and clear['height'] >= 24
     await page.screenshot(path=str(layout_artifacts / f'settings-pickers-{width}-{theme}.png'))
+
+
+@pytest.mark.parametrize('width', [390, 1440])
+async def test_settings_location_and_angle_layout(layout_page, layout_artifacts, width):
+    from playwright.async_api import expect
+    from pvyieldlens.settings import ForecastSettings, HALocation
+
+    page, service = layout_page
+    origin = (await (await page.request.get(page.url + 'api/config')).json())['connection']['url']
+    await service.configure(service.monitoring_settings, origin=origin)
+    service.forecast.configure(service.monitoring_settings,
+        ForecastSettings(tilt_entity='number.tracker_tilt', azimuth_deg=123.5), origin,
+        HALocation(origin=origin, latitude=52.51739, longitude=13.39513,
+                   location_name='West terrace · Community solar array', home_timezone='America/Argentina/Buenos_Aires'))
+    await page.set_viewport_size({'width': width, 'height': 1050 if width == 390 else 930})
+    await page.emulate_media(reduced_motion='reduce')
+    await page.reload()
+    await page.locator('#settings-button').click()
+
+    for theme in ('light', 'dark'):
+        await page.locator('#theme-select').select_option(theme)
+        await page.locator('[data-settings-category=modules]').click()
+        tilt = page.get_by_role('group', name='Module tilt', exact=True)
+        direction = page.get_by_role('group', name='Module direction', exact=True)
+        await expect(tilt.locator('.angle-reading')).to_have_text('number.tracker_tilt · Temporarily unreadable')
+        await expect(direction.locator('[name=forecast_azimuth_deg]')).to_have_value('123.5')
+        tilt_box, direction_box = await tilt.bounding_box(), await direction.bounding_box()
+        if width == 390:
+            assert direction_box['y'] > tilt_box['y'] + tilt_box['height']
+            await tilt.evaluate('''group => {
+                const scroll = group.closest('#settings-scroll');
+                scroll.scrollTop += group.getBoundingClientRect().top - scroll.getBoundingClientRect().top - 10;
+            }''')
+        else:
+            assert direction_box['y'] == pytest.approx(tilt_box['y'], abs=1)
+            assert direction_box['x'] > tilt_box['x'] + tilt_box['width']
+        await page.screenshot(path=str(layout_artifacts / f'settings-angles-{width}-{theme}.png'))
+        await page.locator('[data-settings-category=forecast]').click()
+        summary = page.locator('#forecast-location')
+        await expect(summary.locator('dd')).to_have_text([
+            'West terrace · Community solar array', '52.51739, 13.39513', 'America/Argentina/Buenos_Aires'])
+        assert await summary.evaluate('node => node.scrollWidth <= node.clientWidth')
+        assert await page.evaluate('document.documentElement.scrollWidth === innerWidth')
+        await page.screenshot(path=str(layout_artifacts / f'settings-location-{width}-{theme}.png'))

@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { computed, nextTick, ref, watch } from 'vue';
 import { ChevronDown, X } from 'lucide-vue-next';
-import RequiredMark from './RequiredMark.vue';
 import { useI18n } from '../i18n';
 import type { SourceEntity } from '../models';
 
@@ -92,6 +91,7 @@ async function keydown(event: KeyboardEvent) {
     show();
     activeIndex.value = event.key === 'ArrowDown' ? Math.min(activeIndex.value + 1, filtered.value.length - 1)
       : activeIndex.value < 0 ? filtered.value.length - 1 : Math.max(0, activeIndex.value - 1);
+    positionPopup();
     await nextTick();
     popup.value?.querySelector('[aria-selected=true]')?.scrollIntoView({ block: 'nearest' });
   }
@@ -100,7 +100,7 @@ async function keydown(event: KeyboardEvent) {
 
 <template>
   <div class="sensor-field">
-    <label :for="inputId">{{ label }}<RequiredMark v-if="required" /></label>
+    <label :for="inputId">{{ label }}</label>
     <div class="sensor-combobox">
       <input :id="inputId" ref="input" :name="name" :value="model" role="combobox" aria-autocomplete="list"
         :aria-expanded="open" :aria-controls="listId" :aria-activedescendant="open && activeIndex >= 0 ? `${listId}-${activeIndex}` : undefined"

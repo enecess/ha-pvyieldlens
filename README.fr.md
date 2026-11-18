@@ -83,7 +83,7 @@ Le lissage concerne seulement le dessin. Souris, toucher et clavier inspectent l
 
 ## Prévisions de production
 
-Les prévisions sont désactivées à la première installation. Activez-les dans **Paramètres > Prévisions**. Le lieu et le fuseau horaire proviennent de la connexion Home Assistant enregistrée et se règlent dans HA.
+Le lieu et le fuseau horaire proviennent de la connexion Home Assistant enregistrée et se règlent dans HA.
 
 Dans **Paramètres > Modules photovoltaïques**, choisissez **Valeur fixe** ou **Entité HA** indépendamment pour l’inclinaison et l’orientation. L’inclinaison va de 0° à 90° inclus. L’azimut se mesure dans le sens horaire depuis le nord (0°), jusqu’à 360° exclus. Les orientations fixes comprennent aussi l’est (90°), le sud (180°) et l’ouest (270°). Les entités d’angle sont de type `sensor.*`, `number.*` ou `input_number.*` et utilisent l’unité `°`. Cliquez sur **Actualiser les entités** dans les paramètres de connexion pour les trouver.
 
@@ -97,7 +97,7 @@ Open-Meteo fournit des entrées de modèle toutes les 15 minutes pour aujourd’
 
 Les cartes conservent la météo et les températures maximale/minimale des prévisions horaires, avec deux barres d’énergie et les kWh. Le repère chaud **Aujourd’hui** suit minuit du foyer indépendamment de la sélection bleue. Les résumés météo gardent les échantillons horaires de la même requête, du même cache et de la même heure de récupération. Météo et énergie peuvent être indisponibles séparément ; zéro reste valide.
 
-La météo s’actualise normalement chaque heure ou avec **Actualiser les prévisions**. Le cache correspondant survit au redémarrage. Un échec conserve l’heure de récupération, affiche l’erreur et réessaie après 15 minutes. Des entrées manquantes rendent les totaux concernés indisponibles (**—**). Les états désactivé, lieu absent, chargement et absence de données restent affichés.
+La météo s’actualise normalement chaque heure ou avec **Actualiser les prévisions**. Le cache correspondant survit au redémarrage. Un échec conserve l’heure de récupération, affiche l’erreur et réessaie après 15 minutes. Des entrées manquantes rendent les totaux concernés indisponibles (**—**). Les états de lieu absent, de chargement et d’absence de données restent affichés.
 
 La **Prévision originale** garde le modèle météo/NOCT ; la **Prévision corrigée** le multiplie par le PR récent pondéré par l’énergie et la récence des dates terminées du foyer. Dans **Paramètres > Prévisions**, les jours historiques du PR valent n=14 par défaut, entier de 3 à 90 ; la demi-vie vaut n/2 jours. Il faut au moins 3 dates admissibles à énergie estimée positive. Les énergies réelle et estimée couvrent les mêmes périodes valides après la dernière configuration de surveillance comparable. Une production réelle nulle reste admissible ; un PR supérieur à 100 % n’est pas plafonné. Sans assez d’historique, les valeurs corrigées affichent **—**, les originales restent disponibles. Modifier n recalcule la correction sans nouvelle requête météo.
 

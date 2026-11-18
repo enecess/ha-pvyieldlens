@@ -83,7 +83,7 @@ Wygładzanie dotyczy tylko rysunku. Mysz, dotyk i klawiatura pokazują oryginaln
 
 ## Prognoza produkcji
 
-Prognoza jest domyślnie wyłączona po instalacji. Włącz ją w **Ustawienia > Prognoza**. Lokalizacja i strefa czasowa pochodzą z zapisanego połączenia Home Assistant i są ustawiane w HA.
+Lokalizacja i strefa czasowa pochodzą z zapisanego połączenia Home Assistant i są ustawiane w HA.
 
 W **Ustawienia > Moduły fotowoltaiczne** wybierz osobno dla nachylenia i kierunku **Wartość stała** lub **Encja HA**. Nachylenie wynosi od 0° do 90° włącznie. Azymut kompasowy jest liczony zgodnie z ruchem wskazówek zegara od północy (0°) do wartości poniżej 360°. Stałe kierunki obejmują także wschód (90°), południe (180°) i zachód (270°). Encje kątów to `sensor.*`, `number.*` lub `input_number.*` z jednostką `°`. Wybierz **Odśwież encje** w ustawieniach połączenia, aby je znaleźć.
 
@@ -97,7 +97,7 @@ Open-Meteo dostarcza dane modelu co 15 minut na dzisiaj i sześć kolejnych domo
 
 Karty dat zachowują pogodę oraz godzinowe maksymalne/minimalne temperatury obok par słupków energii i kWh. Ciepły znacznik **Dzisiaj** zmienia się o domowej północy niezależnie od niebieskiego zaznaczenia. Podsumowania pogody nadal używają próbek godzinowych z tego samego zapytania, pamięci podręcznej i czasu pobrania. Pogoda i energia mogą być niedostępne niezależnie; zero jest poprawne.
 
-Pogoda odświeża się zwykle co godzinę lub przyciskiem **Odśwież prognozę**. Pasująca pamięć podręczna przetrwa restart. Błąd zachowuje czas pobrania, jest widoczny i powoduje ponowienie po 15 minutach. Brak danych wejściowych oznacza niedostępne sumy (**—**). Widoczne pozostają wyłączenie, brak lokalizacji, ładowanie i brak danych.
+Pogoda odświeża się zwykle co godzinę lub przyciskiem **Odśwież prognozę**. Pasująca pamięć podręczna przetrwa restart. Błąd zachowuje czas pobrania, jest widoczny i powoduje ponowienie po 15 minutach. Brak danych wejściowych oznacza niedostępne sumy (**—**). Widoczne pozostają brak lokalizacji, ładowanie i brak danych.
 
 **Oryginalna prognoza** zachowuje model pogody/NOCT. **Skorygowana prognoza** mnoży go przez ostatni PR ważony energią, z większą wagą nowszych zakończonych dat domowych. W **Ustawienia > Prognoza** domyślnie n=14 dni historii PR, liczba całkowita 3–90; okres półtrwania to n/2 dni. Potrzeba co najmniej 3 kwalifikujących się dat z dodatnią energią szacowaną. Energia rzeczywista i szacowana obejmują te same poprawne okresy od ostatniej porównywalnej konfiguracji monitorowania. Zerowa produkcja rzeczywista jest poprawna, PR ponad 100% nie jest ograniczany. Bez dostatecznej historii korekta pokazuje **—**, a wartości oryginalne pozostają dostępne. Zmiana n przelicza korektę bez ponownego pobrania pogody.
 

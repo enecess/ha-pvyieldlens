@@ -116,7 +116,7 @@ async def test_forecast_days_select_quarter_hour_details_and_preserve_selection(
 
 
 @pytest.mark.parametrize(('status', 'failed_angle'), [
-    ('disabled', False), ('location_unavailable', False), ('unavailable', False), ('unavailable', True),
+    ('configuration_required', False), ('location_unavailable', False), ('unavailable', False), ('unavailable', True),
     ('loading', False), ('partial', False), ('stale', False), ('stale', True),
 ])
 async def test_forecast_states_are_truthful(forecast_page, status, failed_angle):
@@ -124,7 +124,7 @@ async def test_forecast_states_are_truthful(forecast_page, status, failed_angle)
     page, state, _ = forecast_page
     view = state['view']
     view['status'] = status
-    if status in ('disabled', 'location_unavailable', 'unavailable', 'loading'):
+    if status in ('configuration_required', 'location_unavailable', 'unavailable', 'loading'):
         view.update(fetched_at=None, days=[], intervals=[], today=None, remaining_today=None, tomorrow=None, seven_days=None)
     if status in ('partial', 'stale'):
         view['days'][1].update(forecast_energy_kwh=None, corrected_forecast_energy_kwh=None, quality='partial', data_completeness_percent=50)
@@ -147,7 +147,7 @@ async def test_forecast_states_are_truthful(forecast_page, status, failed_angle)
         else:
             view['last_error'] = 'forecast_fetch_failed'
     await page.locator('#forecast-tab').click()
-    if status in ('disabled', 'location_unavailable', 'loading') or status == 'unavailable' and not failed_angle:
+    if status in ('configuration_required', 'location_unavailable', 'loading') or status == 'unavailable' and not failed_angle:
         await expect(page.locator('#forecast-status')).to_have_attribute('data-status', status)
     else:
         await expect(page.locator('#forecast-status')).to_have_count(0)
@@ -203,8 +203,12 @@ async def test_forecast_states_are_truthful(forecast_page, status, failed_angle)
             else:
                 await expect(page.locator('#forecast-status')).to_have_text('No usable weather forecast is available. Retry the refresh.')
                 await expect(page.locator('#forecast-error')).to_contain_text('Weather refresh failed')
+    if status in ('configuration_required', 'location_unavailable'):
+        await expect(page.locator('#forecast-refresh')).to_be_disabled()
+    await page.emulate_media(reduced_motion='reduce')
     await page.locator('#open-forecast-settings').click()
-    await expect(page.locator('[data-settings-section=forecast]')).to_be_visible()
+    category = 'modules' if status == 'configuration_required' else 'forecast'
+    await expect(page.locator(f'[data-settings-category={category}]')).to_have_attribute('aria-current', 'location')
 
 
 async def test_failed_manual_refresh_reports_request_error_with_cached_angle_notice(forecast_page):

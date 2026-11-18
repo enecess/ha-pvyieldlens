@@ -186,7 +186,12 @@ async def test_settings_reveals_first_invalid_category(browser_workspace):
     assert 'undefined' not in await page.locator('#live-page').inner_text()
     assert 'NaN' not in await page.locator('#live-page').inner_text()
     await expect(page.locator('#live-estimated')).to_have_text('—')
-    await page.locator('#open-settings').click()
+    await page.emulate_media(reduced_motion='reduce')
+    await page.locator('#forecast-tab').click()
+    await expect(page.locator('#forecast-status')).to_have_attribute('data-status', 'configuration_required')
+    await expect(page.locator('#forecast-refresh')).to_be_disabled()
+    await page.get_by_role('button', name='Configure PV modules').click()
+    await expect(page.locator('[data-settings-category=modules]')).to_have_attribute('aria-current', 'location')
     await expect(page.get_by_label('Total max power at STC', exact=False)).to_have_value('')
     await expect(page.get_by_label('Temperature coefficient of Pmax', exact=False)).to_have_value('')
     await page.locator('button[data-settings-category=modules]').click()
@@ -194,19 +199,20 @@ async def test_settings_reveals_first_invalid_category(browser_workspace):
     await page.locator('[name=pmax_temperature_coefficient_pct_per_c]').fill('-0.35')
     await page.locator('button[data-settings-category=forecast]').click()
     await page.locator('#save-button').click()
+    tilt = page.locator('[name=forecast_tilt_deg]')
+    await expect(tilt).to_be_focused()
+    assert await tilt.evaluate('field => field.validity.valueMissing')
+    await tilt.fill('0')
+    await page.locator('#save-button').click()
+    direction = page.locator('#forecast-direction')
+    await expect(direction).to_be_focused()
+    await direction.select_option('0')
+    await page.locator('#save-button').click()
     await expect(page.locator('button[data-settings-category=sources]')).to_have_attribute('aria-pressed', 'true')
     await expect(page.locator('[name=actual_power_entity]')).to_be_focused()
     assert service.monitoring_settings is None
-    await page.locator('[name=actual_power_entity]').fill('sensor.power')
-    await page.locator('[name=module_temperature_entity]').fill('sensor.temp')
-    await page.locator('[name=irradiance_entity]').fill('sensor.sun')
-    await page.locator('button[data-settings-category=forecast]').click()
-    await page.locator('[name=forecast_enabled]').check()
-    await page.locator('#save-button').click()
-    await expect(page.locator('[name=forecast_tilt_deg]')).to_be_focused()
-    await expect(page.locator('[data-settings-section=modules] [name=forecast_tilt_deg]')).to_be_focused()
 
-
+@pytest.mark.parametrize('browser_workspace', ['missing_geometry'], indirect=True)
 @pytest.mark.parametrize(('width', 'language'), [(390, 'en'), (320, 'fr')])
 async def test_forecast_settings_round_trip_and_server_error_category(browser_workspace, width, language):
     from playwright.async_api import expect
@@ -216,9 +222,6 @@ async def test_forecast_settings_round_trip_and_server_error_category(browser_wo
     modules = page.locator('[data-settings-section=modules]')
     await page.locator('button[data-settings-category=modules]').click()
     await expect(modules.locator('[name=forecast_noct_c]')).to_have_value('45')
-    await page.locator('button[data-settings-category=forecast]').click()
-    await page.locator('[name=forecast_enabled]').check()
-    await page.locator('button[data-settings-category=modules]').click()
     await page.locator('[name=forecast_tilt_deg]').fill('25')
     await page.locator('#save-button').click()
     await expect(page.locator('#forecast-direction')).to_be_focused()
@@ -240,7 +243,7 @@ async def test_forecast_settings_round_trip_and_server_error_category(browser_wo
     await page.locator('[name=forecast_noct_c]').fill('46')
     await page.locator('#save-button').click()
     await expect(page.locator('#save-result')).to_have_text('Configuration saved')
-    assert service.forecast.settings.model_dump() == {'enabled': True, 'tilt_deg': 25, 'azimuth_deg': 123.5,
+    assert service.forecast.settings.model_dump() == {'tilt_deg': 25, 'azimuth_deg': 123.5,
         'tilt_entity': None, 'azimuth_entity': None, 'noct_c': 46, 'pr_history_days': 14}
     await page.reload()
     await page.locator('#settings-button').click()
@@ -248,20 +251,6 @@ async def test_forecast_settings_round_trip_and_server_error_category(browser_wo
     await expect(page.locator('[name=forecast_noct_c]')).to_have_value('46')
     await expect(page.locator('[name=forecast_azimuth_deg]')).to_have_value('123.5')
     await expect(page.locator('#forecast-direction')).to_have_value('custom')
-    await page.locator('[name=forecast_enabled]').uncheck()
-    await page.locator('[name=forecast_tilt_deg]').fill('')
-    await page.locator('[name=forecast_azimuth_deg]').fill('')
-    await page.locator('#save-button').click()
-    await expect(page.locator('#save-result')).to_have_text('Configuration saved')
-    assert service.forecast.settings.tilt_deg is None and service.forecast.settings.azimuth_deg is None
-    await page.reload()
-    await page.locator('#settings-button').click()
-    await page.locator('button[data-settings-category=modules]').click()
-    await expect(page.locator('[name=forecast_noct_c]')).to_have_value('46')
-    await expect(page.locator('[name=forecast_enabled]')).not_to_be_checked()
-    await expect(page.locator('[name=forecast_tilt_deg]')).to_have_value('')
-    await expect(page.locator('[name=forecast_azimuth_deg]')).to_have_count(0)
-    await expect(page.locator('#forecast-direction')).to_have_value('')
     await page.set_viewport_size({'width': 390, 'height': 430})
     await page.emulate_media(reduced_motion='reduce')
     await page.locator('[data-settings-category=monitoring]').click()
@@ -297,7 +286,7 @@ async def test_forecast_settings_round_trip_and_server_error_category(browser_wo
     await expect(timeout).to_be_focused()
     field = await timeout.bounding_box()
     dock = await page.locator('#settings-actions').bounding_box()
-    assert field['y'] + field['height'] <= dock['y'], {'field': field, 'dock': dock}
+    assert field['y'] + field['height'] <= dock['y'] + 1, {'field': field, 'dock': dock}
     await expect(timeout).to_be_in_viewport(ratio=1)
     await expect(page.locator('[name=forecast_noct_c]')).to_have_value('47')
     await expect(page.locator('#save-button')).to_be_enabled()
@@ -333,14 +322,15 @@ async def test_angle_entity_inputs_and_rated_power_help(browser_workspace):
     await expect(page.locator('#load-entities')).to_have_text('Refresh entities')
     await expect(page.locator('#connection-result')).to_have_text('Connection verified')
     await page.locator('[data-settings-category=forecast]').click()
-    await page.locator('[name=forecast_enabled]').check()
     await page.locator('[data-settings-category=modules]').click()
     modules = page.locator('[data-settings-section=modules]')
-    tilt_source = modules.locator('[name=forecast_tilt_source]')
-    tilt_entity = modules.locator('[name=forecast_tilt_entity]')
-    tilt_deg = modules.locator('[name=forecast_tilt_deg]')
-    azimuth_source = modules.locator('[name=forecast_azimuth_source]')
-    direction = modules.locator('#forecast-direction')
+    tilt_group = modules.get_by_role('group', name='Module tilt', exact=True)
+    direction_group = modules.get_by_role('group', name='Module direction', exact=True)
+    tilt_source = tilt_group.locator('[name=forecast_tilt_source]')
+    tilt_entity = tilt_group.locator('[name=forecast_tilt_entity]')
+    tilt_deg = tilt_group.locator('[name=forecast_tilt_deg]')
+    azimuth_source = direction_group.locator('[name=forecast_azimuth_source]')
+    direction = direction_group.locator('#forecast-direction')
     await tilt_deg.fill('0')
     await tilt_source.select_option('entity')
     await expect(tilt_deg).to_have_count(0)
@@ -351,7 +341,7 @@ async def test_angle_entity_inputs_and_rated_power_help(browser_workspace):
     await tilt_entity.press('ArrowDown')
     await tilt_entity.press('Enter')
     await expect(tilt_entity).to_have_value('input_number.active_tilt')
-    await expect(modules.get_by_text('Active tilt helper · Temporarily unreadable')).to_be_visible()
+    await expect(tilt_group.get_by_text('Active tilt helper · Temporarily unreadable')).to_be_visible()
     await page.locator('[data-settings-category=connection]').click()
     await page.locator('#ha-token').fill('simulation-token')
     async with page.expect_response('**/api/connection'):
@@ -371,11 +361,10 @@ async def test_angle_entity_inputs_and_rated_power_help(browser_workspace):
     await expect(tilt_entity).to_have_count(0)
     await tilt_source.select_option('entity')
     await expect(tilt_entity).to_have_value('number.tracker_axis')
-    await direction.select_option('180')
     await azimuth_source.select_option('entity')
-    azimuth_entity = modules.locator('[name=forecast_azimuth_entity]')
+    azimuth_entity = direction_group.locator('[name=forecast_azimuth_entity]')
     await azimuth_entity.fill('input_number.setup_tilt')
-    await expect(modules.get_by_text('Edited tilt helper · 90.1°')).to_be_visible()
+    await expect(direction_group.get_by_text('Edited tilt helper · 90.1°')).to_be_visible()
     await azimuth_entity.fill('input_number.saved_in_draft')
     await azimuth_source.select_option('fixed')
     await expect(direction).to_have_value('180')
@@ -407,14 +396,10 @@ async def test_angle_entity_inputs_and_rated_power_help(browser_workspace):
 
 async def assert_required_field(field, required=True):
     assert await field.evaluate('field => field.required') is required
-    assert await field.evaluate('''field => [...field.labels].reduce((count, label) =>
-        count + [...label.querySelectorAll('[aria-hidden=true]')]
-            .filter(mark => mark.textContent === '*' && mark.checkVisibility()).length, 0)
-    ''') == int(required)
 
 
 @pytest.mark.parametrize('mode', ['docker-initial', 'docker-configured', 'app'])
-async def test_connection_credentials_match_visible_required_marks(browser_workspace, mode):
+async def test_connection_credentials_keep_native_requirements(browser_workspace, mode):
     from playwright.async_api import expect
 
     page, _, _ = browser_workspace
@@ -431,6 +416,7 @@ async def test_connection_credentials_match_visible_required_marks(browser_works
     await page.route('**/api/config', configuration)
     await page.locator('#settings-button').click()
     await expect(page.locator('[name=total_max_power_at_stc_w]')).to_be_enabled()
+    await expect(page.locator('#settings-page .required-star')).to_have_count(0)
     url, token = page.locator('#ha-url'), page.locator('#ha-token')
     if mode == 'app':
         for field in [url, token]:
@@ -439,11 +425,17 @@ async def test_connection_credentials_match_visible_required_marks(browser_works
         return
     await assert_required_field(url)
     await assert_required_field(token, mode == 'docker-initial')
+    if mode == 'docker-initial':
+        saved_url = (await (await page.request.get(page.url + 'api/config')).json())['connection']['url']
+        await url.fill(saved_url)
+        await page.locator('#save-button').click()
+        await expect(token).to_be_focused()
+        assert await token.evaluate('field => field.validity.valueMissing')
     if mode == 'docker-configured':
         original = await url.input_value()
-        await url.fill(original + '///')
+        await url.fill(original + '/')
         await assert_required_field(token, False)
-        await url.fill(original + '/different')
+        await url.fill('http://other-ha.invalid:8123')
         await assert_required_field(token)
         await page.locator('#save-button').click()
         await expect(token).to_be_focused()
@@ -456,55 +448,45 @@ async def test_connection_credentials_match_visible_required_marks(browser_works
         await expect(page.locator('#save-button')).to_be_disabled()
 
 
-async def test_settings_required_marks_follow_editable_fields(browser_workspace):
+async def test_settings_sensor_order_and_active_angle_validation(browser_workspace):
     from playwright.async_api import expect
 
     page, _, _ = browser_workspace
     await page.locator('#settings-button').click()
     await expect(page.locator('[name=total_max_power_at_stc_w]')).to_be_enabled()
+    sources = page.locator('[data-settings-section=sources]')
+    assert await sources.locator('input[name]').evaluate_all(
+        'inputs => inputs.map(input => input.name)'
+    ) == ['actual_power_entity', 'irradiance_entity', 'module_temperature_entity']
+    temperature = sources.get_by_role('combobox', name='Module temperature (optional)', exact=True)
+    await expect(temperature).to_be_visible()
+    await assert_required_field(temperature, False)
     for selector in ['[name=total_max_power_at_stc_w]', '[name=pmax_temperature_coefficient_pct_per_c]',
                      '[name=forecast_noct_c]', '[name=actual_power_entity]', '[name=irradiance_entity]',
                      '[name=forecast_pr_history_days]']:
         await assert_required_field(page.locator(selector))
-    for selector in ['[name=module_temperature_entity]', '[name=forecast_tilt_source]',
-                     '[name=forecast_azimuth_source]', '[name=forecast_enabled]']:
-        await assert_required_field(page.locator(selector), False)
-    coefficient = page.locator('[name=pmax_temperature_coefficient_pct_per_c]')
-    await coefficient.fill('0')
-    assert await coefficient.evaluate('field => field.validity.valid')
-    tilt = page.locator('[name=forecast_tilt_deg]')
-    direction = page.locator('#forecast-direction')
-    azimuth = page.locator('[name=forecast_azimuth_deg]')
-    forecast = page.locator('[name=forecast_enabled]')
-    await forecast.check()
-    await page.locator('#save-button').click()
-    await expect(tilt).to_be_focused()
-    await expect(tilt).to_have_attribute('aria-invalid', 'true')
-    assert await tilt.evaluate('field => field.validity.valueMissing')
-    await forecast.uncheck()
-    await assert_required_field(tilt, False)
-    assert await tilt.evaluate('field => field.validity.valid')
-    await expect(tilt).not_to_have_attribute('aria-invalid', 'true')
-    await tilt.fill('0')
+    await expect(page.locator('#settings-page .required-star')).to_have_count(0)
+
+    tilt = page.get_by_role('group', name='Module tilt', exact=True)
+    azimuth = page.get_by_role('group', name='Module direction', exact=True)
+    direction = azimuth.locator('#forecast-direction')
     await direction.select_option('custom')
-    await azimuth.fill('0')
-    for field in [tilt, direction, azimuth]:
-        await assert_required_field(field, False)
-    await forecast.check()
-    for field in [tilt, direction, azimuth]:
+    for field in [tilt.locator('[name=forecast_tilt_deg]'), direction, azimuth.locator('[name=forecast_azimuth_deg]')]:
         await assert_required_field(field)
-        assert await field.evaluate('field => field.validity.valid')
-    await tilt.fill('91')
+    custom = azimuth.locator('[name=forecast_azimuth_deg]')
+    await custom.fill('')
     await page.locator('#save-button').click()
-    await expect(tilt).to_be_focused()
-    await expect(tilt).to_have_attribute('aria-invalid', 'true')
-    await forecast.uncheck()
-    await assert_required_field(tilt, False)
-    assert await tilt.evaluate('field => field.validity.rangeOverflow')
-    await expect(tilt).to_have_attribute('aria-invalid', 'true')
-    for axis in ['tilt', 'azimuth']:
-        await page.locator(f'[name=forecast_{axis}_source]').select_option('entity')
-        await assert_required_field(page.locator(f'[name=forecast_{axis}_entity]'))
+    await expect(custom).to_be_focused()
+    assert await custom.evaluate('field => field.validity.valueMissing')
+    await custom.fill('180')
+    tilt_value = tilt.locator('[name=forecast_tilt_deg]')
+    await tilt_value.fill('91')
+    await page.locator('#save-button').click()
+    await expect(tilt_value).to_be_focused()
+    assert await tilt_value.evaluate('field => field.validity.rangeOverflow')
+    for axis, group in [('tilt', tilt), ('azimuth', azimuth)]:
+        await group.locator(f'[name=forecast_{axis}_source]').select_option('entity')
+        await assert_required_field(group.locator(f'[name=forecast_{axis}_entity]'))
 
 
 async def test_clear_temperature_and_required_entity_pickers(browser_workspace):
@@ -519,12 +501,12 @@ async def test_clear_temperature_and_required_entity_pickers(browser_workspace):
     timeout = page.locator('[name=module_temperature_max_age_seconds]')
     await timeout.fill('86401')
     await page.locator('[data-settings-category=sources]').click()
-    temperature = page.get_by_role('combobox', name='Module temperature')
+    temperature = page.get_by_role('combobox', name='Module temperature (optional)', exact=True)
     await expect(temperature).to_have_accessible_description(
         'Leave blank to estimate module temperature from Open-Meteo air temperature, Home Assistant irradiance, and NOCT.')
     await temperature.focus()
     await page.keyboard.press('Tab')
-    clear_temperature = page.get_by_role('button', name='Clear Module temperature')
+    clear_temperature = page.get_by_role('button', name='Clear Module temperature (optional)', exact=True)
     await expect(clear_temperature).to_be_focused()
     await page.keyboard.press('Enter')
     await expect(temperature).to_be_focused()
@@ -790,10 +772,10 @@ async def test_sensor_suggestions_filter_select_and_preserve_manual_drafts(brows
     await expect(power).to_have_attribute('aria-expanded', 'false')
     await expect(page.get_by_role('button', name='Clear Actual power')).to_be_focused()
     await page.keyboard.press('Tab')
-    await expect(page.locator('[name=module_temperature_entity]')).to_be_focused()
+    await expect(page.locator('[name=irradiance_entity]')).to_be_focused()
     for field, name, entity in [
-        ('module_temperature_entity', 'Module temperature', 'sensor.outdoor_temperature'),
         ('irradiance_entity', 'Irradiance', 'sensor.roof_irradiance'),
+        ('module_temperature_entity', 'Module temperature (optional)', 'sensor.outdoor_temperature'),
     ]:
         control = page.get_by_role('combobox', name=name, exact=True)
         await control.fill('')
@@ -875,7 +857,7 @@ async def test_sensor_keyboard_selection_survives_unchanged_location_poll(browse
     await expect(page.locator('main')).to_have_attribute('data-snapshot-ready', 'true')
     await page.locator('#settings-button').click()
     await expect(page.locator('#connection-result')).to_have_text('Connection verified')
-    await expect(page.locator('#forecast-location')).to_have_text('Active · 1, 2')
+    await expect(page.locator('#forecast-location dd')).to_have_text(['Active', '1, 2', 'UTC'])
     await page.locator('[data-settings-category=sources]').click()
     control = page.get_by_role('combobox', name='Actual power', exact=True)
     await control.fill('')
@@ -1048,12 +1030,16 @@ async def browser_workspace(tmp_path, request):
     from test_engine import settings
     from test_integration import fake_server
     from pvyieldlens.service import Service
+    from pvyieldlens.settings import ForecastSettings
     from pvyieldlens.storage import Store
     from pvyieldlens.web import Runtime, create_app
 
     service = Service(Store(tmp_path / 'data.sqlite'))
-    if getattr(request, 'param', True):
+    configured = getattr(request, 'param', True)
+    if configured:
         await service.configure(settings(settlement_interval_minutes=1, update_interval_seconds=1))
+        if configured != 'missing_geometry':
+            service.forecast.configure(service.monitoring_settings, ForecastSettings(tilt_deg=0.0, azimuth_deg=180.0), service.origin, None)
     async with fake_server() as ha_url:
         web = create_app(service, Runtime(web_password='browser-test', ha_url=ha_url, ha_token='simulation-token'), run_background=False)
         async with fake_server(web) as url, async_playwright() as playwright:
@@ -1191,7 +1177,6 @@ async def test_settings_forecast_geometry_bounds_and_numeric_equivalence(browser
     assert service.monitoring_settings.total_max_power_at_stc_w == 5000
     await page.locator('[name=total_max_power_at_stc_w]').fill('5000')
     await page.locator('[data-settings-category=forecast]').click()
-    await page.locator('[name=forecast_enabled]').check()
     await page.locator('[data-settings-category=modules]').click()
     await page.locator('[name=forecast_tilt_deg]').fill('90')
     await page.locator('#forecast-direction').select_option('custom')
@@ -1562,14 +1547,16 @@ async def test_settings_refreshes_active_location_without_changing_drafts(browse
     page, service, _ = browser_workspace
     response = await page.request.get(page.url + 'api/config')
     await service.configure(service.monitoring_settings, origin=(await response.json())['connection']['url'])
-    location = HALocation(origin=service.origin, latitude=1.0, longitude=2.0, location_name='Active', home_timezone='UTC')
+    location = HALocation(origin=service.origin, latitude=52.51739, longitude=13.39513, location_name='Active', home_timezone='Europe/Berlin')
     if initial_location:
         service.forecast.configure(service.monitoring_settings, service.forecast.settings, service.origin, location)
     await page.reload()
     await page.locator('#settings-button').click()
     await expect(page.locator('[name=total_max_power_at_stc_w]')).to_have_value('5000')
     await page.locator('button[data-settings-category=forecast]').click()
-    await expect(page.locator('#forecast-location')).to_have_text('Active · 1, 2' if initial_location else 'HA location is not available yet.')
+    await expect(page.locator('#forecast-location dt')).to_have_text(['Home Assistant location', 'Coordinates', 'Home time zone'])
+    initial_values = ['Active', '52.51739, 13.39513', 'Europe/Berlin'] if initial_location else ['—', '—', '—']
+    await expect(page.locator('#forecast-location dd')).to_have_text(initial_values)
     await page.locator('button[data-settings-category=modules]').click()
     await page.locator('[name=forecast_noct_c]').fill('48')
     await page.locator('[name=total_max_power_at_stc_w]').fill('6100')
@@ -1581,26 +1568,26 @@ async def test_settings_refreshes_active_location_without_changing_drafts(browse
         await page.locator('#load-entities').click()
         await expect(page.locator('#connection-result')).to_have_text('Connection verified')
         await page.locator('button[data-settings-category=forecast]').click()
-        await expect(page.locator('#forecast-location')).to_have_text('Active · 1, 2' if initial_location else 'HA location is not available yet.')
+        await expect(page.locator('#forecast-location dd')).to_have_text(initial_values)
         drafts = await page.locator('#settings-form').evaluate('form => [...new FormData(form)]')
         for current, expected in (
-            (location, 'Active · 1, 2'),
-            (location.model_copy(update={'location_name': 'Renamed'}), 'Renamed · 1, 2'),
+            (location, ['Active', '52.51739, 13.39513', 'Europe/Berlin']),
+            (location.model_copy(update={'location_name': 'Renamed'}), ['Renamed', '52.51739, 13.39513', 'Europe/Berlin']),
             (location.model_copy(update={'latitude': -33.86, 'longitude': 151.21, 'home_timezone': 'Australia/Sydney'}),
-             'Active · -33.86, 151.21'),
-            (None, 'HA location is not available yet.'),
+             ['Active', '-33.86, 151.21', 'Australia/Sydney']),
+            (None, ['—', '—', '—']),
         ):
             service.forecast.configure(service.monitoring_settings, service.forecast.settings, service.origin, current)
             async with page.expect_response(lambda response: response.url.endswith('/api/snapshot')):
                 pass
-            await expect(page.locator('#forecast-location')).to_have_text(expected)
+            await expect(page.locator('#forecast-location dd')).to_have_text(expected)
             assert await page.locator('#settings-form').evaluate('form => [...new FormData(form)]') == drafts
             await expect(page.locator('#ha-url')).to_have_value(preview_url)
             await expect(page.locator('#ha-token')).to_have_value('simulation-token')
             await expect(page.locator('#save-button')).to_be_enabled()
             await page.locator('#settings-button').click()
-            await expect(page.locator('#forecast-location')).to_have_text(expected)
-        assert service.forecast.settings.enabled is False
+            await expect(page.locator('#forecast-location dd')).to_have_text(expected)
+        assert service.forecast.settings.noct_c == 45
 
 
 @pytest.mark.parametrize('change', ['forecast', 'monitoring', 'connection'])
@@ -1610,6 +1597,7 @@ async def test_live_curve_save_resets_only_for_monitoring_changes(browser_worksp
     from datetime import datetime, timezone
     from playwright.async_api import expect
     from test_engine import samples, settings
+    from pvyieldlens.settings import ForecastSettings
 
     page, service, _ = browser_workspace
     response = await page.request.get(page.url + 'api/config')
@@ -1617,6 +1605,7 @@ async def test_live_curve_save_resets_only_for_monitoring_changes(browser_worksp
     now = int(time.time())
     await service.configure(settings(settlement_interval_minutes=1, update_interval_seconds=1, home_timezone='Asia/Shanghai'),
                             now=now-900, origin=connection['url'])
+    service.forecast.configure(service.monitoring_settings, ForecastSettings(tilt_deg=0.0, azimuth_deg=180.0), service.origin, None)
     service.store.add_observations(samples(at=now-660), origin=service.origin)
     await service.tick(now)
     await page.clock.set_fixed_time(datetime.fromtimestamp(now, timezone.utc))

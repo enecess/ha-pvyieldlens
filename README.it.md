@@ -83,7 +83,7 @@ Lo smussamento riguarda solo il disegno. Mouse, tocco e tastiera mostrano i reco
 
 ## Previsioni di produzione
 
-Le previsioni sono disattivate alla prima installazione. Attivale in **Impostazioni > Previsioni**. La posizione e il fuso orario provengono dalla connessione Home Assistant salvata e si impostano in HA.
+La posizione e il fuso orario provengono dalla connessione Home Assistant salvata e si impostano in HA.
 
 In **Impostazioni > Moduli fotovoltaici**, scegli **Valore fisso** o **Entità HA** separatamente per inclinazione e direzione. L’inclinazione va da 0° a 90° inclusi. L’azimut si misura in senso orario dal nord (0°) fino a 360° esclusi. Le direzioni fisse comprendono anche est (90°), sud (180°) e ovest (270°). Le entità angolari sono `sensor.*`, `number.*` o `input_number.*` con unità `°`. Seleziona **Aggiorna entità** nelle impostazioni della connessione per trovarle.
 
@@ -97,7 +97,7 @@ Open-Meteo fornisce dati del modello ogni 15 minuti per oggi e i sei giorni dome
 
 Le schede mantengono meteo e massima/minima delle previsioni orarie accanto a coppie di barre energetiche e kWh. Il segno caldo **Oggi** segue la mezzanotte domestica indipendentemente dalla selezione blu. I riepiloghi meteo usano ancora campioni orari della stessa richiesta, cache e ora di download. Meteo ed energia possono mancare indipendentemente; zero resta valido.
 
-Il meteo si aggiorna normalmente ogni ora o con **Aggiorna previsione**. La cache corrispondente sopravvive al riavvio. Un errore conserva l’ora di download, viene mostrato e comporta un nuovo tentativo dopo 15 minuti. Dati mancanti rendono indisponibili i totali interessati (**—**). Restano indicati disattivazione, posizione assente, caricamento e nessun dato.
+Il meteo si aggiorna normalmente ogni ora o con **Aggiorna previsione**. La cache corrispondente sopravvive al riavvio. Un errore conserva l’ora di download, viene mostrato e comporta un nuovo tentativo dopo 15 minuti. Dati mancanti rendono indisponibili i totali interessati (**—**). Restano indicati posizione assente, caricamento e nessun dato.
 
 La **Previsione originale** conserva il modello meteo/NOCT. La **Previsione corretta** lo moltiplica per il PR recente ponderato per energia, con più peso alle date domestiche completate più recenti. In **Impostazioni > Previsioni**, i giorni storici PR sono n=14 per default, intero 3–90; l’emivita è n/2 giorni. Servono almeno 3 date idonee con energia stimata positiva. Energia effettiva e stimata usano gli stessi periodi validi dopo l’ultima configurazione di monitoraggio comparabile. Lo zero effettivo è valido e il PR oltre 100% non è limitato. Senza abbastanza storico, la correzione mostra **—**, mentre i valori originali restano disponibili. Cambiare n ricalcola la correzione senza richiedere di nuovo il meteo.
 

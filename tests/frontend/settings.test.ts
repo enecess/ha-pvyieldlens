@@ -7,7 +7,7 @@ const configuration: Configuration = {
     actual_power_entity: 'sensor.power', module_temperature_entity: 'sensor.temp', irradiance_entity: 'sensor.sun',
     settlement_interval_minutes: 1, live_window_seconds: 60, update_interval_seconds: 1,
     actual_power_max_age_seconds: 300, module_temperature_max_age_seconds: 900, irradiance_max_age_seconds: 300, home_timezone: 'UTC' },
-  forecast_settings: { enabled: true, tilt_deg: 25, azimuth_deg: 180, tilt_entity: null, azimuth_entity: null,
+  forecast_settings: { tilt_deg: 25, azimuth_deg: 180, tilt_entity: null, azimuth_entity: null,
     noct_c: 45, pr_history_days: 14 },
   location: null, mode: 'docker', connection: { url: 'http://ha', token_set: true },
 };
@@ -24,7 +24,7 @@ describe('settings drafts', () => {
     const draft = draftFromConfiguration(configuration);
     expect(draft.monitoring.total_max_power_at_stc_w).toBe('5000');
     expect(draft.monitoring.pmax_temperature_coefficient_pct_per_c).toBe('-0.35');
-    expect(draft.forecast).toEqual({ enabled: true, tilt_deg: '25', azimuth_deg: '180',
+    expect(draft.forecast).toStrictEqual({ tilt_deg: '25', azimuth_deg: '180',
       tilt_source: 'fixed', azimuth_source: 'fixed', tilt_entity: '', azimuth_entity: '', noct_c: '45', pr_history_days: '14' });
     expect(draft.connection).toEqual({ url: 'http://ha', token: '' });
     expect(Object.values(draft.monitoring).every(value => typeof value === 'string')).toBe(true);
@@ -86,7 +86,7 @@ describe('settings drafts', () => {
 
   it('saves only active angle sources and ignores hidden inputs when reverting a source', () => {
     const baseline = draftFromConfiguration({ ...configuration,
-      forecast_settings: { enabled: true, tilt_deg: null, azimuth_deg: 180,
+      forecast_settings: { tilt_deg: null, azimuth_deg: 180,
         tilt_entity: 'sensor.tracker_tilt', azimuth_entity: null, noct_c: 48.5, pr_history_days: 21 },
     });
     const draft = structuredClone(baseline);
@@ -95,8 +95,8 @@ describe('settings drafts', () => {
     draft.forecast.tilt_entity = ' sensor.tracker_tilt ';
     draft.forecast.azimuth_entity = 'number.unused';
     const context = { mode: 'app', home_timezone: 'UTC' } as const;
-    expect(configurationUpdateFromDraft(draft, context).forecast_settings).toEqual({
-      enabled: true, tilt_deg: null, azimuth_deg: 180, tilt_entity: 'sensor.tracker_tilt', azimuth_entity: null,
+    expect(configurationUpdateFromDraft(draft, context).forecast_settings).toStrictEqual({
+      tilt_deg: null, azimuth_deg: 180, tilt_entity: 'sensor.tracker_tilt', azimuth_entity: null,
       noct_c: 48.5, pr_history_days: 21,
     });
     draft.forecast.tilt_source = 'fixed';
@@ -109,20 +109,20 @@ describe('settings drafts', () => {
     expect(hasSettingsChanges(draft, baseline)).toBe(true);
   });
 
-  it('preserves null optional geometry without turning blanks into zero', () => {
+  it('preserves blanks from older incomplete geometry without turning them into zero', () => {
     const draft = draftFromConfiguration({ ...configuration,
-      forecast_settings: { ...configuration.forecast_settings, enabled: false, tilt_deg: null, azimuth_deg: null } });
+      forecast_settings: { ...configuration.forecast_settings, tilt_deg: null, azimuth_deg: null } });
     expect([draft.forecast.tilt_source, draft.forecast.azimuth_source]).toEqual(['fixed', 'fixed']);
     expect(draft.forecast.tilt_deg).toBe('');
     expect(draft.forecast.azimuth_deg).toBe('');
     expect(configurationUpdateFromDraft(draft, { mode: 'docker', home_timezone: 'Asia/Shanghai' })).toEqual({
       monitoring_settings: { ...configuration.monitoring_settings, home_timezone: 'Asia/Shanghai' },
       connection: { url: 'http://ha', token: '' },
-      forecast_settings: { enabled: false, tilt_deg: null, azimuth_deg: null, tilt_entity: null, azimuth_entity: null,
+      forecast_settings: { tilt_deg: null, azimuth_deg: null, tilt_entity: null, azimuth_entity: null,
         noct_c: 45, pr_history_days: 14 },
     });
     const zero = draftFromConfiguration({ ...configuration,
-      forecast_settings: { ...configuration.forecast_settings, enabled: false, tilt_deg: 0, azimuth_deg: 0 } });
+      forecast_settings: { ...configuration.forecast_settings, tilt_deg: 0, azimuth_deg: 0 } });
     expect(zero.forecast.tilt_deg).toBe('0');
     expect(zero.forecast.azimuth_deg).toBe('0');
     expect(hasSettingsChanges(zero, draft)).toBe(true);
@@ -136,7 +136,7 @@ describe('settings drafts', () => {
     draft.forecast.azimuth_deg = '359.9';
     expect(configurationUpdateFromDraft(draft, { mode: 'app', home_timezone: 'UTC' })).toEqual({
       monitoring_settings: configuration.monitoring_settings,
-      forecast_settings: { enabled: true, tilt_deg: 90, azimuth_deg: 359.9, tilt_entity: null, azimuth_entity: null,
+      forecast_settings: { tilt_deg: 90, azimuth_deg: 359.9, tilt_entity: null, azimuth_entity: null,
         noct_c: 45, pr_history_days: 14 },
     });
   });

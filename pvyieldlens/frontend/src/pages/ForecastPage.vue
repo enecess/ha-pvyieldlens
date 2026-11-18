@@ -10,7 +10,7 @@ import type { ColorMode } from '../theme';
 import { formatTimes } from '../timezones';
 
 const props = defineProps<{ active: boolean; summary: ForecastSummary | null; language: Language; theme: ColorMode; displayTimezone: string }>();
-defineEmits<{ 'open-settings': [section: 'forecast'] }>();
+defineEmits<{ 'open-settings': [section: 'modules' | 'forecast'] }>();
 const { t } = useI18n();
 const detail = shallowRef<ForecastView | null>(null);
 const selectedDay = ref<string | null>(null);
@@ -34,7 +34,9 @@ const differentTimezone = computed(() => homeTimezone.value !== new Intl.DateTim
 }).resolvedOptions().timeZone);
 const status = computed(() => view.value?.status ?? 'loading');
 const angleUnavailable = computed(() => view.value?.last_error === 'forecast_angle_unavailable');
-const operationalStatus = computed(() => ['disabled', 'location_unavailable', 'loading'].includes(status.value)
+const configurationRequired = computed(() => status.value === 'configuration_required');
+const prerequisiteMissing = computed(() => configurationRequired.value || status.value === 'location_unavailable');
+const operationalStatus = computed(() => prerequisiteMissing.value || status.value === 'loading'
   || status.value === 'unavailable' && !angleUnavailable.value);
 const errorMessage = computed(() => {
   const requestError = error.value ? t(error.value) : '';
@@ -186,7 +188,7 @@ async function refreshForecast() {
   <section id="forecast-page" aria-labelledby="forecast-heading">
     <div class="section-heading"><div><p class="eyebrow">{{ t('pv_modules') }} / {{ t('forecast') }}</p><h1 id="forecast-heading">{{ t('forecast') }}</h1>
       <p class="muted">{{ t('forecast_intro') }}</p></div>
-      <button id="forecast-refresh" class="secondary" :disabled="refreshing || status === 'disabled' || status === 'location_unavailable'" @click="refreshForecast">
+      <button id="forecast-refresh" class="secondary" :disabled="!view || refreshing || prerequisiteMissing" @click="refreshForecast">
         <RefreshCw :size="15" aria-hidden="true" />{{ t('forecast_refresh') }}</button></div>
     <div class="metrics forecast-metrics">
       <article v-for="card in [{ id: 'forecast-remaining', label: 'forecast_remaining', total: view?.remaining_today },
@@ -258,6 +260,6 @@ async function refreshForecast() {
       </p>
       <span id="forecast-fetched">{{ fetchedTime }}</span>
       <a href="https://open-meteo.com/" target="_blank" rel="noopener noreferrer">{{ t('forecast_attribution') }}</a></div>
-    <button id="open-forecast-settings" class="secondary" @click="$emit('open-settings', 'forecast')"><Settings :size="15" aria-hidden="true" />{{ t('forecast_configure') }}</button>
+    <button id="open-forecast-settings" class="secondary" @click="$emit('open-settings', configurationRequired ? 'modules' : 'forecast')"><Settings :size="15" aria-hidden="true" />{{ t(configurationRequired ? 'forecast_configure_modules' : 'forecast_configure') }}</button>
   </section>
 </template>

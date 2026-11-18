@@ -83,7 +83,7 @@ Die Glättung betrifft nur die Zeichnung. Maus, Touch und Tastatur zeigen Origin
 
 ## Ertragsprognose
 
-Die Prognose ist bei der ersten Installation deaktiviert. Aktivieren Sie sie unter **Einstellungen > Prognose**. Standort und Zeitzone stammen aus der gespeicherten Home-Assistant-Verbindung und werden in HA eingestellt.
+Standort und Zeitzone stammen aus der gespeicherten Home-Assistant-Verbindung und werden in HA eingestellt.
 
 Wählen Sie unter **Einstellungen > PV-Module** für Neigung und Ausrichtung jeweils **Fester Wert** oder **HA-Entität**. Die Neigung reicht von 0° bis einschließlich 90°. Der Kompassazimut zählt im Uhrzeigersinn ab Nord (0°) bis unter 360°. Als feste Richtungen stehen auch Ost (90°), Süd (180°) und West (270°) zur Auswahl. Winkelentitäten sind `sensor.*`, `number.*` oder `input_number.*` mit der Einheit `°`. Über **Entitäten aktualisieren** in den Verbindungseinstellungen finden Sie passende Entitäten.
 
@@ -97,7 +97,7 @@ Open-Meteo liefert 15-Minuten-Modelleingaben für heute und die nächsten sechs 
 
 Datumskarten behalten Wetter und stündlich prognostizierte Höchst-/Tiefsttemperaturen neben zwei Energiebalken und kWh-Werten. Die warme Markierung **Heute** folgt der Hausmitternacht unabhängig von der blauen Auswahl. Wetterzusammenfassungen verwenden weiterhin Stundensamples derselben Anfrage, desselben Caches und Abrufzeitpunkts. Wetter und Energie können unabhängig fehlen; Null bleibt gültig.
 
-Wetter wird normalerweise stündlich oder über **Prognose aktualisieren** abgerufen. Passende Caches überstehen Neustarts. Ein Fehler erhält die Abrufzeit, wird angezeigt und nach 15 Minuten erneut versucht. Fehlende Eingaben machen betroffene Summen unverfügbar (**—**). Deaktivierung, fehlender Standort, Laden und fehlende Daten bleiben sichtbar.
+Wetter wird normalerweise stündlich oder über **Prognose aktualisieren** abgerufen. Passende Caches überstehen Neustarts. Ein Fehler erhält die Abrufzeit, wird angezeigt und nach 15 Minuten erneut versucht. Fehlende Eingaben machen betroffene Summen unverfügbar (**—**). Fehlender Standort, Laden und fehlende Daten bleiben sichtbar.
 
 Die **Ursprüngliche Prognose** behält das Wetter-/NOCT-Modell. Die **Korrigierte Prognose** multipliziert es mit dem aktuellen energiegewichteten PR, wobei jüngere abgeschlossene Hauskalendertage stärker zählen. Unter **Einstellungen > Prognose** gilt standardmäßig n=14 historische PR-Tage, ganzzahlig 3–90; die Halbwertszeit ist n/2 Tage. Mindestens 3 geeignete Tage mit positiver geschätzter Energie sind erforderlich. Tatsächliche und geschätzte Energie nutzen dieselben gültigen Zeiträume seit der letzten vergleichbaren Überwachungskonfiguration. Tatsächliche Nullerträge zählen, PR über 100 % wird nicht begrenzt. Ohne genug Historie erscheint die Korrektur als **—**, die Originalprognose bleibt verfügbar. Eine Änderung von n berechnet die Korrektur ohne neuen Wetterabruf.
 

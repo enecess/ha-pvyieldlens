@@ -182,7 +182,7 @@ main.settings-active > .banner { flex-shrink: 0; }
 #settings-scroll { --settings-bottom-space: 160px; height: 100%; container-type: size; overflow-y: auto; overscroll-behavior: contain; padding: 0 6px var(--settings-bottom-space) 0; scroll-padding-bottom: var(--settings-bottom-space); }
 /* The 23px heading inset needs 3px of range to reach the 20px scroll target. */
 .settings-form-end { min-height: calc(100cqh + 3px); }
-#settings-form fieldset { display: grid; gap: 18px; min-width: 0; padding: 0; margin: 0; border: 0; }
+#settings-form > fieldset { display: grid; gap: 18px; min-width: 0; padding: 0; margin: 0; border: 0; }
 .form-section h2 { display: flex; align-items: center; gap: 10px; margin-bottom: 22px; }
 .form-section h2 svg { color: var(--pv-accent); }
 .monitoring-heading { display: flex; align-items: center; gap: 10px; }
@@ -200,8 +200,7 @@ main.settings-active > .banner { flex-shrink: 0; }
 .form-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px; }
 .form-grid.three { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 .form-section label { display: block; min-width: 0; }
-.form-section label > span:where(:not(.required-star)) { display: block; margin-bottom: 8px; font-size: 12px; font-weight: 500; }
-.required-star { margin-inline-start: 4px; color: var(--pv-accent); font-size: 16px; line-height: 12px; font-weight: 750; }
+.form-section label > span { display: block; margin-bottom: 8px; font-size: 12px; font-weight: 500; }
 .form-section input, .form-section select { display: block; width: 100%; min-width: 0; min-height: 39px; padding: 9px 10px; border: 1px solid var(--pv-line); border-radius: 7px; background: var(--pv-bg); color: var(--pv-text); font: inherit; font-size: 13px; }
 .form-section input:focus-visible { outline: 2px solid var(--pv-accent); outline-offset: 2px; }
 .form-section :is(input, select)[aria-invalid='true'] { border-color: var(--pv-amber); outline: 2px solid var(--pv-amber); outline-offset: 2px; }
@@ -213,7 +212,9 @@ main.settings-active > .banner { flex-shrink: 0; }
 .sensor-fields { display: grid; gap: 16px; }
 .sensor-field { display: grid; grid-template-columns: 145px minmax(0, 1fr); align-items: center; gap: 7px 15px; min-width: 0; }
 .sensor-field > label { font-size: 12px; font-weight: 500; }
-.angle-field { display: grid; align-content: start; gap: 12px; min-width: 0; }
+.angle-field { min-width: 0; margin: 0; padding: 10px 12px 12px; border: 1px solid var(--pv-line); border-radius: 8px; }
+.angle-field legend { padding-inline: 5px; font-size: 13px; font-weight: 650; }
+.angle-controls { display: grid; gap: 12px; min-width: 0; }
 .angle-field .sensor-field { grid-template-columns: minmax(0, 1fr); gap: 8px; }
 .form-section .sensor-help { grid-column: -2 / -1; margin-top: 0; }
 .sensor-combobox { position: relative; min-width: 0; }
@@ -234,10 +235,12 @@ main.settings-active > .banner { flex-shrink: 0; }
 .connection-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; margin-top: 18px; font-size: 12px; }
 .advanced-settings { margin-top: 24px; padding-top: 18px; border-top: 1px solid var(--pv-line); }
 .advanced-settings > p { margin-bottom: 16px; }
-.readonly-row { margin-top: 18px; padding: 12px; border: 1px solid var(--pv-line); border-radius: 7px; font-size: 12px; overflow-wrap: anywhere; }
-.form-section .checkbox-row { display: flex; align-items: center; gap: 8px; margin: 22px 0; }
-.form-section .checkbox-row > span { margin: 0; }
-.form-section .checkbox-row input { flex-shrink: 0; width: 18px; height: 18px; min-height: 18px; accent-color: var(--pv-accent); }
+#forecast-location { display: flex; flex-wrap: wrap; gap: 10px 24px; width: fit-content; max-width: 100%; margin: 12px 0 7px; padding: 9px 12px; border-radius: 7px; background: var(--pv-bg); }
+#forecast-location > div { min-width: 0; }
+#forecast-location dt { margin-bottom: 3px; color: var(--pv-muted); font-size: 12px; }
+#forecast-location dd { margin: 0; font-size: 13px; font-weight: 600; overflow-wrap: anywhere; }
+.location-coordinates { font-variant-numeric: tabular-nums; }
+#forecast-location + .muted { margin-bottom: 16px; }
 #settings-actions { position: absolute; left: 0; right: 6px; bottom: 0; z-index: 2; display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 66px; padding: 12px 15px; border: 1px solid var(--pv-line); border-radius: 12px; background: var(--pv-raised); box-shadow: 0 -5px 26px var(--pv-shadow), 0 6px 14px var(--pv-shadow); }
 .settings-feedback { min-width: 0; font-size: 12px; overflow-wrap: anywhere; }
 .settings-feedback > span { display: block; }

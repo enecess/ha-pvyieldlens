@@ -7,7 +7,7 @@ export interface SettingsDraft {
   monitoring: { [Key in Exclude<keyof MonitoringSettings, 'home_timezone'>]: string };
   connection: { url: string; token: string };
   forecast: {
-    enabled: boolean; tilt_deg: string; azimuth_deg: string; noct_c: string; pr_history_days: string;
+    tilt_deg: string; azimuth_deg: string; noct_c: string; pr_history_days: string;
     tilt_source: AngleSource; azimuth_source: AngleSource; tilt_entity: string; azimuth_entity: string;
   };
 }
@@ -28,7 +28,6 @@ export function draftFromConfiguration(value: Configuration): SettingsDraft {
     },
     connection: { url: value.connection.url, token: '' },
     forecast: {
-      enabled: forecast.enabled,
       tilt_source: forecast.tilt_entity ? 'entity' : 'fixed',
       azimuth_source: forecast.azimuth_entity ? 'entity' : 'fixed',
       tilt_entity: forecast.tilt_entity ?? '',
@@ -53,7 +52,6 @@ export function hasSettingsChanges(draft: SettingsDraft, baseline: SettingsDraft
     : numericValue(value) !== numericValue(baseline.monitoring[key as keyof SettingsDraft['monitoring']]))
     || urlValue(draft.connection.url) !== urlValue(baseline.connection.url)
     || draft.connection.token !== baseline.connection.token
-    || draft.forecast.enabled !== baseline.forecast.enabled
     || forecastAxes.some(axis => {
       const source = draft.forecast[`${axis}_source`];
       return source !== baseline.forecast[`${axis}_source`] || (source === 'entity'
@@ -80,7 +78,6 @@ export function configurationUpdateFromDraft(draft: SettingsDraft, context: { mo
     },
     ...(context.mode === 'app' ? {} : { connection: { ...draft.connection } }),
     forecast_settings: {
-      enabled: forecast.enabled,
       tilt_deg: forecast.tilt_source === 'fixed' && forecast.tilt_deg !== '' ? Number(forecast.tilt_deg) : null,
       azimuth_deg: forecast.azimuth_source === 'fixed' && forecast.azimuth_deg !== '' ? Number(forecast.azimuth_deg) : null,
       tilt_entity: forecast.tilt_source === 'entity' ? forecast.tilt_entity.trim() : null,
