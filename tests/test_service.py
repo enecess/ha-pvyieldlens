@@ -460,7 +460,7 @@ async def test_http_location_bootstraps_forecast_before_websocket_ready(tmp_path
     monkeypatch.setattr('pvyieldlens.service.time.time', lambda: 180)
     store = Store(tmp_path / 'data.sqlite')
     store.save_monitoring_settings(settings(settlement_interval_minutes=1), 120, 'http://ha.test')
-    store.save_forecast_settings(ForecastSettings(enabled=True, tilt_deg=25.0, azimuth_deg=180.0))
+    store.save_forecast_settings(ForecastSettings(tilt_deg=25.0, azimuth_deg=180.0))
     async with httpx.AsyncClient(transport=httpx.MockTransport(ha_response)) as ha_http, \
             httpx.AsyncClient(transport=httpx.MockTransport(weather_response)) as weather_http:
         ha_client = HomeAssistantClient('http://ha.test', 'secret', ha_http)
@@ -526,7 +526,7 @@ async def test_om_timeout_does_not_stop_monitoring(tmp_path, monkeypatch):
     monkeypatch.setattr('pvyieldlens.service.time.time', lambda: 180)
     store = Store(tmp_path / 'data.sqlite')
     store.save_monitoring_settings(settings(settlement_interval_minutes=1), 120, location.origin)
-    store.save_forecast_settings(ForecastSettings(enabled=True, tilt_deg=25.0, azimuth_deg=180.0))
+    store.save_forecast_settings(ForecastSettings(tilt_deg=25.0, azimuth_deg=180.0))
     async with httpx.AsyncClient(transport=httpx.MockTransport(timeout)) as http:
         service = Service(store, LiveClient())
         service.forecast = ForecastController(store, OpenMeteoClient(http))
@@ -558,7 +558,7 @@ async def test_ha_outage_uses_cached_location(tmp_path, monkeypatch):
     store = Store(path)
     store.save_monitoring_settings(settings(), 120, 'http://ha.test')
     forecast = ForecastController(store)
-    forecast.configure(settings(), ForecastSettings(enabled=True, tilt_deg=25.0, azimuth_deg=180.0),
+    forecast.configure(settings(), ForecastSettings(tilt_deg=25.0, azimuth_deg=180.0),
                        'http://ha.test', HALocation(origin='http://ha.test', latitude=0.0, longitude=0.0,
                                                   home_timezone='UTC'))
     store.close()
@@ -638,7 +638,7 @@ async def test_service_restart_recreates_separate_owned_weather_client(tmp_path,
     store = Store(tmp_path / 'data.sqlite')
     service = Service(store)
     await service.configure(settings(settlement_interval_minutes=1), now=120, origin='http://ha.test')
-    service.forecast.configure(service.monitoring_settings, ForecastSettings(enabled=True, tilt_deg=25.0, azimuth_deg=180.0),
+    service.forecast.configure(service.monitoring_settings, ForecastSettings(tilt_deg=25.0, azimuth_deg=180.0),
                                service.origin, HALocation(origin=service.origin, latitude=0.0, longitude=0.0,
                                                           home_timezone='UTC'))
     for _ in range(2):
@@ -671,7 +671,7 @@ async def test_successful_invalid_ha_location_clears_cached_site(tmp_path, monke
     store = Store(path)
     service = Service(store)
     await service.configure(settings(), now=120, origin='http://ha.test')
-    service.forecast.configure(service.monitoring_settings, ForecastSettings(enabled=True, tilt_deg=25.0, azimuth_deg=180.0),
+    service.forecast.configure(service.monitoring_settings, ForecastSettings(tilt_deg=25.0, azimuth_deg=180.0),
                                service.origin, HALocation(origin=service.origin, latitude=0.0, longitude=0.0,
                                                           home_timezone='UTC'))
     monkeypatch.setattr('pvyieldlens.service.time.time', lambda: 180)
@@ -707,7 +707,7 @@ async def test_shared_monitoring_inputs_update_forecast_and_new_origin_drops_sit
     store = Store(tmp_path / 'data.sqlite')
     service = Service(store)
     await service.configure(settings(), now=0, origin='http://ha.test')
-    service.forecast.configure(service.monitoring_settings, ForecastSettings(enabled=True, tilt_deg=25.0, azimuth_deg=180.0),
+    service.forecast.configure(service.monitoring_settings, ForecastSettings(tilt_deg=25.0, azimuth_deg=180.0),
                                service.origin, HALocation(origin=service.origin, latitude=0.0, longitude=0.0,
                                                           home_timezone='UTC'))
     await service.configure(settings(total_max_power_at_stc_w=6000, pmax_temperature_coefficient_pct_per_c=-0.4), now=30)
@@ -745,7 +745,7 @@ async def test_correction_invalidates_once_for_recovered_closed_day_settlement_b
                             config=settings(total_max_power_at_stc_w=1000, settlement_interval_minutes=1))
     store.settle(calculate(config, [], store.cursor, TODAY - 180), store.revision, 'UTC')
     service = Service(store, HistoryClient())
-    service.forecast.configure(config, ForecastSettings(enabled=True, tilt_deg=25, azimuth_deg=180),
+    service.forecast.configure(config, ForecastSettings(tilt_deg=25, azimuth_deg=180),
         ORIGIN, HALocation(origin=ORIGIN, latitude=0, longitude=0, home_timezone='UTC'))
     calls = []
     invalidate = service.forecast.invalidate_correction
@@ -835,7 +835,6 @@ async def test_temperature_refresh_and_ha_collection_are_independent(tmp_path, m
                                            settlement_interval_minutes=1, update_interval_seconds=1), 60, origin)
     async with httpx.AsyncClient(transport=httpx.MockTransport(respond)) as http:
         service = Service(store, client, ambient_client=OpenMeteoClient(http))
-        assert service.forecast.settings.enabled is False
         assert service.forecast.settings.tilt_deg is None and service.forecast.settings.azimuth_deg is None
         await service.start()
         try:

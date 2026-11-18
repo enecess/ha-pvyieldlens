@@ -108,8 +108,10 @@ def test_thirteen_outputs_use_scoped_names_and_keep_night_pr_unavailable():
                                        'today_allocation_complete')} == {
         'home_timezone': 'UTC', 'today_valid_seconds': 60, 'lifetime_valid_seconds': 600, 'today_allocation_complete': True}
     assert payloads['sensor.pvyieldlens_estimated_energy_lifetime']['state'] == '1.2'
-    assert all(payload['state'] == 'unavailable' for entity, payload in payloads.items()
-               if entity.startswith('sensor.pvyieldlens_forecast_'))
+    for entity, payload in payloads.items():
+        if entity.startswith('sensor.pvyieldlens_forecast_'):
+            assert payload['state'] == 'unavailable'
+            assert payload['attributes']['status'] == 'configuration_required'
 
 
 async def test_recorder_attribute_change_keeps_update_time_without_reported_timestamp():
@@ -166,12 +168,10 @@ async def test_invalid_optional_location_does_not_break_monitoring_timezone(site
 def test_forecast_entities_have_no_state_class(fetched_at, status):
     from forecast_fixtures import constant_intervals, forecast_input
     from pvyieldlens.forecast import ForecastBatch, forecast_view
-    from pvyieldlens.settings import ForecastSettings
 
     inputs = forecast_input()
     view = forecast_view(ForecastBatch(inputs=inputs, fetched_at=fetched_at,
-        intervals=constant_intervals(0, 2 * 86400), weather_samples=()), inputs.location,
-        ForecastSettings(enabled=True, tilt_deg=25.0, azimuth_deg=180.0), 43200)
+        intervals=constant_intervals(0, 2 * 86400), weather_samples=()), inputs.location, 43200)
     payloads = entity_payloads({'latest_settled_window': None, 'live_window': None, 'energy_totals': {},
         'calculated_at': 123, 'revision': 1, 'forecast': view.model_dump(mode='json', exclude={'days', 'intervals'})})
     targets = (

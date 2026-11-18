@@ -62,7 +62,7 @@ async def test_real_rest_websocket_collection_and_thirteen_outputs(tmp_path):
             assert payload['state'] == 'unavailable'
             assert payload['attributes']['unit_of_measurement'] == 'kWh'
             assert payload['attributes']['device_class'] == 'energy'
-            assert payload['attributes']['status'] == 'disabled'
+            assert payload['attributes']['status'] == 'configuration_required'
             assert 'state_class' not in payload['attributes']
         assert service.forecast.location.latitude == 31.23
         assert service.forecast.location.longitude == 121.47
@@ -157,7 +157,7 @@ async def test_forecast_outputs_republish_after_ha_reconnect_and_shutdown(tmp_pa
         await service.configure(settings(settlement_interval_minutes=1, home_timezone='Asia/Shanghai', update_interval_seconds=1),
             now=time.time() - 65, origin=url)
         service.forecast = ForecastController(store, OpenMeteoClient(weather_http))
-        service.forecast.configure(service.monitoring_settings, ForecastSettings(enabled=True, tilt_deg=25.0, azimuth_deg=180.0),
+        service.forecast.configure(service.monitoring_settings, ForecastSettings(tilt_deg=25.0, azimuth_deg=180.0),
             url, HALocation(origin=url, latitude=31.23, longitude=121.47, location_name='Home', home_timezone='Asia/Shanghai'))
         await service.start()
         try:
@@ -198,7 +198,7 @@ def test_corrected_forecast_keeps_thirteen_original_ha_outputs(tmp_path):
     config = committed_days(store, [(1000, 500)] * 3)
     service = Service(store)
     inputs = forecast_input(total_max_power_at_stc_w=1000)
-    service.forecast.configure(config, ForecastSettings(enabled=True, tilt_deg=25, azimuth_deg=180), ORIGIN, inputs.location)
+    service.forecast.configure(config, ForecastSettings(tilt_deg=25, azimuth_deg=180), ORIGIN, inputs.location)
     service.forecast.batch = ForecastBatch(inputs=inputs, fetched_at=NOW,
         intervals=constant_intervals(TODAY, TODAY + 8 * 86400, interval_seconds=900), weather_samples=())
     snapshot = service.snapshot(NOW)

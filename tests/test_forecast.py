@@ -21,27 +21,22 @@ def test_quarter_hour_noct_and_arbitrary_duration_energy(seconds, energy):
 
 
 def test_forecast_configuration_boundaries():
-    defaults = ForecastSettings()
-    assert not defaults.enabled
-    assert (defaults.tilt_deg, defaults.azimuth_deg, defaults.noct_c) == (None, None, 45)
-    legacy = ForecastSettings.model_validate_json('{"enabled":true,"tilt_deg":25,"azimuth_deg":180}')
-    assert legacy.tilt_entity is legacy.azimuth_entity is None
-    assert legacy == ForecastSettings(enabled=True, tilt_deg=25, azimuth_deg=180)
-    mixed = ForecastSettings(enabled=True, tilt_entity='sensor.tilt', azimuth_deg=180)
+    empty = ForecastSettings()
+    assert empty.geometry_sources is None
+    mixed = ForecastSettings(tilt_entity='sensor.tilt', azimuth_deg=180)
+    assert mixed.geometry_sources == ('sensor.tilt', 180)
     assert ForecastSettings.model_validate_json(mixed.model_dump_json()) == mixed
     for tilt in (0, 90):
-        assert ForecastSettings(enabled=True, tilt_deg=tilt, azimuth_deg=0).tilt_deg == tilt
-    for missing in ({}, {'tilt_deg': 25}, {'azimuth_deg': 180}, {'tilt_entity': 'sensor.tilt'}):
-        with pytest.raises(ValidationError):
-            ForecastSettings(enabled=True, **missing)
+        assert ForecastSettings(tilt_deg=tilt, azimuth_deg=0).geometry_sources == (tilt, 0)
+    assert ForecastSettings(tilt_deg=25).geometry_sources is None
 
 
 @pytest.mark.parametrize('changes', [
-    {'enabled': 1}, {'tilt_deg': True}, {'azimuth_deg': False}, {'noct_c': True},
+    {'tilt_deg': True}, {'azimuth_deg': False}, {'noct_c': True},
     {'tilt_deg': -0.1}, {'tilt_deg': 90.1}, {'azimuth_deg': -0.1}, {'azimuth_deg': 360},
     {'noct_c': 20}, {'noct_c': 80.1},
     {'tilt_deg': 0, 'tilt_entity': 'sensor.tilt'},
-    {'enabled': True, 'tilt_deg': 0, 'azimuth_deg': 0, 'azimuth_entity': 'number.azimuth'},
+    {'tilt_deg': 0, 'azimuth_deg': 0, 'azimuth_entity': 'number.azimuth'},
     *({'tilt_entity': entity} for entity in ('', 'sensor.', 'sensor.Tilt', 'switch.tilt', 'sensor.pvyieldlens_tilt')),
     *({field: value} for field in ('tilt_deg', 'azimuth_deg', 'noct_c')
       for value in (float('nan'), float('inf'), float('-inf'))),
@@ -115,7 +110,7 @@ def test_quarter_hour_forecast_days_follow_fractional_local_calendar_and_clip_bo
     now = datetime.fromisoformat('2026-06-01T20:00:00+00:00').timestamp()
     start = datetime.fromisoformat('2026-06-01T18:15:00+00:00').timestamp()
     batch = ForecastBatch(inputs=inputs, fetched_at=now, intervals=constant_intervals(start - 300, start + 7 * 86400 + 600, interval_seconds=900), weather_samples=())
-    view = forecast_view(batch, inputs.location, ForecastSettings(enabled=True, tilt_deg=25, azimuth_deg=180), now)
+    view = forecast_view(batch, inputs.location, now)
     assert tuple(day.day for day in view.days) == (
         '2026-06-02', '2026-06-03', '2026-06-04', '2026-06-05',
         '2026-06-06', '2026-06-07', '2026-06-08',
@@ -136,9 +131,8 @@ def test_quarter_hour_remaining_energy_clips_current_interval():
     intervals = (*constant_intervals(13 * 3600, 14 * 3600, interval_seconds=900),
                  *constant_intervals(14 * 3600, 86400, forecast_power_w=0, interval_seconds=900))
     batch = ForecastBatch(inputs=inputs, fetched_at=13 * 3600, intervals=intervals, weather_samples=())
-    settings = ForecastSettings(enabled=True, tilt_deg=25, azimuth_deg=180)
-    first = forecast_view(batch, inputs.location, settings, 13 * 3600 + 20 * 60)
-    later = forecast_view(batch, inputs.location, settings, 13 * 3600 + 40 * 60)
+    first = forecast_view(batch, inputs.location, 13 * 3600 + 20 * 60)
+    later = forecast_view(batch, inputs.location, 13 * 3600 + 40 * 60)
     assert first.remaining_today.start == 48000
     assert first.remaining_today.forecast_energy_kwh == pytest.approx(2.48)
     assert first.remaining_today.data_completeness_percent == 100
@@ -160,7 +154,7 @@ def test_quarter_hour_non_hour_timezone_and_dst_day_lengths(home_timezone, start
     start = datetime.fromisoformat(start).timestamp()
     end = datetime.fromisoformat(end).timestamp()
     batch = ForecastBatch(inputs=inputs, fetched_at=start, intervals=constant_intervals(start - 900, end + 900, interval_seconds=900), weather_samples=())
-    view = forecast_view(batch, inputs.location, ForecastSettings(enabled=True, tilt_deg=0, azimuth_deg=0), start)
+    view = forecast_view(batch, inputs.location, start)
     assert (view.today.start, view.today.end) == (start, end)
     assert len(tuple(row for row in view.intervals if start <= row.start < end)) == (end - start) / 900
     assert all(row.end - row.start == 900 for row in view.intervals)
@@ -182,7 +176,7 @@ def test_missing_quarter_hour_interval_invalidates_only_affected_totals():
     batch = ForecastBatch(inputs=inputs, fetched_at=0, intervals=(
         *intervals[:48], missing, *intervals[49:96], night, *intervals[97:],
     ), weather_samples=())
-    view = forecast_view(batch, inputs.location, ForecastSettings(enabled=True, tilt_deg=25, azimuth_deg=180), 13 * 3600)
+    view = forecast_view(batch, inputs.location, 13 * 3600)
     assert view.today.forecast_energy_kwh is None
     assert view.today.quality == 'partial'
     assert view.today.data_completeness_percent == pytest.approx(95 / 96 * 100)
@@ -200,7 +194,7 @@ def test_missing_quarter_hour_interval_invalidates_only_affected_totals():
 def test_missing_whole_day_has_zero_coverage_without_invalidating_tomorrow():
     inputs = forecast_input()
     batch = ForecastBatch(inputs=inputs, fetched_at=0, intervals=constant_intervals(86400, 7 * 86400), weather_samples=())
-    view = forecast_view(batch, inputs.location, ForecastSettings(enabled=True, tilt_deg=25, azimuth_deg=180), 0)
+    view = forecast_view(batch, inputs.location, 0)
     assert (view.today.forecast_energy_kwh, view.today.data_completeness_percent, view.today.quality) == (None, 0, 'unavailable')
     assert view.tomorrow.forecast_energy_kwh == pytest.approx(89.28)
     assert view.seven_days.forecast_energy_kwh is None
@@ -210,22 +204,22 @@ def test_missing_whole_day_has_zero_coverage_without_invalidating_tomorrow():
 
 def test_view_empty_states_do_not_invent_weather():
     inputs = forecast_input()
-    settings = ForecastSettings(enabled=True, tilt_deg=25, azimuth_deg=180)
     batch = ForecastBatch(inputs=inputs, fetched_at=0, intervals=constant_intervals(0, 7 * 86400), weather_samples=())
-    disabled = forecast_view(batch, inputs.location, ForecastSettings(), 0)
-    location = forecast_view(batch, None, settings, 0)
-    loading = forecast_view(None, inputs.location, settings, 0, refreshing=True)
-    failed = forecast_view(None, inputs.location, settings, 0, last_error='weather_unavailable')
-    assert disabled.status == 'disabled'
+    configuration = forecast_view(batch, 'configuration_required', 0)
+    location = forecast_view(batch, 'location_unavailable', 0)
+    loading = forecast_view(None, inputs.location, 0, refreshing=True)
+    failed = forecast_view(None, inputs.location, 0, last_error='weather_unavailable')
+    assert configuration.status == 'configuration_required'
     assert location.status == 'location_unavailable'
-    assert location.home_timezone is None
-    assert location.today is None
-    assert location.days == location.intervals == ()
+    for view in (configuration, location):
+        assert view.home_timezone is None
+        assert view.today is None
+        assert view.days == view.intervals == ()
     assert loading.status == 'loading'
     assert loading.refreshing
     assert failed.status == 'unavailable'
     assert failed.last_error == 'weather_unavailable'
-    for view in (disabled, loading, failed):
+    for view in (loading, failed):
         assert view.today.forecast_energy_kwh is None
         assert view.today.data_completeness_percent == 0
         assert view.intervals == ()
@@ -235,7 +229,6 @@ def test_view_empty_states_do_not_invent_weather():
 @pytest.mark.parametrize('irradiance', [None, 0], ids=['missing', 'zero'])
 def test_angle_failure_requires_overlapping_cached_power(irradiance):
     inputs = forecast_input()
-    settings = ForecastSettings(enabled=True, tilt_entity='sensor.tilt', azimuth_deg=180)
     batch = ForecastBatch(
         inputs=inputs, fetched_at=-1, tilt_entity='sensor.tilt', angles_read_at=-2, weather_samples=(),
         intervals=calculate_forecast(inputs, (
@@ -246,7 +239,7 @@ def test_angle_failure_requires_overlapping_cached_power(irradiance):
         )),
     )
     issues = (ForecastAngleIssue(axis='tilt', entity_id='sensor.tilt'),)
-    view = forecast_view(batch, inputs.location, settings, 0,
+    view = forecast_view(batch, inputs.location, 0,
                          last_error='forecast_angle_unavailable', unavailable_angles=issues)
     assert view.last_error == 'forecast_angle_unavailable'
     assert view.unavailable_angles == issues
@@ -269,8 +262,7 @@ def test_angle_failure_requires_overlapping_cached_power(irradiance):
 def test_staleness_keeps_complete_totals_and_original_fetch_time(age, last_error, expected):
     inputs = forecast_input()
     batch = ForecastBatch(inputs=inputs, fetched_at=0, intervals=constant_intervals(0, 7 * 86400), weather_samples=())
-    view = forecast_view(batch, inputs.location, ForecastSettings(enabled=True, tilt_deg=25, azimuth_deg=180),
-                         age, refreshing=True, last_error=last_error)
+    view = forecast_view(batch, inputs.location, age, refreshing=True, last_error=last_error)
     assert view.status == expected
     assert view.today.quality == 'complete'
     assert view.today.forecast_energy_kwh == pytest.approx(89.28)
@@ -285,7 +277,7 @@ def test_weather_sampling_uses_raw_hourly_temperature_with_quarter_hour_power():
         air_temperature_c=10 if index % 2 == 0 else 30, weather_code=61 if index == 23 else 0)
         for index in range(7 * 24 + 1))
     batch = ForecastBatch(inputs=inputs, fetched_at=120, intervals=constant_intervals(0, 7 * 86400, interval_seconds=900), weather_samples=samples)
-    view = forecast_view(batch, inputs.location, ForecastSettings(enabled=True, tilt_deg=25, azimuth_deg=180), 180)
+    view = forecast_view(batch, inputs.location, 180)
     day = view.days[0]
     assert day.weather.weather_code == 61
     assert day.weather.air_temperature_min_c == 10
@@ -312,7 +304,7 @@ def test_weather_sampling_days_follow_dst_and_fractional_timezone(home_timezone,
     samples = tuple(WeatherSample(at=base+index*3600, irradiance_w_m2=800,
         air_temperature_c=float(index), weather_code=61 if index == last else 0) for index in range(216))
     batch = ForecastBatch(inputs=inputs, fetched_at=start, intervals=constant_intervals(base, base+215*3600, interval_seconds=900), weather_samples=samples)
-    view = forecast_view(batch, inputs.location, ForecastSettings(enabled=True, tilt_deg=25, azimuth_deg=180), start)
+    view = forecast_view(batch, inputs.location, start)
     assert (view.today.start, view.today.end) == (start, end)
     members = tuple(sample for sample in samples if start <= sample.at < end)
     assert len(members) == count
@@ -336,7 +328,7 @@ def test_missing_weather_field_does_not_erase_other_field_or_power(missing, code
         weather_code=None if missing == 'all' or missing == 'code' and index == 12 else 0)
         for index in range(24) if missing != 'sample' or index != 12)
     batch = ForecastBatch(inputs=inputs, fetched_at=120, intervals=constant_intervals(0, 7*86400), weather_samples=samples)
-    view = forecast_view(batch, inputs.location, ForecastSettings(enabled=True, tilt_deg=25, azimuth_deg=180), 180)
+    view = forecast_view(batch, inputs.location, 180)
     assert view.status == 'ready'
     assert view.today.forecast_energy_kwh == pytest.approx(89.28)
     assert view.days[0].weather.model_dump() == dict(weather_code=code, air_temperature_min_c=minimum,
@@ -364,7 +356,7 @@ def test_correction_scales_raw_quarter_hours_and_clipped_totals_once(pr):
     batch = ForecastBatch(inputs=inputs, fetched_at=10,
         intervals=constant_intervals(-86400, 8 * 86400, interval_seconds=900), weather_samples=())
     correction = ForecastCorrection(pr=pr, history_days=14, start=-14 * 86400, end=0)
-    view = forecast_view(batch, inputs.location, ForecastSettings(enabled=True, tilt_deg=25, azimuth_deg=180), 123,
+    view = forecast_view(batch, inputs.location, 123,
                          correction=correction)
     assert view.correction == correction
     for row in view.intervals:
@@ -383,7 +375,7 @@ def test_correction_preserves_missing_forecast_even_with_zero_factor():
     rows = constant_intervals(0, 8 * 86400, interval_seconds=900)
     missing = rows[0].model_copy(update={'forecast_power_w': None, 'forecast_energy_kwh': None, 'quality': 'unavailable'})
     batch = ForecastBatch(inputs=inputs, fetched_at=10, intervals=(missing, *rows[1:]), weather_samples=())
-    view = forecast_view(batch, inputs.location, ForecastSettings(enabled=True, tilt_deg=25, azimuth_deg=180), 120,
+    view = forecast_view(batch, inputs.location, 120,
         correction=ForecastCorrection(pr=0, history_days=14, start=-14 * 86400, end=0))
     assert view.intervals[0].corrected_forecast_power_w is None
     assert view.intervals[0].corrected_forecast_energy_kwh is None

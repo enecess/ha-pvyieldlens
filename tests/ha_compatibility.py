@@ -339,15 +339,15 @@ async def exercise(client, directory):
     await client.publish(entity_payloads(snapshot))
     assert float((await client.request('GET',
         'states/sensor.pvyieldlens_forecast_energy_remaining_today'))['state']) == .6
-    snapshot['forecast'] = {'status': 'disabled'}
+    snapshot['forecast'] = {'status': 'configuration_required'}
     await client.publish(entity_payloads(snapshot))
     for name in ('today', 'remaining_today', 'tomorrow', '7d'):
         actual = await client.request('GET', 'states/sensor.pvyieldlens_forecast_energy_' + name)
         assert actual['state'] == 'unavailable'
         assert actual['attributes']['friendly_name'] == 'forecast_energy_' + name
-        assert actual['attributes']['status'] == 'disabled'
+        assert actual['attributes']['status'] == 'configuration_required'
         assert 'state_class' not in actual['attributes']
-    checks['four_forecast_outputs_energy_no_state_class_periods_decrease_disabled'] = True
+    checks['four_forecast_outputs_energy_no_state_class_periods_decrease_configuration_required'] = True
     return checks
 
 

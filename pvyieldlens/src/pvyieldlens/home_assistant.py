@@ -243,7 +243,7 @@ def entity_payloads(snapshot):
                 'home_timezone': forecast.get('home_timezone'), 'fetched_at': forecast.get('fetched_at'),
                 'calculated_at': forecast.get('calculated_at'),
                 'data_completeness_percent': data.get('data_completeness_percent', 0), 'quality': data.get('quality', 'unavailable'),
-                'status': forecast.get('status', 'disabled'), 'refreshing': forecast.get('refreshing', False),
+                'status': forecast.get('status', 'configuration_required'), 'refreshing': forecast.get('refreshing', False),
                 'last_error': forecast.get('last_error'),
             },
         }

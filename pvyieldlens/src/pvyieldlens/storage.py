@@ -140,7 +140,12 @@ class Store:
 
     def forecast_settings(self) -> ForecastSettings:
         value = self.get_meta('forecast_settings')
-        return ForecastSettings.model_validate_json(value) if value else ForecastSettings()
+        if not value:
+            return ForecastSettings()
+        saved = json.loads(value)
+        if isinstance(saved, dict):
+            saved.pop('enabled', None)
+        return ForecastSettings.model_validate(saved)
 
     def save_forecast_settings(self, settings: ForecastSettings) -> None:
         self.set_meta('forecast_settings', settings.model_dump_json())

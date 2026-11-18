@@ -110,7 +110,6 @@ class MonitoringSettings(BaseModel):
 class ForecastSettings(BaseModel):
     model_config = ConfigDict(extra="forbid", allow_inf_nan=False, strict=True, frozen=True)
 
-    enabled: bool = False
     tilt_deg: float | None = Field(default=None, ge=0, le=90)
     azimuth_deg: float | None = Field(default=None, ge=0, lt=360)
     tilt_entity: AngleEntityId | None = None
@@ -130,9 +129,14 @@ class ForecastSettings(BaseModel):
         for fixed, entity in ((self.tilt_deg, self.tilt_entity), (self.azimuth_deg, self.azimuth_entity)):
             if fixed is not None and entity is not None:
                 raise ValueError("forecast_angle_sources_conflict")
-            if self.enabled and fixed is None and entity is None:
-                raise ValueError("forecast_geometry_required")
         return self
+
+
+    @property
+    def geometry_sources(self) -> tuple[float | str, float | str] | None:
+        tilt = self.tilt_entity or self.tilt_deg
+        azimuth = self.azimuth_entity or self.azimuth_deg
+        return (tilt, azimuth) if tilt is not None and azimuth is not None else None
 
 
 class HALocation(BaseModel):

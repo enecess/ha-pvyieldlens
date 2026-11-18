@@ -59,6 +59,13 @@ class ConfigurationUpdate(BaseModel):
     connection: Connection | None = None
     forecast_settings: ForecastSettings
 
+    @field_validator('forecast_settings')
+    @classmethod
+    def require_geometry(cls, settings: ForecastSettings) -> ForecastSettings:
+        if settings.geometry_sources is None:
+            raise ValueError('forecast_geometry_required')
+        return settings
+
 
 def create_app(service: Service, runtime: Runtime, run_background=True) -> FastAPI:
     if not runtime.supervisor_token and not runtime.web_password:
@@ -248,9 +255,9 @@ def create_app(service: Service, runtime: Runtime, run_background=True) -> FastA
     async def refresh_forecast():
         async with service.lock:
             forecast = service.forecast
-            if not forecast.settings.enabled:
-                return JSONResponse({'error': 'forecast_disabled'}, status_code=409)
-            if forecast.context is None:
+            if forecast.context == 'configuration_required':
+                return JSONResponse({'error': 'forecast_configuration_required'}, status_code=422)
+            if forecast.context == 'location_unavailable':
                 return JSONResponse({'error': 'forecast_location_required'}, status_code=422)
             scheduled = forecast.request_refresh()
             return JSONResponse({'scheduled': scheduled, 'status': forecast.view(time.time()).status}, status_code=202)

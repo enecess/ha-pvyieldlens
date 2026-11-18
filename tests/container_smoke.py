@@ -143,29 +143,31 @@ def main():
         fresh = request('/api/config')
         assert fresh['monitoring_settings'] is None
         assert fresh['forecast_settings'] == {
-            'enabled': False, 'tilt_deg': None, 'azimuth_deg': None,
+            'tilt_deg': None, 'azimuth_deg': None,
             'tilt_entity': None, 'azimuth_entity': None, 'noct_c': 45.0, 'pr_history_days': 14}
+        forecast = request('/api/forecast')
+        assert forecast['status'] == 'configuration_required' and forecast['fetched_at'] is None
+        assert forecast['intervals'] == []
+        assert request('/api/snapshot')['forecast']['status'] == 'configuration_required'
+        # The simulator has no tracker entity, so readiness is exercised without external weather.
+        forecast_settings = {**fresh['forecast_settings'], 'tilt_deg': 0.0, 'azimuth_entity': 'number.tracker_azimuth'}
         request('/api/config', {'monitoring_settings':{
             'total_max_power_at_stc_w':5000, 'pmax_temperature_coefficient_pct_per_c':-0.35,
             'actual_power_entity':'sensor.power', 'module_temperature_entity':'sensor.temp', 'irradiance_entity':'sensor.sun',
-            'settlement_interval_minutes':1, 'update_interval_seconds':1, 'home_timezone':'Asia/Shanghai'}, 'forecast_settings': fresh['forecast_settings']})
+            'settlement_interval_minutes':1, 'update_interval_seconds':1, 'home_timezone':'Asia/Shanghai'}, 'forecast_settings': forecast_settings})
         until(lambda: request('/api/snapshot')['connected'])
         until(lambda: request('/api/snapshot')['energy_totals']['estimated_energy_lifetime_kwh'] > 0, timeout=75)
         fresh_live_points = live_series()
         fresh_assets = frontend_assets()
         fresh_outputs = publication()
-        assert request('/api/snapshot')['forecast']['status'] == 'disabled'
         config = request('/api/config')
-        assert config['forecast_settings'] == {
-            'enabled': False, 'tilt_deg': None, 'azimuth_deg': None,
-            'tilt_entity': None, 'azimuth_entity': None, 'noct_c': 45.0, 'pr_history_days': 14}
+        assert config['forecast_settings'] == forecast_settings
         assert config['location']['latitude'] == 31.23
         assert config['location']['longitude'] == 121.47
         assert config['location']['home_timezone'] == 'Asia/Shanghai'
-        forecast = request('/api/forecast')
-        assert forecast['status'] == 'disabled' and forecast['fetched_at'] is None
-        assert forecast['intervals'] == []
-        config['forecast_settings'].update(tilt_deg=25.0, azimuth_deg=180.0, noct_c=47.0)
+        until(lambda: request('/api/forecast')['last_error'] == 'forecast_angle_unavailable')
+        assert request('/api/snapshot')['forecast']['status'] == 'unavailable'
+        config['forecast_settings'].update(tilt_deg=25.0, noct_c=47.0)
         request('/api/config', {'monitoring_settings': config['monitoring_settings'], 'forecast_settings': config['forecast_settings']})
         before = request('/api/snapshot')['energy_totals']['estimated_energy_lifetime_kwh']
         docker('stop', '--time', '10', app)
@@ -180,11 +182,10 @@ def main():
         assert after >= before > 0
         retained = request('/api/config')
         assert retained['monitoring_settings'] == config['monitoring_settings']
-        assert retained['forecast_settings'] == {
-            'enabled': False, 'tilt_deg': 25.0, 'azimuth_deg': 180.0,
-            'tilt_entity': None, 'azimuth_entity': None, 'noct_c': 47.0, 'pr_history_days': 14}
+        assert retained['forecast_settings'] == config['forecast_settings']
+        until(lambda: request('/api/forecast')['last_error'] == 'forecast_angle_unavailable')
         forecast = request('/api/forecast')
-        assert forecast['status'] == 'disabled' and forecast['fetched_at'] is None
+        assert forecast['status'] == 'unavailable' and forecast['fetched_at'] is None
         assert forecast['intervals'] == []
         assert 'simulation-token' not in json.dumps(request('/api/config'))
         subprocess.run(['docker','compose','-f',str(root/'compose.yaml'),'config','--quiet'], check=True,
@@ -193,7 +194,7 @@ def main():
                           'fresh_setup':'passed', 'fresh_outputs':fresh_outputs, 'restart_outputs':restart_outputs,
                           'fresh_bundle_assets':fresh_assets, 'restart_bundle_assets':restart_assets,
                           'fresh_live_points':fresh_live_points, 'restart_live_points':restart_live_points,
-                          'forecast_disabled_defaults':'passed', 'restart_persistence':'passed', 'compose':'passed',
+                          'forecast_readiness':'passed', 'restart_persistence':'passed', 'compose':'passed',
                           'energy_before_kwh':before, 'energy_after_kwh':after}))
     finally:
         for kind, name in reversed(created):

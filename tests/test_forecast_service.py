@@ -15,7 +15,7 @@ from test_engine import samples, settings
 
 
 ORIGIN = 'http://ha.test'
-ENABLED = ForecastSettings(enabled=True, tilt_deg=25.0, azimuth_deg=180.0)
+PREDICTION = ForecastSettings(tilt_deg=25.0, azimuth_deg=180.0)
 LOCATION = HALocation(origin=ORIGIN, latitude=0.0, longitude=0.0, home_timezone='UTC')
 
 
@@ -26,7 +26,7 @@ def angle_state(entity_id, value, unit='°'):
         'last_reported': '1970-01-01T00:00:00+00:00'}
 
 
-def controller(store, http, *, prediction=ENABLED, ha_client=None):
+def controller(store, http, *, prediction=PREDICTION, ha_client=None):
     from pvyieldlens.forecast_service import ForecastController
 
     forecast = ForecastController(store, OpenMeteoClient(http), ha_client=ha_client)
@@ -96,7 +96,7 @@ async def test_refresh_resolves_entity_angles_and_restores_last_batch(tmp_path, 
     async with httpx.AsyncClient(transport=httpx.MockTransport(respond)) as http:
         ha = HomeAssistantClient(ORIGIN, 'saved-token', http)
         forecast = controller(store, http, prediction=ForecastSettings(
-            enabled=True, tilt_entity='sensor.tilt', azimuth_deg=180), ha_client=lambda: ha)
+            tilt_entity='sensor.tilt', azimuth_deg=180), ha_client=lambda: ha)
         await forecast.refresh()
         view = forecast.view(180)
         assert ha_requests == [['sensor.tilt']]
@@ -113,7 +113,7 @@ async def test_refresh_resolves_entity_angles_and_restores_last_batch(tmp_path, 
         assert view.fetched_at == 245
 
         clock[0] = 360
-        forecast.configure(settings(), ForecastSettings(enabled=True, tilt_entity='sensor.tilt',
+        forecast.configure(settings(), ForecastSettings(tilt_entity='sensor.tilt',
             azimuth_entity='input_number.azimuth'), ORIGIN, LOCATION)
         await forecast.refresh()
         assert ha_requests == [['sensor.tilt'], ['sensor.tilt'], ['sensor.tilt', 'input_number.azimuth']]
@@ -150,7 +150,7 @@ async def test_unavailable_entity_angle_keeps_only_usable_forecast(tmp_path):
     async with httpx.AsyncClient(transport=httpx.MockTransport(respond)) as http:
         ha = HomeAssistantClient(ORIGIN, 'saved-token', http)
         forecast = controller(store, http, prediction=ForecastSettings(
-            enabled=True, tilt_entity='sensor.tilt', azimuth_deg=180), ha_client=lambda: ha)
+            tilt_entity='sensor.tilt', azimuth_deg=180), ha_client=lambda: ha)
         now = 120
         await forecast.refresh(now=now)
         failed = forecast.view(now)
@@ -208,8 +208,8 @@ async def test_forecast_only_change_keeps_monitoring_revision_cursor_and_totals(
     before_live, before_sources = service.live_window, service.sources.copy()
     before_days = list(map(tuple, store.db.execute('SELECT * FROM days')))
     before_observations = store.observations(0, 60, settings().entities, ORIGIN)
-    service.forecast.configure(service.monitoring_settings, ENABLED, ORIGIN, LOCATION)
-    service.forecast.configure(service.monitoring_settings, ENABLED.model_copy(update={'noct_c': 47.0}), ORIGIN, LOCATION)
+    service.forecast.configure(service.monitoring_settings, PREDICTION, ORIGIN, LOCATION)
+    service.forecast.configure(service.monitoring_settings, PREDICTION.model_copy(update={'noct_c': 47.0}), ORIGIN, LOCATION)
     assert store.revision == before_revision
     assert store.cursor == before_cursor
     assert store.totals(60, 'UTC') == before_totals
@@ -240,7 +240,7 @@ async def test_manual_refresh_coalesces_with_running_request(tmp_path, dynamic):
         if dynamic:
             ha = HomeAssistantClient(ORIGIN, 'saved-token', http)
             forecast = controller(store, http, prediction=ForecastSettings(
-                enabled=True, tilt_entity='sensor.angle', azimuth_entity='sensor.angle'), ha_client=lambda: ha)
+                tilt_entity='sensor.angle', azimuth_entity='sensor.angle'), ha_client=lambda: ha)
         else:
             forecast = controller(store, http)
         await forecast.start()
@@ -282,7 +282,7 @@ async def test_changed_inputs_discard_old_inflight_result(tmp_path, field, value
         if field == 'tilt_entity':
             ha = HomeAssistantClient(ORIGIN, 'saved-token', http)
             forecast = controller(store, http, prediction=ForecastSettings(
-                enabled=True, tilt_entity='sensor.old_tilt', azimuth_deg=180), ha_client=lambda: ha)
+                tilt_entity='sensor.old_tilt', azimuth_deg=180), ha_client=lambda: ha)
         else:
             forecast = controller(store, http)
         refresh = asyncio.create_task(forecast.refresh(now=120))
@@ -322,7 +322,7 @@ async def test_unchanged_configuration_does_not_restart_or_refetch(tmp_path):
             await asyncio.sleep(0)
             before_changes = store.db.total_changes
             task = forecast._task
-            forecast.configure(settings(), ENABLED, ORIGIN, LOCATION)
+            forecast.configure(settings(), PREDICTION, ORIGIN, LOCATION)
             await forecast.start()
             await asyncio.sleep(0)
             assert forecast._task is task
@@ -380,23 +380,57 @@ async def test_success_failure_and_stale_deadlines(tmp_path, monkeypatch):
     store.close()
 
 
-async def test_disabled_has_no_requests_and_keeps_parameters(tmp_path):
-    requests = []
+async def test_complete_legacy_settings_fetch_forecast_automatically(tmp_path):
+    from pvyieldlens.forecast_service import ForecastController
+
     store = Store(tmp_path / 'data.sqlite')
-    async with httpx.AsyncClient(transport=httpx.MockTransport(
-        lambda request: requests.append(request) or httpx.Response(200, json=forecast_payload(0)),
-    )) as http:
-        forecast = controller(store, http)
-        disabled = ENABLED.model_copy(update={'enabled': False})
-        forecast.configure(settings(), disabled, ORIGIN, LOCATION)
+    store.save_monitoring_settings(settings(), 0, ORIGIN)
+    store.set_meta('ha_location', LOCATION.model_dump_json())
+    store.set_meta('forecast_settings', '{"enabled":false,"tilt_deg":0.0,"azimuth_deg":180.0}')
+
+    fetched = asyncio.Event()
+
+    def respond(request):
+        assert float(request.url.params['tilt']) == 0.0
+        assert float(request.url.params['azimuth']) == 0.0
+        fetched.set()
+        return httpx.Response(200, json=forecast_payload(0))
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(respond)) as http:
+        forecast = ForecastController(store, OpenMeteoClient(http))
         await forecast.start()
-        await forecast.refresh(now=120)
-        assert not forecast.request_refresh()
-        await asyncio.sleep(0)
-        assert requests == []
-        assert store.forecast_settings() == disabled
-        assert forecast.view(120).status == 'disabled'
-        await forecast.stop()
+        try:
+            await asyncio.wait_for(fetched.wait(), 1)
+            assert forecast.view(120).fetched_at is not None
+            assert forecast.batch.inputs.tilt_deg == 0.0
+            assert forecast.batch.inputs.azimuth_deg == 180.0
+        finally:
+            await forecast.stop()
+    store.close()
+
+
+async def test_partial_legacy_settings_wait_for_geometry_without_fetching(tmp_path):
+    from pvyieldlens.forecast_service import ForecastController
+
+    store = Store(tmp_path / 'data.sqlite')
+    store.save_monitoring_settings(settings(), 0, ORIGIN)
+    store.set_meta('ha_location', LOCATION.model_dump_json())
+    store.set_meta('forecast_settings', '{"enabled":false,"tilt_deg":0.0}')
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(
+        lambda request: pytest.fail('Incomplete geometry should not request weather'),
+    )) as http:
+        forecast = ForecastController(store, OpenMeteoClient(http))
+        await forecast.start()
+        try:
+            await forecast.refresh(now=120)
+            assert not forecast.request_refresh()
+            await asyncio.sleep(0)
+            assert forecast.settings.tilt_deg == 0.0
+            assert forecast.settings.azimuth_deg is None
+            assert forecast.view(120).status == 'configuration_required'
+        finally:
+            await forecast.stop()
     store.close()
 
 
@@ -432,7 +466,7 @@ async def test_location_name_updates_do_not_invalidate_physical_cache(tmp_path):
     )) as http:
         forecast = controller(store, http)
         await forecast.refresh(now=120)
-        forecast.configure(settings(), ENABLED, ORIGIN, LOCATION.model_copy(update={'location_name': 'New name'}))
+        forecast.configure(settings(), PREDICTION, ORIGIN, LOCATION.model_copy(update={'location_name': 'New name'}))
         assert forecast.view(180).fetched_at == 120
         assert forecast.view(180).today.forecast_energy_kwh == pytest.approx(89.28)
         assert HALocation.model_validate_json(store.get_meta('ha_location')).location_name == 'New name'
@@ -460,13 +494,13 @@ async def test_changed_inputs_hide_persisted_cache_after_restart(tmp_path, chang
         if 'tilt_entity' in changes:
             ha = HomeAssistantClient(ORIGIN, 'saved-token', http)
             forecast = controller(store, http, prediction=ForecastSettings(
-                enabled=True, tilt_entity='sensor.old_tilt', azimuth_deg=180), ha_client=lambda: ha)
+                tilt_entity='sensor.old_tilt', azimuth_deg=180), ha_client=lambda: ha)
         else:
             forecast = controller(store, http)
         await forecast.refresh(now=120)
         assert forecast.view(180).status == 'ready'
     if 'tilt_entity' in changes:
-        store.save_forecast_settings(ForecastSettings(enabled=True, azimuth_deg=180, **changes))
+        store.save_forecast_settings(ForecastSettings(azimuth_deg=180, **changes))
     elif 'origin' in changes:
         store.save_monitoring_settings(settings(), 180, changes['origin'])
         store.set_meta('ha_location', LOCATION.model_copy(update=changes).model_dump_json())
@@ -502,7 +536,7 @@ async def test_changed_running_inputs_refresh_after_old_result_is_discarded(tmp_
         await forecast.start()
         try:
             await asyncio.wait_for(entered.wait(), 1)
-            forecast.configure(settings(total_max_power_at_stc_w=6000), ENABLED, ORIGIN, LOCATION)
+            forecast.configure(settings(total_max_power_at_stc_w=6000), PREDICTION, ORIGIN, LOCATION)
             assert forecast.request_refresh()
             release.set()
             await asyncio.wait_for(received.wait(), 1)
@@ -577,149 +611,6 @@ async def test_direct_refresh_failure_reschedules_sleeping_worker(tmp_path, monk
     store.close()
 
 
-@pytest.mark.parametrize('background', [True, False])
-@pytest.mark.parametrize('dynamic', [False, True])
-async def test_disabling_cancels_inflight_refresh_and_retains_parameters(tmp_path, background, dynamic):
-    entered, cancelled, release = asyncio.Event(), asyncio.Event(), asyncio.Event()
-    second_received = asyncio.Event()
-    requests = []
-
-    async def respond(request):
-        requests.append(request)
-        if len(requests) > 1:
-            if request.url.host == 'ha.test':
-                return httpx.Response(200, json=[angle_state('sensor.tilt', '25')])
-            second_received.set()
-            return httpx.Response(200, json=forecast_payload(0, irradiance_w_m2=400.0))
-        entered.set()
-        try:
-            await release.wait()
-        except asyncio.CancelledError:
-            cancelled.set()
-            raise
-        return httpx.Response(200, json=forecast_payload(0))
-
-    store = Store(tmp_path / 'data.sqlite')
-    async with httpx.AsyncClient(transport=httpx.MockTransport(respond)) as http:
-        prediction = ForecastSettings(enabled=True, tilt_entity='sensor.tilt', azimuth_deg=180) if dynamic else ENABLED
-        ha = HomeAssistantClient(ORIGIN, 'saved-token', http)
-        forecast = controller(store, http, prediction=prediction, ha_client=lambda: ha)
-        refresh = None
-        if background:
-            await forecast.start()
-        else:
-            refresh = asyncio.create_task(forecast.refresh(now=120))
-        try:
-            await asyncio.wait_for(entered.wait(), 1)
-            disabled = prediction.model_copy(update={'enabled': False})
-            forecast.configure(settings(), disabled, ORIGIN, LOCATION)
-            assert forecast.view(120).status == 'disabled'
-            assert forecast.view(120).refreshing is False
-            assert not forecast.request_refresh()
-            await asyncio.wait_for(cancelled.wait(), 1)
-            if refresh is not None:
-                await refresh
-            assert store.get_meta('forecast_cache') is None
-            assert store.forecast_settings() == disabled
-            assert not http.is_closed
-            forecast.configure(settings(), prediction, ORIGIN, LOCATION)
-            if background:
-                await asyncio.wait_for(second_received.wait(), 1)
-            else:
-                await forecast.refresh(now=180)
-            assert [request.url.path for request in requests] == (
-                ['/api/template', '/api/template', '/v1/forecast'] if dynamic else ['/v1/forecast', '/v1/forecast']
-            )
-            assert forecast.view(180).today.forecast_energy_kwh == pytest.approx(46.74)
-            assert forecast.view(180).refreshing is False
-        finally:
-            await forecast.stop()
-    store.close()
-
-
-async def test_reenabling_before_cancelled_fetch_unwinds_requests_new_weather(tmp_path):
-    entered, second_entered = asyncio.Event(), asyncio.Event()
-    release, second_release = asyncio.Event(), asyncio.Event()
-    requests = []
-
-    async def respond(request):
-        requests.append(request)
-        if len(requests) == 1:
-            entered.set()
-            await release.wait()
-            return httpx.Response(200, json=forecast_payload(0))
-        second_entered.set()
-        await second_release.wait()
-        return httpx.Response(200, json=forecast_payload(0, irradiance_w_m2=400.0))
-
-    store = Store(tmp_path / 'data.sqlite')
-    async with httpx.AsyncClient(transport=httpx.MockTransport(respond)) as http:
-        forecast = controller(store, http)
-        await forecast.start()
-        try:
-            await asyncio.wait_for(entered.wait(), 1)
-            forecast.configure(settings(), ENABLED.model_copy(update={'enabled': False}), ORIGIN, LOCATION)
-            forecast.configure(settings(), ENABLED, ORIGIN, LOCATION)
-            release.set()
-            await asyncio.wait_for(second_entered.wait(), 1)
-            assert forecast.view(120).fetched_at is None
-            assert store.get_meta('forecast_cache') is None
-            second_release.set()
-            await forecast.refresh(now=180)
-            assert len(requests) == 2
-            assert forecast.view(180).today.forecast_energy_kwh == pytest.approx(46.74)
-            assert forecast.view(180).refreshing is False
-        finally:
-            await forecast.stop()
-    store.close()
-
-
-async def test_repeated_disabled_configuration_is_idempotent_during_cancellation_cleanup(tmp_path):
-    entered, cancelling, release_cleanup = asyncio.Event(), asyncio.Event(), asyncio.Event()
-    cleaned_up, second_received = asyncio.Event(), asyncio.Event()
-    requests = []
-
-    async def respond(request):
-        requests.append(request)
-        if len(requests) > 1:
-            second_received.set()
-            return httpx.Response(200, json=forecast_payload(0, irradiance_w_m2=400.0))
-        entered.set()
-        try:
-            await asyncio.Event().wait()
-        finally:
-            cancelling.set()
-            await release_cleanup.wait()
-            cleaned_up.set()
-
-    store = Store(tmp_path / 'data.sqlite')
-    async with httpx.AsyncClient(transport=httpx.MockTransport(respond)) as http:
-        forecast = controller(store, http)
-        await forecast.start()
-        try:
-            await asyncio.wait_for(entered.wait(), 1)
-            disabled = ENABLED.model_copy(update={'enabled': False})
-            forecast.configure(settings(), disabled, ORIGIN, LOCATION)
-            await asyncio.wait_for(cancelling.wait(), 1)
-            changes = store.db.total_changes
-            forecast.configure(settings(), disabled, ORIGIN, LOCATION)
-            forecast.configure(settings(), disabled, ORIGIN, LOCATION)
-            assert store.db.total_changes == changes
-            assert forecast.view(120).status == 'disabled'
-            assert forecast.view(120).refreshing is False
-            assert not cleaned_up.is_set()
-            release_cleanup.set()
-            await asyncio.wait_for(cleaned_up.wait(), 1)
-            forecast.configure(settings(), ENABLED, ORIGIN, LOCATION)
-            await asyncio.wait_for(second_received.wait(), 1)
-            assert len(requests) == 2
-            assert forecast.view(180).today.forecast_energy_kwh == pytest.approx(46.74)
-        finally:
-            release_cleanup.set()
-            await forecast.stop()
-    store.close()
-
-
 async def test_forecast_remaining_updates_without_new_weather(tmp_path):
     from pvyieldlens.home_assistant import entity_payloads
     from pvyieldlens.service import Service
@@ -765,7 +656,7 @@ async def test_hourly_cache_is_ignored_without_losing_monitoring(tmp_path):
     store = Store(path)
     store.save_monitoring_settings(settings(), 0, ORIGIN)
     store.settle(calculate(settings(), samples(), 0, 60), store.revision, 'UTC')
-    store.save_forecast_settings(ENABLED)
+    store.save_forecast_settings(PREDICTION)
     store.set_meta('ha_location', LOCATION.model_dump_json())
     cached = ForecastBatch(
         inputs=forecast_input(), fetched_at=120, intervals=constant_intervals(0, 9 * 86400),
@@ -849,14 +740,14 @@ async def test_correction_cache_reuses_snapshots_and_refreshes_date_context_and_
     )) as http:
         forecast = forecast_service.ForecastController(store, OpenMeteoClient(http))
         service.forecast = forecast
-        forecast.configure(config, ENABLED, ORIGIN, LOCATION)
+        forecast.configure(config, PREDICTION, ORIGIN, LOCATION)
         await forecast.refresh(now=NOW)
         before = service.snapshot(NOW)
         service.snapshot(NOW + 10)
         assert len(calls) == 1
         raw_batch = forecast.batch.model_dump_json()
         revision, live = store.revision, service.live_window
-        forecast.configure(config, ENABLED.model_copy(update={'pr_history_days': 30}), ORIGIN, LOCATION)
+        forecast.configure(config, PREDICTION.model_copy(update={'pr_history_days': 30}), ORIGIN, LOCATION)
         after = service.snapshot(NOW + 20)
         assert len(calls) == 2
         assert before['forecast']['correction']['pr'] != after['forecast']['correction']['pr']
@@ -885,12 +776,12 @@ def test_correction_cache_discards_old_epoch_after_context_changes_back_without_
     store = Store(tmp_path / 'data.sqlite')
     config = committed_days(store, [(1000, 900)] * 3)
     forecast = ForecastController(store)
-    forecast.configure(config, ENABLED, ORIGIN, LOCATION)
+    forecast.configure(config, PREDICTION, ORIGIN, LOCATION)
     assert forecast.view(NOW).correction.pr == pytest.approx(90)
     changed = config.model_copy(update={'actual_power_entity': 'sensor.changed'})
     store.save_monitoring_settings(changed, NOW + 1, ORIGIN)
-    forecast.configure(changed, ENABLED, ORIGIN, LOCATION)
+    forecast.configure(changed, PREDICTION, ORIGIN, LOCATION)
     store.save_monitoring_settings(config, NOW + 2, ORIGIN)
-    forecast.configure(config, ENABLED, ORIGIN, LOCATION)
+    forecast.configure(config, PREDICTION, ORIGIN, LOCATION)
     assert forecast.view(NOW + 3).correction.pr is None
     store.close()
