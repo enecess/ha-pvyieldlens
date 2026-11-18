@@ -154,3 +154,15 @@ it('preserves the history-day draft through blanks, edits and serialization', ()
   draft.forecast.pr_history_days = '14.0';
   expect(hasSettingsChanges(draft, baseline)).toBe(false);
 });
+
+it('serializes an optional module temperature entity', () => {
+  const context = { mode: 'app', home_timezone: 'UTC' } as const;
+  const draft = draftFromConfiguration(configuration);
+  expect(draft.monitoring.module_temperature_entity).toBe('sensor.temp');
+  draft.monitoring.module_temperature_entity = ' sensor.temp ';
+  expect(configurationUpdateFromDraft(draft, context).monitoring_settings.module_temperature_entity).toBe('sensor.temp');
+  draft.monitoring.module_temperature_entity = '  ';
+  const monitoring_settings = configurationUpdateFromDraft(draft, context).monitoring_settings;
+  expect(monitoring_settings.module_temperature_entity).toBeNull();
+  expect(draftFromConfiguration({ ...configuration, monitoring_settings }).monitoring.module_temperature_entity).toBe('');
+});

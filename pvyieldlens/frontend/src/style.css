@@ -200,7 +200,8 @@ main.settings-active > .banner { flex-shrink: 0; }
 .form-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px; }
 .form-grid.three { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 .form-section label { display: block; min-width: 0; }
-.form-section label > span { display: block; margin-bottom: 8px; font-size: 12px; font-weight: 500; }
+.form-section label > span:where(:not(.required-star)) { display: block; margin-bottom: 8px; font-size: 12px; font-weight: 500; }
+.required-star { margin-inline-start: 4px; color: var(--pv-accent); font-size: 16px; line-height: 12px; font-weight: 750; }
 .form-section input, .form-section select { display: block; width: 100%; min-width: 0; min-height: 39px; padding: 9px 10px; border: 1px solid var(--pv-line); border-radius: 7px; background: var(--pv-bg); color: var(--pv-text); font: inherit; font-size: 13px; }
 .form-section input:focus-visible { outline: 2px solid var(--pv-accent); outline-offset: 2px; }
 .form-section :is(input, select)[aria-invalid='true'] { border-color: var(--pv-amber); outline: 2px solid var(--pv-amber); outline-offset: 2px; }
@@ -210,13 +211,16 @@ main.settings-active > .banner { flex-shrink: 0; }
 .input-unit input, .input-unit select { padding-right: 52px; }
 .input-unit > span { position: absolute; right: 11px; top: 50%; transform: translateY(-50%); color: var(--pv-muted); font-size: 11px; pointer-events: none; }
 .sensor-fields { display: grid; gap: 16px; }
-.sensor-field { display: grid; grid-template-columns: 145px minmax(0, 1fr); align-items: center; gap: 15px; min-width: 0; }
+.sensor-field { display: grid; grid-template-columns: 145px minmax(0, 1fr); align-items: center; gap: 7px 15px; min-width: 0; }
 .sensor-field > label { font-size: 12px; font-weight: 500; }
 .angle-field { display: grid; align-content: start; gap: 12px; min-width: 0; }
 .angle-field .sensor-field { grid-template-columns: minmax(0, 1fr); gap: 8px; }
-#forecast-module-settings { margin-bottom: 16px; }
+.form-section .sensor-help { grid-column: -2 / -1; margin-top: 0; }
 .sensor-combobox { position: relative; min-width: 0; }
 .sensor-combobox input { padding-right: 32px; }
+.sensor-combobox:has(.sensor-clear) input { padding-right: 64px; }
+.sensor-clear { position: absolute; inset: 50% 27px auto auto; transform: translateY(-50%); display: grid; place-items: center; width: 32px; height: 32px; border: 0; border-radius: 5px; color: var(--pv-muted); }
+.sensor-clear:hover { color: var(--pv-accent); background: var(--pv-soft); }
 .sensor-combobox > svg { position: absolute; top: 50%; right: 11px; transform: translateY(-50%); color: var(--pv-muted); pointer-events: none; }
 .sensor-suggestions { position: fixed; z-index: 5; overflow-y: auto; overscroll-behavior: contain; padding: 4px; border: 1px solid var(--pv-line); border-radius: 8px; background: var(--pv-raised); color: var(--pv-text); box-shadow: 0 8px 24px var(--pv-shadow), 0 2px 6px var(--pv-shadow); }
 .sensor-option { padding: 9px 10px; border-radius: 5px; cursor: pointer; }

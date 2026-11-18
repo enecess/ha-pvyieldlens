@@ -787,3 +787,34 @@ async def test_settings_sections_remeasure_when_visible_resized_and_expanded(lay
         await page.locator('[data-settings-category=monitoring]').click()
         await expect(page.locator('[data-settings-category=monitoring]')).to_have_attribute('aria-current', 'location')
         await page.locator('#live-tab').click()
+
+
+@pytest.mark.parametrize('width', [320, 390])
+@pytest.mark.parametrize('theme', ['light', 'dark'])
+async def test_sensor_labels_and_clear_buttons_fit_narrow_settings(layout_page, layout_artifacts, width, theme):
+    from playwright.async_api import expect
+
+    page, _ = layout_page
+    await page.set_viewport_size({'width': width, 'height': 840})
+    await page.emulate_media(reduced_motion='reduce')
+    await page.locator('#theme-select').select_option(theme)
+    await page.locator('#language-select').select_option('de')
+    await page.locator('#settings-button').click()
+    await page.locator('[data-settings-category=sources]').click()
+    section = page.locator('[data-settings-section=sources]')
+    await expect(section.get_by_role('button')).to_have_count(3)
+    for field in await section.locator('input[role=combobox]').all():
+        bounds = await field.evaluate('''field => {
+            const box = node => node.getBoundingClientRect().toJSON();
+            const label = field.labels[0];
+            const text = new Range();
+            text.selectNodeContents(label);
+            return {input: box(field), button: box(field.parentElement.querySelector('button')),
+                text: box(text), section: box(field.closest('[data-settings-section]'))};
+        }''')
+        control, clear, text, panel = (bounds[key] for key in ('input', 'button', 'text', 'section'))
+        assert panel['left'] <= text['left'] < text['right'] <= panel['right']
+        assert control['left'] < clear['left'] < clear['right'] <= control['right'] <= width
+        assert control['top'] <= clear['top'] < clear['bottom'] <= control['bottom']
+        assert clear['width'] >= 24 and clear['height'] >= 24
+    await page.screenshot(path=str(layout_artifacts / f'settings-pickers-{width}-{theme}.png'))

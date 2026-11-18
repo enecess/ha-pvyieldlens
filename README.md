@@ -66,7 +66,7 @@ The top-right **Theme mode** menu offers Auto, Light and Dark. Auto follows Home
 | Total max power at STC | Sum of module maximum powers under standard test conditions (STC), in W, e.g. `5000`. |
 | Temperature coefficient of Pmax | The Pmax coefficient from the module datasheet, in %/°C, e.g. `-0.35`. |
 | Actual power | Your solar generation power sensor (W or kW). |
-| Module temperature | Your module temperature sensor (°C, °F or K). |
+| Module temperature | Optional module temperature sensor (°C, °F or K). Leave blank to estimate module temperature. |
 | Irradiance | An irradiance sensor in the same plane as the modules (W/m² or kW/m²). |
 | Settlement interval | Saves energy and PR every 1, 5 or 10 minutes for review in **Efficiency**. The default is 5 minutes. |
 | Average over | Calculates live values from the most recent 60 seconds by default. Longer windows smooth short-term changes. |
@@ -91,7 +91,7 @@ Enter the datasheet NOCT in **PV modules** (above 20°C and at most 80°C, defau
 
 For a tracker, every refresh reads the selected HA angles once. All 15-minute periods in that seven-day forecast, including earlier periods today, use that same pair of angles. The Forecast page shows the angles and their read time separately from the weather fetch time. If an entity is unavailable, the page identifies it and shows any still-usable periods from the last forecast. With no usable forecast, energy values show **—** and you can retry the refresh.
 
-Monitoring uses the measured **Module temperature**. Forecast uses **Air temperature** and **Nominal operating cell temperature (NOCT)** to calculate **Estimated cell temperature**. These are separate physical quantities; the monitoring model does not convert module temperature to cell temperature.
+Monitoring uses the measured **Module temperature** when you select a sensor. If you leave it blank, PVYieldLens estimates module temperature using Open-Meteo air temperature for your Home Assistant location, your irradiance sensor, and the NOCT set under **PV modules**. The estimate works with Forecast disabled. Without usable air temperature or irradiance data, estimated module temperature and temperature-dependent power and PR values are unavailable. Forecast uses its own weather inputs and NOCT to calculate **Estimated cell temperature**.
 
 Open-Meteo supplies 15-minute model inputs for today and the next six home calendar days. Some regions or fields interpolate hourly models; a 15-minute output step does not guarantee greater accuracy. Select a date for paired original/corrected energy, power curves and interval details. Today covers the full day; **Remaining today** runs from now to home midnight and decreases between weather fetches. Normal days have 96 intervals, while daylight-saving days can have 92 or 100.
 
@@ -134,7 +134,7 @@ P_estimated = P_stc × [1 + (K / 100) × (T − 25)] × G / 1000
 PR = P_actual / P_estimated × 100%
 ```
 
-`P_stc`: Total max power at STC (W); `K`: Temperature coefficient of Pmax (%/°C), entered as the datasheet percentage, e.g. `-0.35`; `T`: Module temperature (°C); `G`: Irradiance in the module plane (W/m²). The app divides K by 100 once.
+Here `P_stc` is the total max power at STC in W. Enter `K` as the datasheet percentage in %/°C, for example `-0.35`. PVYieldLens divides it by 100. `T` is the measured or estimated module temperature in °C. `G` is irradiance in the module plane in W/m².
 
 Performance ratio (PR) compares actual power with estimated power. Optimizable power is estimated power minus actual power and can be negative.
 

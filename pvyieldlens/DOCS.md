@@ -5,7 +5,7 @@
 ## Get started
 
 1. Open the Web UI and select **Settings**.
-2. Select your Actual power, Module temperature and Irradiance sensors.
+2. Select your Actual power and Irradiance sensors. Select a Module temperature sensor if you have one.
 3. Enter Total max power at STC in W and Temperature coefficient of Pmax in %/°C from your module datasheet.
 4. Save and open **Dashboard**.
 
@@ -59,7 +59,7 @@ Enter the datasheet NOCT in **PV modules** (above 20°C and at most 80°C, defau
 
 For a tracker, every refresh reads the selected HA angles once. All 15-minute periods in that seven-day forecast, including earlier periods today, use that same pair of angles. The Forecast page shows the angles and their read time separately from the weather fetch time. If an entity is unavailable, the page identifies it and shows any still-usable periods from the last forecast. With no usable forecast, energy values show **—** and you can retry the refresh.
 
-Monitoring uses the measured **Module temperature**. Forecast uses **Air temperature** and **Nominal operating cell temperature (NOCT)** to calculate **Estimated cell temperature**. These are separate physical quantities; the monitoring model does not convert module temperature to cell temperature.
+Monitoring uses the measured **Module temperature** when you select a sensor. If you leave it blank, PVYieldLens estimates module temperature using Open-Meteo air temperature for your Home Assistant location, your irradiance sensor, and the NOCT set under **PV modules**. The estimate works with Forecast disabled. Without usable air temperature or irradiance data, estimated module temperature and temperature-dependent power and PR values are unavailable. Forecast uses its own weather inputs and NOCT to calculate **Estimated cell temperature**.
 
 Open-Meteo supplies 15-minute model inputs for today and the next six home calendar days. Some regions or fields interpolate hourly models; a 15-minute output step does not guarantee greater accuracy. Select a date for paired original/corrected energy, power curves and interval details. Today covers the full day; **Remaining today** runs from now to home midnight and decreases between weather fetches. Normal days have 96 intervals, while daylight-saving days can have 92 or 100.
 

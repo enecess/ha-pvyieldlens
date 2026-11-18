@@ -334,12 +334,8 @@ async def test_angle_entity_inputs_and_rated_power_help(browser_workspace):
     await expect(page.locator('#connection-result')).to_have_text('Connection verified')
     await page.locator('[data-settings-category=forecast]').click()
     await page.locator('[name=forecast_enabled]').check()
-    await page.locator('#forecast-module-settings').press('Enter')
-    await expect(page.locator('[data-settings-category=modules]')).to_have_attribute('aria-current', 'location')
+    await page.locator('[data-settings-category=modules]').click()
     modules = page.locator('[data-settings-section=modules]')
-    await expect(modules.get_by_role('heading')).to_be_focused()
-    await page.keyboard.press('Tab')
-    await expect(modules.locator('[name=total_max_power_at_stc_w]')).to_be_focused()
     tilt_source = modules.locator('[name=forecast_tilt_source]')
     tilt_entity = modules.locator('[name=forecast_tilt_entity]')
     tilt_deg = modules.locator('[name=forecast_tilt_deg]')
@@ -408,6 +404,138 @@ async def test_angle_entity_inputs_and_rated_power_help(browser_workspace):
     await expect(page.locator('#save-button')).to_be_disabled()
 
 
+async def assert_required_field(field, required=True):
+    assert await field.evaluate('field => field.required') is required
+    assert await field.evaluate('''field => [...field.labels].reduce((count, label) =>
+        count + [...label.querySelectorAll('[aria-hidden=true]')]
+            .filter(mark => mark.textContent === '*' && mark.checkVisibility()).length, 0)
+    ''') == int(required)
+
+
+@pytest.mark.parametrize('mode', ['docker-initial', 'docker-configured', 'app'])
+async def test_connection_credentials_match_visible_required_marks(browser_workspace, mode):
+    from playwright.async_api import expect
+
+    page, _, _ = browser_workspace
+
+    async def configuration(route):
+        response = await route.fetch()
+        body = await response.json()
+        if mode == 'docker-initial':
+            body['connection'] = {'url': '', 'token_set': False}
+        if mode == 'app':
+            body['mode'] = 'app'
+        await route.fulfill(response=response, json=body)
+
+    await page.route('**/api/config', configuration)
+    await page.locator('#settings-button').click()
+    await expect(page.locator('[name=total_max_power_at_stc_w]')).to_be_enabled()
+    url, token = page.locator('#ha-url'), page.locator('#ha-token')
+    if mode == 'app':
+        for field in [url, token]:
+            await expect(field).to_be_hidden()
+            await expect(field).to_be_disabled()
+        return
+    await assert_required_field(url)
+    await assert_required_field(token, mode == 'docker-initial')
+    if mode == 'docker-configured':
+        original = await url.input_value()
+        await url.fill(original + '///')
+        await assert_required_field(token, False)
+        await url.fill(original + '/different')
+        await assert_required_field(token)
+        await page.locator('#save-button').click()
+        await expect(token).to_be_focused()
+        await url.fill(original)
+        await assert_required_field(token, False)
+
+
+async def test_settings_required_marks_follow_editable_fields(browser_workspace):
+    from playwright.async_api import expect
+
+    page, _, _ = browser_workspace
+    await page.locator('#settings-button').click()
+    await expect(page.locator('[name=total_max_power_at_stc_w]')).to_be_enabled()
+    for selector in ['[name=total_max_power_at_stc_w]', '[name=pmax_temperature_coefficient_pct_per_c]',
+                     '[name=forecast_noct_c]', '[name=actual_power_entity]', '[name=irradiance_entity]',
+                     '[name=forecast_pr_history_days]']:
+        await assert_required_field(page.locator(selector))
+    for selector in ['[name=module_temperature_entity]', '[name=forecast_tilt_source]',
+                     '[name=forecast_azimuth_source]', '[name=forecast_enabled]']:
+        await assert_required_field(page.locator(selector), False)
+    coefficient = page.locator('[name=pmax_temperature_coefficient_pct_per_c]')
+    await coefficient.fill('0')
+    assert await coefficient.evaluate('field => field.validity.valid')
+    tilt = page.locator('[name=forecast_tilt_deg]')
+    direction = page.locator('#forecast-direction')
+    azimuth = page.locator('[name=forecast_azimuth_deg]')
+    forecast = page.locator('[name=forecast_enabled]')
+    await forecast.uncheck()
+    await tilt.fill('0')
+    await direction.select_option('custom')
+    await azimuth.fill('0')
+    for field in [tilt, direction, azimuth]:
+        await assert_required_field(field, False)
+    await forecast.check()
+    for field in [tilt, direction, azimuth]:
+        await assert_required_field(field)
+        assert await field.evaluate('field => field.validity.valid')
+    await forecast.uncheck()
+    for axis in ['tilt', 'azimuth']:
+        await page.locator(f'[name=forecast_{axis}_source]').select_option('entity')
+        await assert_required_field(page.locator(f'[name=forecast_{axis}_entity]'))
+
+
+async def test_clear_temperature_and_required_entity_pickers(browser_workspace):
+    from playwright.async_api import expect
+
+    page, service, _ = browser_workspace
+    await service.configure(service.monitoring_settings.model_copy(update={'module_temperature_max_age_seconds': 1200}))
+    await page.set_viewport_size({'width': 320, 'height': 800})
+    await page.locator('#settings-button').click()
+    await expect(page.locator('#connection-result')).to_have_text('Connection verified')
+    await page.locator('[data-settings-category=monitoring]').click()
+    timeout = page.locator('[name=module_temperature_max_age_seconds]')
+    await timeout.fill('86401')
+    await page.locator('[data-settings-category=sources]').click()
+    temperature = page.get_by_role('combobox', name='Module temperature')
+    await expect(temperature).to_have_accessible_description(
+        'Leave blank to estimate module temperature from Open-Meteo air temperature, Home Assistant irradiance, and NOCT.')
+    await temperature.focus()
+    await page.keyboard.press('Tab')
+    clear_temperature = page.get_by_role('button', name='Clear Module temperature')
+    await expect(clear_temperature).to_be_focused()
+    await page.keyboard.press('Enter')
+    await expect(temperature).to_be_focused()
+    await expect(temperature).to_have_value('')
+    await expect(clear_temperature).to_have_count(0)
+    await expect(timeout).to_be_hidden()
+    await page.locator('#save-button').click()
+    await expect(page.locator('#save-result')).to_have_text('Configuration saved')
+    assert service.monitoring_settings.module_temperature_entity is None
+    assert service.monitoring_settings.module_temperature_max_age_seconds == 1200
+
+    await temperature.focus()
+    await page.get_by_role('option').filter(has_text='sensor.temp').click()
+    await expect(temperature).to_have_value('sensor.temp')
+    await page.locator('[data-settings-category=monitoring]').click()
+    await expect(timeout).to_be_visible()
+    await expect(timeout).to_have_value('1200')
+
+    power = page.get_by_role('combobox', name='Actual power')
+    await power.fill('invalid')
+    await page.locator('#save-button').click()
+    await expect(power).to_have_attribute('aria-invalid', 'true')
+    await page.get_by_role('button', name='Clear Actual power').click()
+    await expect(power).to_be_focused()
+    await expect(power).to_have_value('')
+    await expect(power).not_to_have_attribute('aria-invalid', 'true')
+    await page.locator('#save-button').click()
+    await expect(power).to_be_focused()
+    await expect(power).to_have_attribute('aria-invalid', 'true')
+    assert service.monitoring_settings.actual_power_entity == 'sensor.power'
+
+
 async def test_monitoring_timeouts_are_directly_visible(browser_workspace):
     from playwright.async_api import expect
 
@@ -438,10 +566,13 @@ async def test_monitoring_timeouts_are_directly_visible(browser_workspace):
     await help_toggle.press('Enter')
     await expect(help_panel).to_be_hidden()
     await expect(page.locator('#monitoring-fields')).to_be_visible()
+    for name in ['settlement_interval_minutes', 'live_window_seconds', 'update_interval_seconds']:
+        await assert_required_field(page.locator(f'[name={name}]'))
     for name, value in [('actual_power_max_age_seconds', '900'), ('module_temperature_max_age_seconds', '900'), ('irradiance_max_age_seconds', '900')]:
         field = page.locator(f'[name={name}]')
         await expect(field).to_be_visible()
         await expect(field).to_have_value(value)
+        await assert_required_field(field)
         await field.focus()
         await expect(field).to_be_focused()
         await expect(field).to_be_in_viewport(ratio=1)
@@ -636,6 +767,8 @@ async def test_sensor_suggestions_filter_select_and_preserve_manual_drafts(brows
     await power.press('ArrowDown')
     await power.press('Tab')
     await expect(power).to_have_attribute('aria-expanded', 'false')
+    await expect(page.get_by_role('button', name='Clear Actual power')).to_be_focused()
+    await page.keyboard.press('Tab')
     await expect(page.locator('[name=module_temperature_entity]')).to_be_focused()
     for field, name, entity in [
         ('module_temperature_entity', 'Module temperature', 'sensor.outdoor_temperature'),

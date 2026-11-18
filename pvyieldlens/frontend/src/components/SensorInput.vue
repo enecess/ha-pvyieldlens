@@ -1,13 +1,14 @@
 <script setup lang="ts">
 import { computed, nextTick, ref, watch } from 'vue';
-import { ChevronDown } from 'lucide-vue-next';
+import { ChevronDown, X } from 'lucide-vue-next';
+import RequiredMark from './RequiredMark.vue';
 import { useI18n } from '../i18n';
 import type { SourceEntity } from '../models';
 
 const props = withDefaults(defineProps<{
   name: string; label: string; entities: SourceEntity[]; active: boolean; disabled: boolean;
-  pattern?: string;
-}>(), { pattern: 'sensor\\.[a-z0-9_]+' });
+  pattern?: string; required?: boolean; help?: string;
+}>(), { required: true, pattern: 'sensor\\.[a-z0-9_]+' });
 const model = defineModel<string>({ required: true });
 const { t } = useI18n();
 const input = ref<HTMLInputElement>();
@@ -68,10 +69,15 @@ function edit(event: Event) {
   show();
 }
 
-function select(entity: SourceEntity) {
-  input.value!.value = entity.entity_id;
+function update(value: string) {
+  input.value!.value = value;
   input.value!.dispatchEvent(new Event('input', { bubbles: true }));
   open.value = false;
+}
+
+function clear() {
+  update('');
+  input.value!.focus();
 }
 
 async function keydown(event: KeyboardEvent) {
@@ -80,7 +86,7 @@ async function keydown(event: KeyboardEvent) {
   else if (event.key === 'Tab') open.value = false;
   else if (event.key === 'Enter' && open.value) {
     event.preventDefault();
-    if (activeIndex.value >= 0) select(filtered.value[activeIndex.value]!);
+    if (activeIndex.value >= 0) update(filtered.value[activeIndex.value]!.entity_id);
   } else if (!event.shiftKey && (event.key === 'ArrowDown' || event.key === 'ArrowUp')) {
     event.preventDefault();
     show();
@@ -94,19 +100,24 @@ async function keydown(event: KeyboardEvent) {
 
 <template>
   <div class="sensor-field">
-    <label :for="inputId">{{ label }}</label>
+    <label :for="inputId">{{ label }}<RequiredMark v-if="required" /></label>
     <div class="sensor-combobox">
       <input :id="inputId" ref="input" :name="name" :value="model" role="combobox" aria-autocomplete="list"
         :aria-expanded="open" :aria-controls="listId" :aria-activedescendant="open && activeIndex >= 0 ? `${listId}-${activeIndex}` : undefined"
-        :pattern="pattern" :placeholder="t(name.startsWith('forecast_') ? 'search_entities' : 'select_source')" autocomplete="off" required :disabled="disabled"
+        :pattern="pattern" :placeholder="t(name.startsWith('forecast_') ? 'search_entities' : 'select_source')" autocomplete="off"
+        :required="required" :disabled="disabled" :aria-describedby="help ? inputId + '-help' : undefined"
         @input="edit" @focus="show" @click="show" @blur="open = false" @keydown="keydown">
+      <button v-if="!disabled && model.trim()" class="sensor-clear" type="button" :aria-label="t('clear_entity', { field: label })" @click="clear">
+        <X :size="16" aria-hidden="true" />
+      </button>
       <ChevronDown :size="14" aria-hidden="true" />
     </div>
+    <small v-if="help" :id="inputId + '-help'" class="sensor-help">{{ help }}</small>
     <Teleport to="body">
       <div v-if="open" ref="popup" class="sensor-suggestions" :style="placement">
         <div :id="listId" role="listbox" :aria-label="label">
           <div v-for="(entity, index) in filtered" :id="`${listId}-${index}`" :key="entity.entity_id" role="option"
-            :aria-selected="index === activeIndex" class="sensor-option" @mousedown.prevent @click="select(entity)">
+            :aria-selected="index === activeIndex" class="sensor-option" @mousedown.prevent @click="update(entity.entity_id)">
             <span class="sensor-option-heading"><span>{{ entity.name }}</span><span class="sensor-option-unit">{{ entity.unit }}</span></span>
             <span class="sensor-option-id">{{ entity.entity_id }}</span>
           </div>

@@ -3,8 +3,9 @@ import { computed, nextTick, onUnmounted, ref, shallowReactive, shallowRef, watc
 import { Check, ChevronDown, Clock3, Compass, Database, Plug, RefreshCw, RotateCcw, Sun } from 'lucide-vue-next';
 import { api, ApiError } from '../api';
 import SensorInput from '../components/SensorInput.vue';
+import RequiredMark from '../components/RequiredMark.vue';
 import { useI18n } from '../i18n';
-import { configurationUpdateFromDraft, draftFromConfiguration, forecastAxes, hasSettingsChanges, type SettingsSection } from '../settings';
+import { configurationUpdateFromDraft, draftFromConfiguration, forecastAxes, hasSettingsChanges, normalizeConnectionUrl, type SettingsSection } from '../settings';
 import type { Configuration, ConfigurationSaveResult, ConnectionResult, HALocation } from '../models';
 
 const props = defineProps<{ active: boolean; initialSection: SettingsSection; location: HALocation | null }>();
@@ -22,7 +23,6 @@ const form = ref<HTMLFormElement>();
 const scroll = ref<HTMLElement>();
 const categories = ref<HTMLElement>();
 const actions = ref<HTMLElement>();
-const modulesHeading = ref<HTMLHeadingElement>();
 const activeSection = ref<SettingsSection>('connection');
 const monitoringOpen = ref(false);
 const monitoringHelpOpen = ref(false);
@@ -34,12 +34,16 @@ const discoveryRequest = ref<string | null>(null);
 const connections = shallowReactive(new Map<string, ConnectionResult>());
 const dirty = computed(() => hasSettingsChanges(draft.value, baseline.value));
 const editable = computed(() => configuration.value !== null && !busy.value);
-const connectionKey = computed(() => {
-  if (configuration.value?.mode === 'app') return 'app';
-  const url = draft.value.connection.url.trim().replace(/\/+$/, '');
-  return JSON.stringify([url, draft.value.connection.token, !draft.value.connection.token
-    && Boolean(configuration.value?.connection.token_set) && url === configuration.value?.connection.url.trim().replace(/\/+$/, '')]);
+const dockerConnection = computed(() => configuration.value?.mode !== 'app');
+const connectionUrl = computed(() => normalizeConnectionUrl(draft.value.connection.url.trim()));
+const savedTokenAvailable = computed(() => {
+  const saved = configuration.value?.connection;
+  return Boolean(saved?.token_set && connectionUrl.value === normalizeConnectionUrl(saved.url.trim()));
 });
+const tokenRequired = computed(() => dockerConnection.value && !savedTokenAvailable.value);
+const connectionKey = computed(() => dockerConnection.value
+  ? JSON.stringify([connectionUrl.value, draft.value.connection.token, !draft.value.connection.token && savedTokenAvailable.value])
+  : 'app');
 const discovered = computed(() => connections.get(connectionKey.value));
 const connectionStatus = computed(() => discoveryRequest.value === connectionKey.value ? 'connecting'
   : discoveryFailure.value?.key === connectionKey.value ? discoveryFailure.value.code : discovered.value ? 'connection_verified' : '');
@@ -76,12 +80,16 @@ const angleSelections = computed(() => {
     })];
   }));
 });
-const timeoutFields = [
+const temperatureConfigured = computed(() => draft.value.monitoring.module_temperature_entity.trim() !== '');
+const timeoutFields = computed(() => ([
   { key: 'actual_power_max_age_seconds', label: 'actual_power_max_age' }, { key: 'module_temperature_max_age_seconds', label: 'module_temperature_max_age' },
   { key: 'irradiance_max_age_seconds', label: 'irradiance_max_age' },
-] as const;
+] as const).filter(field => field.key !== 'module_temperature_max_age_seconds' || temperatureConfigured.value));
 let scrollFrame = 0;
 
+watch(temperatureConfigured, configured => {
+  if (!configured) draft.value.monitoring.module_temperature_max_age_seconds = baseline.value.monitoring.module_temperature_max_age_seconds;
+});
 watch([dirty, busy], ([dirty, busy]) => emit('state-change', { dirty, busy }), { immediate: true });
 watch(() => props.active, active => {
   if (!active) return;
@@ -270,17 +278,17 @@ async function save() {
               <section class="form-section panel" data-settings-section="connection">
                 <h2><Plug :size="18" aria-hidden="true" />{{ t('connection') }}</h2>
                 <p v-if="configuration?.mode === 'app'" id="app-connection-note" class="muted">{{ t('app_connection') }}</p>
-                <div v-show="configuration?.mode !== 'app'" id="connection-fields" class="form-grid">
-                  <label><span>{{ t('ha_url') }}</span><input id="ha-url" v-model="draft.connection.url" type="url" placeholder="http://homeassistant.local:8123" autocomplete="url" :disabled="configuration?.mode === 'app'"></label>
-                  <label><span>{{ t('ha_token') }}</span><input id="ha-token" v-model="draft.connection.token" type="password" autocomplete="new-password" :disabled="configuration?.mode === 'app'"><small>{{ t('token_help') }}</small></label>
+                <div v-show="dockerConnection" id="connection-fields" class="form-grid">
+                  <label><span>{{ t('ha_url') }}<RequiredMark v-if="dockerConnection" /></span><input id="ha-url" v-model="draft.connection.url" type="url" placeholder="http://homeassistant.local:8123" autocomplete="url" :required="dockerConnection" :disabled="!dockerConnection"></label>
+                  <label><span>{{ t('ha_token') }}<RequiredMark v-if="tokenRequired" /></span><input id="ha-token" v-model="draft.connection.token" type="password" autocomplete="new-password" :required="tokenRequired" :disabled="!dockerConnection"><small>{{ t('token_help') }}</small></label>
                 </div>
                 <div class="connection-actions"><button id="load-entities" class="secondary" type="button" :disabled="discoveryRequest !== null" @click="discoverEntities(true)"><RefreshCw :size="14" aria-hidden="true" />{{ t(discoveryRequest !== null ? 'connecting' : 'connect') }}</button><span id="connection-result" role="status">{{ connectionStatus ? t(connectionStatus) : '' }}</span></div>
               </section>
               <section class="form-section panel" data-settings-section="modules">
-                <h2 ref="modulesHeading" tabindex="-1"><Sun :size="18" aria-hidden="true" />{{ t('pv_modules') }}</h2>
+                <h2><Sun :size="18" aria-hidden="true" />{{ t('pv_modules') }}</h2>
                 <div class="form-grid">
-                  <label><span>{{ t('total_max_power_at_stc') }}</span><div class="input-unit"><input name="total_max_power_at_stc_w" type="number" min="1" max="1000000000" step="any" required :value="draft.monitoring.total_max_power_at_stc_w" @input="draft.monitoring.total_max_power_at_stc_w = inputValue($event)"><span>W</span></div><small>{{ t('rated_power_help') }}</small></label>
-                  <label><span>{{ t('pmax_temperature_coefficient') }}</span><div class="input-unit"><input name="pmax_temperature_coefficient_pct_per_c" type="number" min="-5" max="5" step="any" required :value="draft.monitoring.pmax_temperature_coefficient_pct_per_c" @input="draft.monitoring.pmax_temperature_coefficient_pct_per_c = inputValue($event)"><span>%/°C</span></div><small>{{ t('pmax_temperature_coefficient_help') }}</small></label>
+                  <label><span>{{ t('total_max_power_at_stc') }}<RequiredMark /></span><div class="input-unit"><input name="total_max_power_at_stc_w" type="number" min="1" max="1000000000" step="any" required :value="draft.monitoring.total_max_power_at_stc_w" @input="draft.monitoring.total_max_power_at_stc_w = inputValue($event)"><span>W</span></div><small>{{ t('rated_power_help') }}</small></label>
+                  <label><span>{{ t('pmax_temperature_coefficient') }}<RequiredMark /></span><div class="input-unit"><input name="pmax_temperature_coefficient_pct_per_c" type="number" min="-5" max="5" step="any" required :value="draft.monitoring.pmax_temperature_coefficient_pct_per_c" @input="draft.monitoring.pmax_temperature_coefficient_pct_per_c = inputValue($event)"><span>%/°C</span></div><small>{{ t('pmax_temperature_coefficient_help') }}</small></label>
                   <div v-for="axis in forecastAxes" :key="axis" class="angle-field">
                     <label><span>{{ t(`forecast_${axis}_source`) }}</span>
                       <select v-model="draft.forecast[`${axis}_source`]" :name="`forecast_${axis}_source`"><option value="fixed">{{ t('angle_source_fixed') }}</option><option value="entity">{{ t('angle_source_entity') }}</option></select>
@@ -291,22 +299,23 @@ async function save() {
                       <small v-if="angleSelections[axis]" class="angle-reading">{{ angleSelections[axis] }}</small>
                       <small>{{ t('angle_entity_help') }} {{ t(`${axis}_help`) }}</small>
                     </div>
-                    <label v-else-if="axis === 'tilt'"><span>{{ t('forecast_tilt') }}</span>
+                    <label v-else-if="axis === 'tilt'"><span>{{ t('forecast_tilt') }}<RequiredMark v-if="draft.forecast.enabled" /></span>
                       <div class="input-unit"><input name="forecast_tilt_deg" type="number" min="0" max="90" step="any" :required="draft.forecast.enabled" :value="draft.forecast.tilt_deg" @input="draft.forecast.tilt_deg = inputValue($event)"><span>°</span></div><small>{{ t('tilt_help') }}</small>
                     </label>
                     <template v-else>
-                      <label><span>{{ t('forecast_direction') }}</span><select id="forecast-direction" v-model="direction" :required="draft.forecast.enabled" @change="direction === 'custom' || (draft.forecast.azimuth_deg = direction)"><option value="">{{ t('direction_unset') }}</option><option value="0">{{ t('north') }}</option><option value="90">{{ t('east') }}</option><option value="180">{{ t('south') }}</option><option value="270">{{ t('west') }}</option><option value="custom">{{ t('custom') }}</option></select><small v-if="direction !== 'custom'">{{ t('azimuth_help') }}</small></label>
-                      <label v-if="direction === 'custom'" id="forecast-azimuth-row"><span>{{ t('forecast_azimuth') }}</span><div class="input-unit"><input name="forecast_azimuth_deg" type="number" min="0" step="any" :required="draft.forecast.enabled" :value="draft.forecast.azimuth_deg" @input="draft.forecast.azimuth_deg = inputValue($event)"><span>°</span></div><small>{{ t('azimuth_help') }}</small></label>
+                      <label><span>{{ t('forecast_direction') }}<RequiredMark v-if="draft.forecast.enabled" /></span><select id="forecast-direction" v-model="direction" :required="draft.forecast.enabled" @change="direction === 'custom' || (draft.forecast.azimuth_deg = direction)"><option value="">{{ t('direction_unset') }}</option><option value="0">{{ t('north') }}</option><option value="90">{{ t('east') }}</option><option value="180">{{ t('south') }}</option><option value="270">{{ t('west') }}</option><option value="custom">{{ t('custom') }}</option></select><small v-if="direction !== 'custom'">{{ t('azimuth_help') }}</small></label>
+                      <label v-if="direction === 'custom'" id="forecast-azimuth-row"><span>{{ t('forecast_azimuth') }}<RequiredMark v-if="draft.forecast.enabled" /></span><div class="input-unit"><input name="forecast_azimuth_deg" type="number" min="0" step="any" :required="draft.forecast.enabled" :value="draft.forecast.azimuth_deg" @input="draft.forecast.azimuth_deg = inputValue($event)"><span>°</span></div><small>{{ t('azimuth_help') }}</small></label>
                     </template>
                   </div>
-                  <label><span>{{ t('forecast_noct') }}</span><div class="input-unit"><input name="forecast_noct_c" type="number" min="20" max="80" step="any" required :value="draft.forecast.noct_c" @input="draft.forecast.noct_c = inputValue($event)"><span>°C</span></div><small>{{ t('noct_help') }}</small></label>
+                  <label><span>{{ t('forecast_noct') }}<RequiredMark /></span><div class="input-unit"><input name="forecast_noct_c" type="number" min="20" max="80" step="any" required :value="draft.forecast.noct_c" @input="draft.forecast.noct_c = inputValue($event)"><span>°C</span></div><small>{{ t('noct_help') }}</small></label>
                 </div>
               </section>
               <section class="form-section panel" data-settings-section="sources">
                 <h2><Database :size="18" aria-hidden="true" />{{ t('inputs') }}</h2>
                 <div class="sensor-fields">
                   <SensorInput v-for="field in sensorOptions" :key="field.key" v-model="draft.monitoring[field.key]" :name="field.key" :label="t(field.label)"
-                    :entities="field.entities"
+                    :entities="field.entities" :required="field.key !== 'module_temperature_entity'"
+                    :help="field.key === 'module_temperature_entity' ? t('module_temperature_estimate_help') : undefined"
                     :active="active" :disabled="!editable" />
                 </div>
               </section>
@@ -315,10 +324,8 @@ async function save() {
                 <p id="forecast-location" class="readonly-row">{{ locationText }}</p>
                 <p id="home-timezone" class="readonly-row">{{ t('home_timezone') }}: {{ location?.home_timezone ?? configuration?.monitoring_settings?.home_timezone ?? '—' }}</p><p class="muted">{{ t('location_help') }}</p>
                 <label class="checkbox-row"><span>{{ t('forecast_enabled') }}</span><input v-model="draft.forecast.enabled" name="forecast_enabled" type="checkbox"></label>
-                <button id="forecast-module-settings" class="secondary" type="button"
-                  @click="scrollToSection('modules'); modulesHeading?.focus({ preventScroll: true })"><Sun :size="15" aria-hidden="true" />{{ t('forecast_module_settings') }}</button>
                 <div class="form-grid">
-                  <label><span>{{ t('forecast_pr_history_days') }}</span><input name="forecast_pr_history_days" type="number" min="3" max="90" step="1" required :value="draft.forecast.pr_history_days" @input="draft.forecast.pr_history_days = inputValue($event)"><small>{{ t('pr_history_days_help') }}</small></label>
+                  <label><span>{{ t('forecast_pr_history_days') }}<RequiredMark /></span><input name="forecast_pr_history_days" type="number" min="3" max="90" step="1" required :value="draft.forecast.pr_history_days" @input="draft.forecast.pr_history_days = inputValue($event)"><small>{{ t('pr_history_days_help') }}</small></label>
                 </div>
               </section>
               <div class="settings-form-end">
@@ -338,11 +345,11 @@ async function save() {
                   </dl>
                   <div v-show="monitoringOpen" id="monitoring-fields">
                     <div class="form-grid three">
-                      <label><span>{{ t('settlement_interval') }}</span><div class="input-unit"><select v-model="draft.monitoring.settlement_interval_minutes" name="settlement_interval_minutes"><option value="1">1</option><option value="5">5</option><option value="10">10</option></select><span>{{ t('minutes') }}</span></div></label>
-                      <label><span>{{ t('live_window_duration') }}</span><div class="input-unit"><input name="live_window_seconds" type="number" min="10" max="3600" required :value="draft.monitoring.live_window_seconds" @input="draft.monitoring.live_window_seconds = inputValue($event)"><span>s</span></div></label>
-                      <label><span>{{ t('update_interval') }}</span><div class="input-unit"><input name="update_interval_seconds" type="number" min="1" max="60" required :value="draft.monitoring.update_interval_seconds" @input="draft.monitoring.update_interval_seconds = inputValue($event)"><span>s</span></div></label>
+                      <label><span>{{ t('settlement_interval') }}<RequiredMark /></span><div class="input-unit"><select v-model="draft.monitoring.settlement_interval_minutes" name="settlement_interval_minutes" required><option value="1">1</option><option value="5">5</option><option value="10">10</option></select><span>{{ t('minutes') }}</span></div></label>
+                      <label><span>{{ t('live_window_duration') }}<RequiredMark /></span><div class="input-unit"><input name="live_window_seconds" type="number" min="10" max="3600" required :value="draft.monitoring.live_window_seconds" @input="draft.monitoring.live_window_seconds = inputValue($event)"><span>s</span></div></label>
+                      <label><span>{{ t('update_interval') }}<RequiredMark /></span><div class="input-unit"><input name="update_interval_seconds" type="number" min="1" max="60" required :value="draft.monitoring.update_interval_seconds" @input="draft.monitoring.update_interval_seconds = inputValue($event)"><span>s</span></div></label>
                     </div>
-                    <div class="advanced-settings"><h3>{{ t('advanced') }}</h3><p class="muted">{{ t('hold_help') }}</p><div class="form-grid three"><label v-for="field in timeoutFields" :key="field.key"><span>{{ t(field.label) }}</span><div class="input-unit"><input :name="field.key" type="number" min="1" max="86400" required :value="draft.monitoring[field.key]" @input="draft.monitoring[field.key] = inputValue($event)"><span>s</span></div></label></div></div>
+                    <div class="advanced-settings"><h3>{{ t('advanced') }}</h3><p class="muted">{{ t('hold_help') }}</p><div class="form-grid three"><label v-for="field in timeoutFields" :key="field.key"><span>{{ t(field.label) }}<RequiredMark /></span><div class="input-unit"><input :name="field.key" type="number" min="1" max="86400" required :value="draft.monitoring[field.key]" @input="draft.monitoring[field.key] = inputValue($event)"><span>s</span></div></label></div></div>
                   </div>
                 </section>
               </div>

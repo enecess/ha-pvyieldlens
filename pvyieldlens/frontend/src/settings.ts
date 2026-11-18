@@ -41,9 +41,13 @@ export function draftFromConfiguration(value: Configuration): SettingsDraft {
   };
 }
 
+export function normalizeConnectionUrl(url: string): string {
+  return url.replace(/\/+$/, '');
+}
+
 export function hasSettingsChanges(draft: SettingsDraft, baseline: SettingsDraft): boolean {
   const numericValue = (value: string) => value.trim() !== '' && Number.isFinite(Number(value)) ? Number(value) : value;
-  const urlValue = (value: string) => value.replace(/\/+$/, '') || value;
+  const urlValue = (value: string) => normalizeConnectionUrl(value) || value;
   return Object.entries(draft.monitoring).some(([key, value]) => key.endsWith('_entity')
     ? value.trim() !== baseline.monitoring[key as keyof SettingsDraft['monitoring']].trim()
     : numericValue(value) !== numericValue(baseline.monitoring[key as keyof SettingsDraft['monitoring']]))
@@ -65,7 +69,8 @@ export function configurationUpdateFromDraft(draft: SettingsDraft, context: { mo
     monitoring_settings: {
       total_max_power_at_stc_w: Number(draft.monitoring.total_max_power_at_stc_w),
       pmax_temperature_coefficient_pct_per_c: Number(draft.monitoring.pmax_temperature_coefficient_pct_per_c),
-      actual_power_entity: draft.monitoring.actual_power_entity.trim(), module_temperature_entity: draft.monitoring.module_temperature_entity.trim(),
+      actual_power_entity: draft.monitoring.actual_power_entity.trim(),
+      module_temperature_entity: draft.monitoring.module_temperature_entity.trim() || null,
       irradiance_entity: draft.monitoring.irradiance_entity.trim(),
       settlement_interval_minutes: Number(draft.monitoring.settlement_interval_minutes) as MonitoringSettings['settlement_interval_minutes'],
       live_window_seconds: Number(draft.monitoring.live_window_seconds), update_interval_seconds: Number(draft.monitoring.update_interval_seconds),

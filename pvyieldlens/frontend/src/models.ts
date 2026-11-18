@@ -2,7 +2,7 @@ export interface MonitoringSettings {
   total_max_power_at_stc_w: number;
   pmax_temperature_coefficient_pct_per_c: number;
   actual_power_entity: string;
-  module_temperature_entity: string;
+  module_temperature_entity: string | null;
   irradiance_entity: string;
   settlement_interval_minutes: 1 | 5 | 10;
   live_window_seconds: number;
