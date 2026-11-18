@@ -79,6 +79,12 @@ async def test_daily_slots_zero_gaps_cutoff_and_viewport(browser_workspace, widt
     assert bounds['x'] >= 0 and bounds['x'] + bounds['width'] <= width + 1
     assert bounds['y'] >= viewport['y'] - 1 and bounds['y'] + bounds['height'] <= 901
     assert await page.evaluate('document.documentElement.scrollWidth <= innerWidth')
+    bars = chart.locator('.daily-column').last.locator('.daily-bar')
+    last_bar = await bars.last.bounding_box()
+    pointer_x = last_bar['x'] + last_bar['width'] / 2
+    await page.mouse.move(pointer_x, last_bar['y'] + 5)
+    bounds = await tip.bounding_box()
+    assert bounds['x'] + bounds['width'] <= min(pointer_x, (await bars.first.bounding_box())['x']) - 11
     # All dates retain independent hit columns despite sparse axis labels.
     box = await hit.bounding_box()
     await page.mouse.move(box['x'] + 2.5/count*box['width'], box['y']+5)
@@ -89,11 +95,96 @@ async def test_daily_slots_zero_gaps_cutoff_and_viewport(browser_workspace, widt
     await page.screenshot(path=str(artifacts / f'daily-{width}-{period}-{language}-{theme}.png'))
     await page.locator('#content-scroll').evaluate('node => node.scrollTo(0,0)')
     await page.screenshot(path=str(artifacts / f'cards-{width}-{period}-{language}-{theme}.png'))
-    await page.locator('#daily-pr-chart').scroll_into_view_if_needed()
-    await page.locator('#daily-pr-chart .chart-hit-area').focus()
+    pr_chart = page.locator('#daily-pr-chart')
+    await pr_chart.scroll_into_view_if_needed()
+    pr_hit = pr_chart.locator('.chart-hit-area')
+    box = await pr_hit.bounding_box()
+    await page.mouse.move(box['x'] + (1 - 0.9 / count) * box['width'], box['y'] + 5)
+    await expect(pr_hit).to_have_attribute('aria-valuenow', str(count - 1))
+    await pr_hit.focus()
     await page.keyboard.press('End')
-    await expect(page.locator('#daily-pr-chart .chart-tooltip')).to_be_visible()
+    pr_tip = pr_chart.locator('.chart-tooltip')
+    await expect(pr_tip).to_be_visible()
+    guide_x = (await pr_chart.locator('.chart-guide').bounding_box())['x']
+    bounds = await pr_tip.bounding_box()
+    # End reanchors at the guide even when the pointer had already selected the final date.
+    assert guide_x - 13 <= bounds['x'] + bounds['width'] <= guide_x - 11
     await page.screenshot(path=str(artifacts / f'single-pr-{width}-{period}-{language}-{theme}.png'))
+
+
+async def test_dashboard_single_day_energy_tooltip_clears_focus(browser_workspace):
+    from playwright.async_api import expect
+
+    page, _, _ = browser_workspace
+    context = await page.context.browser.new_context(has_touch=True, is_mobile=True,
+        viewport={'width': 320, 'height': 900}, http_credentials={'username': 'admin', 'password': 'browser-test'})
+    async with context:
+        touch = await context.new_page()
+
+        async def history(route):
+            response = await route.fetch()
+            payload = await response.json()
+            payload['days'][-1]['summary'].update(estimated_energy_kwh=12.345, actual_energy_kwh=10.543, pr=85.4)
+            await route.fulfill(response=response, json=payload)
+
+        await touch.route('**/api/history?*', history)
+        await touch.goto(page.url)
+        chart = touch.locator('#dashboard-energy-chart')
+        tip = chart.locator('.chart-tooltip')
+        days = chart.locator('.daily-column')
+        await expect(days).to_have_count(7)
+        await chart.scroll_into_view_if_needed()
+        bars = days.last.locator('.daily-bar')
+        last_bar = await bars.last.bounding_box()
+        pointer_x = last_bar['x'] + last_bar['width'] / 2
+        await touch.mouse.move(pointer_x, last_bar['y'] + 5)
+        await expect(tip).to_contain_text('10.543 kWh')
+        seven_day_tip = await tip.bounding_box()
+        seven_day_left = min(pointer_x, (await bars.first.bounding_box())['x'])
+
+        await touch.locator('#dashboard-energy-range [data-value=custom]').click()
+        await touch.locator('#dashboard-energy-range-apply').click()
+        await expect(days).to_have_count(1)
+        await chart.scroll_into_view_if_needed()
+        hit = await chart.locator('.chart-hit-area').bounding_box()
+        pointer_x = round(hit['x'] + hit['width'] / 2 + 10)
+        await touch.touchscreen.tap(pointer_x, hit['y'] + 20)
+        await expect(tip).to_contain_text('12.345 kWh')
+        await expect(tip).to_contain_text('10.543 kWh')
+        bounds = await tip.bounding_box()
+        chart_bounds = await chart.bounding_box()
+        guide_x = (await chart.locator('.chart-guide').bounding_box())['x']
+        assert chart_bounds['x'] <= bounds['x']
+        assert bounds['x'] + bounds['width'] <= chart_bounds['x'] + chart_bounds['width']
+        assert chart_bounds['y'] <= bounds['y']
+        assert bounds['y'] + bounds['height'] <= chart_bounds['y'] + chart_bounds['height']
+        assert (bounds['x'] + bounds['width'] <= min(pointer_x, guide_x) - 11
+                or bounds['x'] >= max(pointer_x, guide_x) + 11)
+        assert bounds['width'] < seven_day_tip['width']
+        assert await tip.evaluate('node => node.scrollWidth <= node.clientWidth')
+        assert seven_day_tip['x'] + seven_day_tip['width'] <= seven_day_left - 11
+
+        # Shrink only the viewport, leaving the chart and touch selection in place.
+        reduced_height = int(chart_bounds['y']) + 65
+        assert reduced_height < 900
+        await touch.set_viewport_size({'width': 320, 'height': reduced_height})
+        await touch.evaluate('() => new Promise(resolve => requestAnimationFrame(resolve))')
+        assert await chart.bounding_box() == chart_bounds
+        bounds = await tip.bounding_box()
+        assert bounds['y'] >= chart_bounds['y'] - 1 and bounds['y'] + bounds['height'] <= reduced_height + 1
+        assert await tip.evaluate("node => getComputedStyle(node).pointerEvents === 'auto'")
+        assert await tip.evaluate('node => node.scrollHeight > node.clientHeight')
+        values = tip.locator('div > span:last-child')
+        for value in ['12.345 kWh', '10.543 kWh']:
+            reading = values.get_by_text(value, exact=True)
+            assert await reading.evaluate('''node => {
+                const tip = node.closest('.chart-tooltip');
+                const view = tip.getBoundingClientRect();
+                tip.scrollTop += node.getBoundingClientRect().bottom - view.top - tip.clientHeight;
+                const box = node.getBoundingClientRect();
+                return box.top >= view.top && box.bottom <= view.bottom;
+            }'''), value
+        assert await tip.evaluate('node => node.scrollTop > 0')
 
 
 async def test_ha_midnight_refreshes_without_settlement(browser_workspace, monkeypatch):
