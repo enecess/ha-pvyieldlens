@@ -60,6 +60,23 @@ it('renders the approved dashboard charts without diagnostics or quality display
   expect(host.querySelector('#generation-temperature-chart .chart-tooltip')?.textContent).toContain('— °C');
 });
 
+it.each([
+  ['generation-power-chart', '2,100 W'],
+  ['generation-irradiance-chart', '800 W/m²'],
+  ['generation-temperature-chart', '— °C'],
+])('inspects the settlement window at its midpoint on %s', async (id, value) => {
+  const { host } = mount();
+  await flush();
+
+  const chart = host.querySelector(`#${id}`)!;
+  const hit = chart.querySelector('.chart-hit-area')!;
+  const clientX = Number(hit.getAttribute('x')) + Number(hit.getAttribute('width')) / 2;
+  hit.dispatchEvent(new MouseEvent('pointermove', { clientX }));
+
+  expect(hit.getAttribute('aria-valuenow')).toBe('400');
+  expect(chart.querySelector('.chart-tooltip')?.textContent).toContain(value);
+});
+
 it('applies valid inclusive custom dates, rejects invalid drafts and cancels without fetching', async () => {
   const { host } = mount(); await flush();
   const click = async (value: string) => { host.querySelector<HTMLElement>(value)!.click(); await flush(); };

@@ -71,12 +71,16 @@ const powerSeries: ChartSeries[] = [
 ];
 const irradianceSeries: ChartSeries[] = [{ key: 'irradiance_w_m2', label: 'irradiance', color: 'var(--pv-estimated)' }];
 const temperatureSeries: ChartSeries[] = [{ key: 'module_temperature_c', label: 'module_temperature', color: 'var(--pv-temperature)' }];
-const generationPower = computed(() => generation.value?.windows.map((window, index, windows) => ({
-  ...window, at: window.end, window, breakBefore: index > 0 && window.start > windows[index - 1].end,
-})) ?? []);
-const generationInputs = computed(() => generation.value?.inputs.map((point, index, inputs) => ({
-  ...point, at: point.end, breakBefore: index > 0 && point.start > inputs[index - 1].end,
-})) ?? []);
+const generationPoints = computed(() => {
+  const view = generation.value;
+  return view?.windows.map((window, index, windows) => {
+    const { irradiance_w_m2, module_temperature_c } = view.inputs[index];
+    return {
+      ...window, irradiance_w_m2, module_temperature_c, at: window.end, window,
+      breakBefore: index > 0 && window.start > windows[index - 1].end,
+    };
+  }) ?? [];
+});
 const number = (value: number | null | undefined, digits = 1) => value == null ? '—' :
   new Intl.NumberFormat(props.language, { maximumFractionDigits: digits }).format(value);
 const updated = computed(() => props.snapshot?.calculated_at == null ? '—'
@@ -127,15 +131,15 @@ const tooltip = (point: ChartPoint): ChartTooltip => ({ title: pointLabels.value
         <div class="generation-charts">
           <section class="generation-power">
             <div class="legend"><span class="estimated-dot">{{ t('estimated_power') }}</span><span class="actual-dot">{{ t('actual_power') }}</span></div>
-            <PowerChart id="generation-power-chart" :points="generationPower" :range="generation?.requested_range" :series="powerSeries" unit="W" :active="active" :language="language" :timezone="displayTimezone" :theme="theme" coverage="windows" />
+            <PowerChart id="generation-power-chart" :points="generationPoints" :range="generation?.requested_range" :series="powerSeries" unit="W" :active="active" :language="language" :timezone="displayTimezone" :theme="theme" coverage="windows" />
           </section>
           <section>
             <div class="legend"><span class="estimated-dot">{{ t('irradiance') }}</span></div>
-            <PowerChart id="generation-irradiance-chart" :points="generationInputs" :range="generation?.requested_range" :series="irradianceSeries" unit="W/m²" :active="active" :language="language" :timezone="displayTimezone" :theme="theme" />
+            <PowerChart id="generation-irradiance-chart" :points="generationPoints" :range="generation?.requested_range" :series="irradianceSeries" unit="W/m²" :active="active" :language="language" :timezone="displayTimezone" :theme="theme" coverage="windows" />
           </section>
           <section class="generation-temperature">
             <div class="legend"><span class="temperature-dot">{{ t('module_temperature') }}</span></div>
-            <PowerChart id="generation-temperature-chart" :points="generationInputs" :range="generation?.requested_range" :series="temperatureSeries" unit="°C" :active="active" :language="language" :timezone="displayTimezone" :theme="theme" />
+            <PowerChart id="generation-temperature-chart" :points="generationPoints" :range="generation?.requested_range" :series="temperatureSeries" unit="°C" :active="active" :language="language" :timezone="displayTimezone" :theme="theme" coverage="windows" />
           </section>
         </div>
       </article>
