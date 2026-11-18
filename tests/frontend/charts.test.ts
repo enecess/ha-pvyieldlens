@@ -131,6 +131,32 @@ it('reports unavailable between broken runs and outside point coverage', () => {
   expect(handle.selectedAt()).toBe(80);
 });
 
+it.each([
+  {
+    scenario: 'one local date', startUtc: '2026-11-17T23:00:00Z', duration: 8100, hitOffset: 2100,
+    uncoveredTitle: '07:02:55', pointTitle: '07:35:00',
+  },
+  {
+    scenario: 'across local midnight', startUtc: '2026-11-18T15:55:00Z', duration: 900, hitOffset: 480,
+    uncoveredTitle: '2026年11月18日 23:57:55', pointTitle: '2026年11月19日 00:03:00',
+  },
+])('uses the same default tooltip time format $scenario', ({ startUtc, duration, hitOffset, uncoveredTitle, pointTitle }) => {
+  const start = Date.parse(startUtc) / 1000;
+  const end = start + duration;
+  const pointAt = start + hitOffset;
+  const { host, handle } = chart([start + 300, pointAt, pointAt + 300].map(at => ({ at, irradiance_w_m2: null })),
+    { language: 'zh', timezone: 'Asia/Shanghai', range: { start, end } },
+    [{ key: 'irradiance_w_m2', label: 'Irradiance', color: 'blue' }]);
+
+  inspect(host, start + 175.25, start, end);
+  expect(host.querySelector('.chart-tooltip strong')?.textContent).toBe(uncoveredTitle);
+  expect(handle.selectedAt()).toBeNull();
+
+  inspect(host, pointAt + 0.25, start, end);
+  expect(host.querySelector('.chart-tooltip strong')?.textContent).toBe(pointTitle);
+  expect(handle.selectedAt()).toBe(pointAt);
+});
+
 it('uses settlement coverage without rejecting valid interval edges or crossing a missing settlement', () => {
   const window = { start: 20, end: 40, actual_power_w: 10, estimated_power_w: 20, pr: 50, optimizable_power_w: 10,
     actual_energy_wh: 1, estimated_energy_wh: 2, valid_seconds: 20, data_completeness_percent: 100,

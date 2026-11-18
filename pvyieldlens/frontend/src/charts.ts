@@ -46,10 +46,6 @@ let chartId = 0;
 export function plot(host: HTMLElement, data: ChartPoint[], series: ChartSeries[], unit: string,
   { language, timezone, translate: t, tooltip, currentTime, range, selection = 'nearest', coverage = 'points', selectedAt }: ChartOptions): ChartHandle {
   const number = (value: number, digits = 1) => new Intl.NumberFormat(language, { maximumFractionDigits: digits }).format(value);
-  const stamps = formatTimes(data.map(point => point.at), language, timezone, {
-    hour: '2-digit', minute: '2-digit', second: '2-digit',
-  });
-  const labels = new Map(data.map((point, index) => [point.at, stamps[index]]));
   host.replaceChildren();
   const valid = data.flatMap(point => series.map(item => point[item.key]))
     .filter((value): value is number => typeof value === 'number' && Number.isFinite(value));
@@ -62,6 +58,13 @@ export function plot(host: HTMLElement, data: ChartPoint[], series: ChartSeries[
   }
   const width = Math.max(host.clientWidth, 1), height = host.clientHeight, left = 48, right = 12, top = 16, bottom = 34;
   const start = range?.start ?? data[0].at, end = Math.max(range?.end ?? data[data.length - 1].at, start + 1);
+  const dateFields = { year: 'numeric', month: 'short', day: 'numeric' } as const;
+  const timeFields = { hour: '2-digit', minute: '2-digit', second: '2-digit' } as const;
+  const dateFormat = new Intl.DateTimeFormat(language, { ...dateFields, timeZone: timezone });
+  const dateTimeFields = { ...dateFields, ...timeFields };
+  const defaultTitleFields = dateFormat.format(start * 1000) === dateFormat.format(end * 1000) ? timeFields : dateTimeFields;
+  const stamps = formatTimes(data.map(point => point.at), language, timezone, defaultTitleFields);
+  const labels = new Map(data.map((point, index) => [point.at, stamps[index]]));
   const maximum = Math.max(series.some(item => item.key === 'pr') ? 100 : 1, ...valid) * 1.1;
   const minimum = Math.min(0, ...valid);
   const x = (at: number) => left + (at - start) / (end - start) * (width - left - right);
@@ -202,9 +205,8 @@ export function plot(host: HTMLElement, data: ChartPoint[], series: ChartSeries[
     const content = point ? tooltip?.(point) ?? { title: labels.get(point.at)!, rows: series.map(item => {
       const value = point[item.key];
       return { label: t(item.label), value: `${value == null ? '—' : number(value)} ${unit}`, color: item.color };
-    }) } : { title: formatTimes([at], language, timezone, {
-      year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit',
-    })[0], rows: series.map(item => ({ label: t(item.label), value: `— ${unit}`, color: item.color })) };
+    }) } : { title: formatTimes([at], language, timezone, tooltip ? dateTimeFields : defaultTitleFields)[0],
+      rows: series.map(item => ({ label: t(item.label), value: `— ${unit}`, color: item.color })) };
     const title = document.createElement('strong');
     title.textContent = content.title;
     tip.replaceChildren(title);
