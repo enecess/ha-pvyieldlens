@@ -623,6 +623,7 @@ async def test_downloads_emhass_forecast_csv(forecast_page, width, tmp_path):
 
         trigger = page.locator('#forecast-refresh + #forecast-export')
         await expect(trigger).to_be_enabled()
+        requests = state['hourly']
         if width == 390:
             await expect(trigger).to_have_text('Exporter le CSV')
             for button in [page.locator('#forecast-refresh'), trigger]:
@@ -676,6 +677,7 @@ async def test_downloads_emhass_forecast_csv(forecast_page, width, tmp_path):
         await expect(dialog).to_be_hidden()
         await expect(trigger).to_be_focused()
         await expect(chart_day).to_have_attribute('aria-pressed', 'true')
+        assert state['hourly'] == requests
 
 
 async def test_forecast_export_availability(forecast_page, tmp_path):
