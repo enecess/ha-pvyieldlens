@@ -28,6 +28,7 @@ class Service:
         self._owns_ambient_client = ambient_client is None
         self._ambient_wake = asyncio.Event()
         self._ambient_request_scope: asyncio.Timeout | None = None
+        self._ambient_request_started_at: float | None = None
         self._ambient_attempted: tuple[str, AmbientSite] | None = None
         self.monitoring_settings = store.monitoring_settings()
         self.lock = asyncio.Lock()
@@ -68,6 +69,7 @@ class Service:
             self._recovery_needed = True
             if previous_target != self._ambient_target():
                 self._ambient_attempted = None
+                self._ambient_request_started_at = None
                 self._ambient_wake.set()
                 request_scope = self._ambient_request_scope
                 if request_scope is not None and not request_scope.expired():
@@ -89,6 +91,7 @@ class Service:
                 origin, site = target
                 if self.ambient_client is None:
                     self.ambient_client = OpenMeteoClient()
+                self._ambient_request_started_at = time.time()
                 self._ambient_request_scope = asyncio.timeout(OPEN_METEO_TIMEOUT_SECONDS)
                 try:
                     async with self._ambient_request_scope:
@@ -118,7 +121,10 @@ class Service:
         ambient_pending = self._ambient_target() if self.tasks else None
         if ambient_pending == self._ambient_attempted:
             ambient_pending = None
-        ambient_start = (now - AMBIENT_LOOKBACK_SECONDS) // AMBIENT_SAMPLE_SECONDS * AMBIENT_SAMPLE_SECONDS
+        requested_at = self._ambient_request_started_at
+        # The first batch keeps its original lookback while the request or cache write is pending.
+        lookback_at = now if requested_at is None else requested_at
+        ambient_start = (lookback_at - AMBIENT_LOOKBACK_SECONDS) // AMBIENT_SAMPLE_SECONDS * AMBIENT_SAMPLE_SECONDS
         periods = self.store.configuration_history(cursor, now)
         for index, period in enumerate(periods):
             limit = periods[index+1].effective_at if index+1 < len(periods) else now
@@ -333,6 +339,7 @@ class Service:
         self.subscribed.clear()
         self.store.set_meta('started_at', str(time.time()))
         self._ambient_attempted = None
+        self._ambient_request_started_at = None
         self.tasks = [asyncio.create_task(run()) for run in (self._events, self._run, self._run_ambient)]
 
     async def stop(self):

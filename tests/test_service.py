@@ -1,4 +1,5 @@
 import asyncio
+from contextlib import suppress
 from datetime import datetime, timezone
 
 import httpx
@@ -807,10 +808,10 @@ class AmbientMonitoringHA:
         pass
 
 
-def ambient_response():
+def ambient_response(*, start=0):
     return httpx.Response(200, json={
         'minutely_15_units': {'time': 'unixtime', 'temperature_2m': '°C'},
-        'minutely_15': {'time': [0, 900], 'temperature_2m': [20, 21]},
+        'minutely_15': {'time': [start, start + 900], 'temperature_2m': [20, 21]},
     })
 
 
@@ -1077,3 +1078,104 @@ async def test_ha_continues_during_expired_ambient_request_cleanup(tmp_path, mon
                 await service.stop()
             finally:
                 store.close()
+
+
+async def test_ambient_startup_hold_keeps_inflight_lookback_through_quarter_hour(tmp_path, monkeypatch):
+    site = AmbientSite(latitude=31.2, longitude=121.5)
+    origin = 'http://ha.test'
+    location = HALocation(origin=origin, latitude=31.2, longitude=121.5, home_timezone='UTC')
+    now = 7 * 86400 + 899
+    monkeypatch.setattr('pvyieldlens.service.time.time', lambda: now)
+    client = AmbientMonitoringHA(location, lambda: now, history_at=840)
+    original_publish = client.publish
+    requested, weather_ready, publish_ready = asyncio.Event(), asyncio.Event(), asyncio.Event()
+
+    async def respond(request):
+        requested.set()
+        await weather_ready.wait()
+        return ambient_response()
+
+    async def hold_publish(payloads):
+        await original_publish(payloads)
+        # Keep the recovery observations in place until both settlement ticks have run.
+        await publish_ready.wait()
+
+    monkeypatch.setattr(client, 'publish', hold_publish)
+    store = Store(tmp_path / 'data.sqlite')
+    store.save_monitoring_settings(settings(module_temperature_entity=None, ambient_site=site,
+                                           settlement_interval_minutes=1, update_interval_seconds=1), 840, origin)
+    async with httpx.AsyncClient(transport=httpx.MockTransport(respond)) as http:
+        service = Service(store, client, ambient_client=OpenMeteoClient(http))
+        await service.start()
+        try:
+            await asyncio.wait_for(requested.wait(), 2)
+            await asyncio.wait_for(client.published.get(), 2)
+            assert store.cursor == 840
+
+            now += 2
+            await service.tick()
+            assert store.cursor == 840
+
+            weather_ready.set()
+            async with asyncio.timeout(2):
+                while not store.observations(840, 900, (site.observation_entity_id,), origin):
+                    await asyncio.sleep(0)
+            settlement = asyncio.create_task(service.tick())
+            try:
+                async with asyncio.timeout(2):
+                    while store.cursor < 900:
+                        await asyncio.sleep(0)
+                [window] = store.history(840, 900)
+                assert window['estimated_power_w'] == pytest.approx(3720)
+            finally:
+                settlement.cancel()
+                with suppress(asyncio.CancelledError):
+                    await settlement
+        finally:
+            publish_ready.set()
+            await service.stop()
+            store.close()
+
+
+async def test_late_ambient_weather_fills_generation_temperature_without_changing_power(tmp_path, monkeypatch):
+    from pvyieldlens.generation import generation_view
+
+    site = AmbientSite(latitude=31.2, longitude=121.5)
+    origin = 'http://ha.test'
+    monkeypatch.setattr('pvyieldlens.service.time.time', lambda: 1800)
+    requested, release = asyncio.Event(), asyncio.Event()
+
+    async def respond(request):
+        requested.set()
+        await release.wait()
+        return ambient_response(start=900)
+
+    store = Store(tmp_path / 'data.sqlite')
+    store.save_monitoring_settings(settings(module_temperature_entity=None, ambient_site=site,
+                                           settlement_interval_minutes=10), 960, origin)
+    store.add_observations([Observation('sensor.sun', 960, 800)], origin)
+    async with httpx.AsyncClient(transport=httpx.MockTransport(respond)) as http:
+        service = Service(store, ambient_client=OpenMeteoClient(http))
+        await service.start()
+        try:
+            await asyncio.wait_for(requested.wait(), 2)
+            assert store.cursor == 1800
+            before = generation_view(store, 1800, 'UTC')
+            totals = store.totals(1800, 'UTC')
+            assert [(row['start'], row['end']) for row in before.windows] == [(960, 1200), (1200, 1800)]
+            assert all(row['actual_power_w'] is None and row['estimated_power_w'] is None for row in before.windows)
+            assert all(point.module_temperature_c is None for point in before.inputs)
+
+            release.set()
+            async with asyncio.timeout(2):
+                while not store.observations(1800, 1800, (site.observation_entity_id,), origin):
+                    await asyncio.sleep(0)
+            after = generation_view(store, 1800, 'UTC')
+            assert [(point.start, point.end) for point in after.inputs] == [(960, 1200), (1200, 1800)]
+            assert [point.irradiance_w_m2 for point in after.inputs] == pytest.approx([800, 800])
+            assert [point.module_temperature_c for point in after.inputs] == pytest.approx([45, 45])
+            assert after.windows == before.windows
+            assert store.totals(1800, 'UTC') == totals
+        finally:
+            await service.stop()
+            store.close()

@@ -169,13 +169,12 @@ class Store:
     def cache_ambient_temperature(self, items: tuple[Observation, ...], origin: str) -> None:
         cursor = self.cursor
         with self.db:
-            # Keep observations already used by settlement, including a sample shared across the cursor.
+            # Late weather can fill input chart gaps. Preserve existing readings before the cursor.
             self.db.executemany("""
                 INSERT INTO observations VALUES (?,?,?,?,?)
                 ON CONFLICT(origin, entity_id, at) DO UPDATE SET value=excluded.value, reported_at=excluded.reported_at
                 WHERE observations.at>=COALESCE(?, observations.at)
-            """, ((origin, item.entity_id, item.at, item.value, item.reported_at, cursor)
-                  for item in items if cursor is None or item.at + AMBIENT_SAMPLE_SECONDS > cursor))
+            """, ((origin, item.entity_id, item.at, item.value, item.reported_at, cursor) for item in items))
 
     def observations(self, start: float, end: float, entities: tuple[str, ...], origin='') -> list[Observation]:
         if not entities:
