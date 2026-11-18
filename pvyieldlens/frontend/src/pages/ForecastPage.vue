@@ -37,12 +37,14 @@ const angleUnavailable = computed(() => view.value?.last_error === 'forecast_ang
 const operationalStatus = computed(() => ['disabled', 'location_unavailable', 'loading'].includes(status.value)
   || status.value === 'unavailable' && !angleUnavailable.value);
 const errorMessage = computed(() => {
+  const requestError = error.value ? t(error.value) : '';
   if (angleUnavailable.value) {
     const angles = view.value!.unavailable_angles.map(({ axis, entity_id }) =>
       `${t(axis === 'tilt' ? 'forecast_tilt' : 'forecast_direction')} (${entity_id})`).join(' · ');
-    return t(view.value!.geometry ? 'forecast_angle_unavailable_cached' : 'forecast_angle_unavailable', { angles });
+    const angleError = t(view.value!.geometry ? 'forecast_angle_unavailable_cached' : 'forecast_angle_unavailable', { angles });
+    return requestError ? `${requestError} ${angleError}` : angleError;
   }
-  return error.value ? t(error.value) : view.value?.last_error ? t('forecast_fetch_failed') : '';
+  return requestError || (view.value?.last_error ? t('forecast_fetch_failed') : '');
 });
 const refreshing = computed(() => refreshPending.value !== null || Boolean(view.value?.refreshing));
 const days = computed(() => detail.value && key(view.value) === key(detail.value) ? detail.value.days : []);

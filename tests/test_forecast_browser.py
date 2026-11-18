@@ -200,6 +200,27 @@ async def test_forecast_states_are_truthful(forecast_page, status, failed_angle)
     await expect(page.locator('[data-settings-section=forecast]')).to_be_visible()
 
 
+async def test_failed_manual_refresh_reports_request_error_with_cached_angle_notice(forecast_page):
+    from playwright.async_api import expect
+
+    page, state, _ = forecast_page
+    view = state['view']
+    view.update(status='stale', last_error='forecast_angle_unavailable',
+                geometry={'tilt_deg': 28.4, 'azimuth_deg': 180, 'read_at': view['fetched_at'] - 60},
+                unavailable_angles=[{'axis': 'tilt', 'entity_id': 'sensor.tracker_tilt'}])
+    await page.route('**/api/forecast/refresh', lambda route: route.fulfill(status=503, json={'error': 'error'}))
+    await page.locator('#forecast-tab').click()
+    notice = page.locator('#forecast-error')
+    await expect(notice).to_contain_text('Showing the last forecast')
+    await expect(notice).not_to_contain_text('Something went wrong')
+    await page.locator('#forecast-refresh').click()
+    await expect(notice).to_contain_text('Something went wrong. Please retry.')
+    await expect(notice).to_contain_text('Module tilt (sensor.tracker_tilt)')
+    await expect(notice).to_contain_text('Showing the last forecast')
+    await expect(page.locator('#forecast-chart svg')).to_be_visible()
+    await expect(page.locator('#forecast-refresh')).to_be_enabled()
+
+
 async def test_scalar_poll_does_not_redraw_or_refetch_forecast_detail(forecast_page):
     from playwright.async_api import expect
     page, state, _ = forecast_page
