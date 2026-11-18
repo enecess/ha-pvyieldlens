@@ -1,4 +1,5 @@
 import json
+from contextlib import closing
 from pathlib import Path
 
 import httpx
@@ -6,6 +7,7 @@ import pytest
 
 from pvyieldlens.engine import Observation
 from pvyieldlens.service import Service
+from pvyieldlens.settings import AmbientSite
 from pvyieldlens.storage import Store
 from pvyieldlens.web import Runtime, create_app
 from test_engine import samples, settings
@@ -114,6 +116,48 @@ async def test_live_series_starts_at_physical_or_source_configuration_boundary(s
     assert result['points'][0]['at'] == 1005
     assert result['context']['revision'] == 2
     assert result['points'][-1]['estimated_power_w'] == pytest.approx(7440 if 'total_max_power_at_stc_w' in changes else 3720)
+
+
+@pytest.mark.parametrize(('changes', 'power'), [
+    ({'module_temperature_noct_c': 55}, 3580),
+    ({'module_temperature_entity': 'sensor.temp', 'ambient_site': None}, 4000),
+    ({'ambient_site': AmbientSite(latitude=32, longitude=122)}, 3860),
+], ids=['estimated-noct', 'measured-source', 'ambient-site'])
+async def test_live_windows_only_count_time_since_the_temperature_change(service, tmp_path, changes, power):
+    site = AmbientSite(latitude=31.2, longitude=121.5)
+    initial = settings(module_temperature_entity=None, ambient_site=site, settlement_interval_minutes=1)
+    await service.configure(initial, now=0)
+    service.store.add_observations(samples(temp=25) + [
+        Observation(site.observation_entity_id, 0, 20),
+        Observation(AmbientSite(latitude=32, longitude=122).observation_entity_id, 0, 10),
+    ])
+    await service.tick(60)
+    [settled] = service.store.history(0, 60)
+    assert settled['estimated_power_w'] == pytest.approx(3720)
+
+    changed = initial.model_copy(update=changes)
+    await service.configure(changed, now=60)
+    await service.tick(65)
+    current = service.snapshot(65)['live_window']
+    boundary, _ = service.live_series(65)['points']
+    assert (boundary['valid_seconds'], current['valid_seconds']) == (0, 5)
+    assert (boundary['start'], boundary['end'], boundary['estimated_power_w']) == (0, 60, None)
+    assert (current['start'], current['end'], current['quality']) == (5, 65, 'partial')
+    assert current['estimated_power_w'] == pytest.approx(power)
+    assert current['data_completeness_percent'] == pytest.approx(100 * 5 / 60)
+
+    await service.configure(changed.model_copy(update={'settlement_interval_minutes': 5}), now=67)
+    with closing(Store(tmp_path / 'data.sqlite')) as reopened:
+        restarted = Service(reopened)
+        await restarted.tick(75)
+        replay, published = restarted.live_series(75)['points']
+        assert (replay['at'], replay['start'], replay['valid_seconds']) == (70, 10, 10)
+        assert replay['estimated_power_w'] == pytest.approx(power)
+        assert replay['data_completeness_percent'] == pytest.approx(100 * 10 / 60)
+        assert published['valid_seconds'] == restarted.snapshot(75)['live_window']['valid_seconds'] == 15
+        await restarted.tick(125)
+        assert restarted.snapshot(125)['live_window']['valid_seconds'] == 60
+        assert reopened.history(0, 60) == [settled]
 
 
 async def test_live_series_live_only_settings_replay_without_revision_split(service):

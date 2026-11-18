@@ -90,6 +90,13 @@ let scrollFrame = 0;
 watch(temperatureConfigured, configured => {
   if (!configured) draft.value.monitoring.module_temperature_max_age_seconds = baseline.value.monitoring.module_temperature_max_age_seconds;
 });
+watch([tokenRequired, () => draft.value.forecast.enabled], async () => {
+  const invalid = form.value?.querySelectorAll('[aria-invalid="true"]:required:invalid');
+  await nextTick();
+  invalid?.forEach(field => {
+    if (field.matches(':optional:valid')) field.removeAttribute('aria-invalid');
+  });
+});
 watch([dirty, busy], ([dirty, busy]) => emit('state-change', { dirty, busy }), { immediate: true });
 watch(() => props.active, active => {
   if (!active) return;

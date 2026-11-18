@@ -80,6 +80,11 @@ class ConfigurationRevision:
     monitoring_settings: MonitoringSettings
     origin: str
 
+    @property
+    def temperature_context(self):
+        config = self.monitoring_settings
+        return self.origin, config.module_temperature_entity or (config.ambient_site, config.module_temperature_noct_c)
+
 
 class Store:
     def __init__(self, path: Path):

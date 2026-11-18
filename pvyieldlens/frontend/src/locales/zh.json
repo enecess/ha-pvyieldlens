@@ -76,7 +76,7 @@
   "actual_power_sensor": "实际功率",
   "module_temperature_sensor": "组件温度",
   "module_temperature_estimate_help": "留空时，根据 Open-Meteo 气温、Home Assistant 辐照度和 NOCT 估算组件温度。",
-  "clear_entity": "清除{field}实体",
+  "clear_entity": "清除{field}",
   "irradiance_sensor": "辐照度",
   "select_source": "搜索传感器",
   "timing": "更新设置",

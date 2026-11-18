@@ -70,8 +70,9 @@ def input_spans(observations: list[Observation], sources: tuple[tuple[str, int],
         yield left, right, tuple(values)
 
 
-def calculate(monitoring_settings: MonitoringSettings, observations: list[Observation], start: float, end: float) -> WindowResult:
-    """Integrate the intersection of valid, piecewise constant source intervals."""
+def calculate(monitoring_settings: MonitoringSettings, observations: list[Observation], start: float, end: float, *,
+              valid_from: float | None = None) -> WindowResult:
+    """Integrate covered source intervals, keeping the requested bounds for completeness."""
     temperature_input = monitoring_settings.temperature_input
     if temperature_input is None:
         return _window_result(start, end, 0, 0, 0, ())
@@ -82,7 +83,8 @@ def calculate(monitoring_settings: MonitoringSettings, observations: list[Observ
     )
     segments = []
     coefficient = monitoring_settings.pmax_temperature_coefficient_per_c
-    for left, right, (power, temperature, irradiance) in input_spans(observations, sources, start, end):
+    coverage_start = start if valid_from is None else min(max(start, valid_from), end)
+    for left, right, (power, temperature, irradiance) in input_spans(observations, sources, coverage_start, end):
         if power is None or temperature is None or irradiance is None:
             continue
         if monitoring_settings.module_temperature_entity is None:
@@ -113,8 +115,9 @@ def _window_result(start: float, end: float, duration: float, estimated: float, 
 
 
 def calculate_live(monitoring_settings: MonitoringSettings, observations: list[Observation], at: float, *,
-                       started_at: float | None = None) -> WindowResult:
-    result = calculate(monitoring_settings, observations, at - monitoring_settings.live_window_seconds, at)
+                   started_at: float | None = None, valid_from: float | None = None) -> WindowResult:
+    result = calculate(monitoring_settings, observations, at - monitoring_settings.live_window_seconds,
+                       at, valid_from=valid_from)
     current = calculate(monitoring_settings, [item for item in observations if item.at <= at], at, at + 0.0001)
     return _live_result(result, bool(current.valid_seconds), started_at)
 
@@ -130,12 +133,12 @@ def _live_result(result: WindowResult, current_valid: bool, started_at: float | 
 
 
 def calculate_live_series(monitoring_settings: MonitoringSettings, observations: list[Observation], endpoints: list[float], *,
-                              started_at: float | None = None) -> list[WindowResult]:
+                          started_at: float | None = None, valid_from: float | None = None) -> list[WindowResult]:
     """Reuse one integration for a request's rolling windows without retaining state."""
     if not endpoints:
         return []
     segments = calculate(monitoring_settings, observations, min(endpoints) - monitoring_settings.live_window_seconds,
-                         max(endpoints) + 0.0001).segments
+                         max(endpoints) + 0.0001, valid_from=valid_from).segments
     starts = [part.start for part in segments]
     ends = [part.end for part in segments]
     durations = list(accumulate((part.end - part.start for part in segments), initial=0))

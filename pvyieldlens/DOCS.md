@@ -41,7 +41,7 @@ Use the language menu at the top right to change the page language.
 
 Performance ratio (PR) compares actual power with estimated power. The optimizable power is estimated power minus actual power. PR may be above 100%, and the optimizable power may be negative. PR is not shown when estimated power is zero.
 
-Energy is counted only when all three sensors have data. Today's energy resets at midnight in your Home Assistant time zone; total energy starts from your first setup.
+Energy is counted only when actual power, irradiance, and measured or estimated module temperature are valid at the same time. Today's energy resets at midnight in your Home Assistant time zone; total energy starts from your first setup.
 
 Choose a language above for the full guide, including settings, output sensors and formulas.
 

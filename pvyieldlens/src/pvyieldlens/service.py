@@ -3,6 +3,7 @@ import logging
 import time
 from contextlib import suppress
 from datetime import datetime, time as day_time
+from itertools import pairwise
 from zoneinfo import ZoneInfo
 
 import httpx
@@ -162,17 +163,23 @@ class Service:
         if cursor > first and first < midnight:
             self.forecast.invalidate_correction()
 
+    def _live_inputs(self, start: float, end: float):
+        periods = self.store.configuration_history(start, end)
+        valid_from = next((current.effective_at for current, previous in pairwise(reversed(periods))
+                           if current.temperature_context != previous.temperature_context), start)
+        observations = self.store.observations(valid_from, end, self.monitoring_settings.observation_entities, self.origin)
+        return periods, observations, valid_from
+
     async def tick(self, now: float | None = None):
         now = time.time() if now is None else now
         async with self.lock:
             if not self.monitoring_settings:
                 return
             await self._settle(now)
-            observations = self.store.observations(now - self.monitoring_settings.live_window_seconds, now,
-                                                   self.monitoring_settings.observation_entities, self.origin)
+            _, observations, valid_from = self._live_inputs(now - self.monitoring_settings.live_window_seconds, now)
             started_at = self.store.get_meta('started_at')
-            result = calculate_live(self.monitoring_settings, observations, now,
-                                        started_at=float(started_at) if started_at is not None else None)
+            result = calculate_live(self.monitoring_settings, observations, now, valid_from=valid_from,
+                                    started_at=float(started_at) if started_at is not None else None)
             self.live_window = result.public()
             self.calculated_at = now
 
@@ -184,17 +191,15 @@ class Service:
             return {'configured': False, 'recovering': False, 'range': {'start': start, 'end': now},
                     'step_seconds': None, 'context': None, 'points': []}
         revision = self.store.revision
-        period = self.store.configuration_history(now, now)[-1]
-        observations = self.store.observations(start - monitoring_settings.live_window_seconds, now,
-                                               monitoring_settings.observation_entities, self.origin)
+        periods, observations, valid_from = self._live_inputs(start - monitoring_settings.live_window_seconds, now)
         anchor = self.calculated_at if self.calculated_at is not None and start <= self.calculated_at <= now else now
-        first = max(start, period.effective_at)
+        first = max(start, periods[-1].effective_at)
         started_at = self.store.get_meta('started_at')
         started_at = float(started_at) if started_at is not None else None
         endpoints = [anchor - index * monitoring_settings.update_interval_seconds
                      for index in reversed(range(max(0, int((anchor - first) // monitoring_settings.update_interval_seconds) + 1)))]
         points = [{'at': at, **result.public()} for at, result in zip(
-            endpoints, calculate_live_series(monitoring_settings, observations, endpoints, started_at=started_at))]
+            endpoints, calculate_live_series(monitoring_settings, observations, endpoints, valid_from=valid_from, started_at=started_at))]
         if points:
             if self.live_window is not None and anchor == self.calculated_at:
                 points[-1] = {'at': anchor, **self.live_window}
