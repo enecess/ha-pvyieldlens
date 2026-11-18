@@ -1,6 +1,6 @@
 import type { ForecastInterval, WindowResult } from './models';
 import type { Language } from './i18n';
-import { positionChartTooltip } from './chartTooltip';
+import { positionChartTooltip, scrollChartTooltip } from './chartTooltip';
 import { formatTimes } from './timezones';
 
 export interface ChartPoint {
@@ -184,6 +184,7 @@ export function plot(host: HTMLElement, data: ChartPoint[], series: ChartSeries[
   const listeners = new AbortController();
   const events = { signal: listeners.signal };
   const scrollHost = host.closest('#content-scroll');
+  const viewport = window.visualViewport;
   let active: ChartPoint | undefined;
   let activePointerX: number | undefined;
   const positionTip = () => {
@@ -196,6 +197,8 @@ export function plot(host: HTMLElement, data: ChartPoint[], series: ChartSeries[
     if (!tip.hidden) {
       scrollHost?.removeEventListener('scroll', positionTip);
       window.removeEventListener('resize', positionTip);
+      viewport?.removeEventListener('resize', positionTip);
+      viewport?.removeEventListener('scroll', positionTip);
     }
     tip.hidden = true;
     guide.setAttribute('visibility', 'hidden');
@@ -238,6 +241,8 @@ export function plot(host: HTMLElement, data: ChartPoint[], series: ChartSeries[
     if (tip.hidden) {
       scrollHost?.addEventListener('scroll', positionTip, events);
       window.addEventListener('resize', positionTip, events);
+      viewport?.addEventListener('resize', positionTip, events);
+      viewport?.addEventListener('scroll', positionTip, events);
     }
     tip.hidden = false;
     hit.setAttribute('aria-valuenow', String(at));
@@ -276,6 +281,7 @@ export function plot(host: HTMLElement, data: ChartPoint[], series: ChartSeries[
   };
   let touchStart: { x: number; y: number } | undefined;
   hit.addEventListener('pointermove', event => { if (event.pointerType !== 'touch') inspect(event); }, events);
+  hit.addEventListener('wheel', event => scrollChartTooltip(event, tip), { ...events, passive: false });
   host.addEventListener('pointerleave', event => { if (event.pointerType !== 'touch') hide(); }, events);
   hit.addEventListener('pointerdown', event => {
     if (event.pointerType === 'touch') touchStart = { x: event.clientX, y: event.clientY };

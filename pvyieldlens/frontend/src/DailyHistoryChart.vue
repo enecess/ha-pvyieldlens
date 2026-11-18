@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
-import { positionChartTooltip } from './chartTooltip';
+import { positionChartTooltip, scrollChartTooltip } from './chartTooltip';
 import type { HistoryDay } from './models';
 import { catalogs, translate, type Language } from './i18n';
 import type { ColorMode } from './theme';
@@ -18,6 +18,7 @@ const width = ref(600);
 const height = ref(260);
 const selected = ref<number | null>(null);
 const pointerX = ref<number>();
+const viewport = window.visualViewport;
 let resize: ResizeObserver;
 const number = (value: number | null, digits = 1) => value == null ? '—' :
   new Intl.NumberFormat(props.language, { maximumFractionDigits: digits }).format(value);
@@ -83,11 +84,15 @@ onMounted(() => {
   document.addEventListener('pointerdown', outside);
   host.value!.closest('#content-scroll')?.addEventListener('scroll', positionTip);
   window.addEventListener('resize', positionTip);
+  viewport?.addEventListener('resize', positionTip);
+  viewport?.addEventListener('scroll', positionTip);
 });
 onBeforeUnmount(() => {
   resize.disconnect(); document.removeEventListener('pointerdown', outside);
   host.value?.closest('#content-scroll')?.removeEventListener('scroll', positionTip);
   window.removeEventListener('resize', positionTip);
+  viewport?.removeEventListener('resize', positionTip);
+  viewport?.removeEventListener('scroll', positionTip);
 });
 </script>
 
@@ -111,7 +116,8 @@ onBeforeUnmount(() => {
       <rect ref="hit" class="chart-hit-area" x="48" y="16" :width="plotWidth" :height="plotHeight" fill="transparent" tabindex="0" role="slider"
         :aria-label="t('history_day_inspect')" aria-valuemin="0" :aria-valuemax="days.length - 1" :aria-valuenow="selected ?? 0"
         :aria-valuetext="selectedDay ? `${date(selectedDay.day, true)} · ${number(selectedDay.summary.actual_energy_kwh, 3)} kWh · ${number(selectedDay.summary.pr)} %` : t('history_day_inspect')"
-        @pointermove="pointer" @pointerdown="pointer" @pointercancel="selected = null" @keydown="keyboard" @blur="event => { if (event.relatedTarget !== tip) selected = null; }" />
+        @pointermove="pointer" @pointerdown="pointer" @pointercancel="selected = null" @wheel="scrollChartTooltip($event, tip)"
+        @keydown="keyboard" @blur="event => { if (event.relatedTarget !== tip) selected = null; }" />
     </svg>
     <div v-else-if="active" class="chart-empty">{{ t('history_no_periods') }}</div>
     <div v-if="selectedDay" ref="tip" class="chart-tooltip daily-tooltip" tabindex="0" role="status" @keydown.esc="selected = null; hit?.focus()">

@@ -8,14 +8,17 @@ export function positionChartTooltip(host: HTMLElement, tip: HTMLElement, {
   topOffset?: number;
 }): boolean {
   const chart = host.getBoundingClientRect();
+  const { offsetLeft, offsetTop, width: viewportWidth, height: viewportHeight } = window.visualViewport ?? {
+    offsetLeft: 0, offsetTop: 0, width: window.innerWidth, height: window.innerHeight,
+  };
   const content = host.closest<HTMLElement>('#content-scroll');
   const contentBounds = content?.getBoundingClientRect();
   const contentLeft = (contentBounds?.left ?? 0) + (content?.clientLeft ?? 0);
   const contentTop = (contentBounds?.top ?? 0) + (content?.clientTop ?? 0);
-  const visibleLeft = Math.max(chart.left, contentLeft, 0);
-  const visibleRight = Math.min(chart.right, contentLeft + (content?.clientWidth ?? window.innerWidth), window.innerWidth);
-  const visibleTop = Math.max(chart.top, contentTop, 0);
-  const visibleBottom = Math.min(chart.bottom, contentTop + (content?.clientHeight ?? window.innerHeight), window.innerHeight);
+  const visibleLeft = Math.max(chart.left, contentLeft, offsetLeft);
+  const visibleRight = Math.min(chart.right, contentLeft + (content?.clientWidth ?? window.innerWidth), offsetLeft + viewportWidth);
+  const visibleTop = Math.max(chart.top, contentTop, offsetTop);
+  const visibleBottom = Math.min(chart.bottom, contentTop + (content?.clientHeight ?? window.innerHeight), offsetTop + viewportHeight);
   const availableHeight = Math.max(0, visibleBottom - visibleTop);
 
   const scrollTop = tip.scrollTop;
@@ -54,4 +57,19 @@ export function positionChartTooltip(host: HTMLElement, tip: HTMLElement, {
   const scrollable = fits && tip.scrollHeight > tip.clientHeight;
   tip.style.pointerEvents = scrollable ? 'auto' : 'none';
   return scrollable;
+}
+
+export function scrollChartTooltip(event: WheelEvent, tip: HTMLElement | undefined) {
+  if (!tip || tip.hidden || tip.style.visibility === 'hidden' || !event.cancelable || event.defaultPrevented ||
+      event.ctrlKey || event.metaKey || event.shiftKey) return;
+
+  const mode = event.deltaMode;
+  const { deltaY } = event;
+  if (!deltaY) return;
+  const before = tip.scrollTop;
+  if (deltaY < 0 ? before <= 0 : before >= tip.scrollHeight - tip.clientHeight) return;
+  const unit = mode === WheelEvent.DOM_DELTA_LINE ? parseFloat(getComputedStyle(tip).lineHeight)
+    : mode === WheelEvent.DOM_DELTA_PAGE ? tip.clientHeight : 1;
+  tip.scrollTop += deltaY * unit;
+  if (tip.scrollTop !== before) event.preventDefault();
 }

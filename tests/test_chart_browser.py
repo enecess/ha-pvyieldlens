@@ -535,10 +535,26 @@ async def test_partially_visible_tooltip_keeps_all_rows_reachable(chart_page):
     tooltip = chart.locator('.chart-tooltip')
     await expect(tooltip).to_be_visible()
     assert await tooltip.evaluate('node => node.scrollHeight > node.clientHeight')
+    await expect(hit).to_have_attribute('aria-valuenow', '900')
+    scroll = page.locator('#content-scroll')
+    scroll_top = await scroll.evaluate('node => node.scrollTop')
+    at_bottom = """() => {
+        const tip = document.querySelector('#history-chart .chart-tooltip');
+        return tip.scrollTop > 0 && tip.scrollTop + tip.clientHeight >= tip.scrollHeight - 1;
+    }"""
+    await page.mouse.wheel(0, 200)
+    await page.wait_for_function(at_bottom, timeout=2000)
+    await expect(hit).to_have_attribute('aria-valuenow', '900')
+    assert await scroll.evaluate('node => node.scrollTop') == scroll_top
+    await page.mouse.wheel(0, 60)
+    await page.wait_for_function("before => document.querySelector('#content-scroll').scrollTop > before", arg=scroll_top)
+
+    await page.mouse.move(0, 0)
+    await scroll.evaluate('(node, top) => { node.scrollTop = top; }', scroll_top)
+    await page.mouse.move(box['x'] + box['width'] - 1, box['y'] + 4)
     await tooltip.hover()
     await page.mouse.wheel(0, 200)
-    await page.wait_for_function("() => document.querySelector('#history-chart .chart-tooltip').scrollTop > 0")
-    assert await tooltip.evaluate('node => node.scrollTop + node.clientHeight >= node.scrollHeight - 1')
+    await page.wait_for_function(at_bottom)
     await page.mouse.move(0, 0)
     await expect(tooltip).to_be_hidden()
     await hit.evaluate('node => node.focus({preventScroll: true})')
@@ -548,13 +564,60 @@ async def test_partially_visible_tooltip_keeps_all_rows_reachable(chart_page):
     await page.keyboard.press('Home')
     await expect(tooltip).to_be_visible()
     await page.keyboard.press('End')
-    await page.wait_for_function("() => { const tip = document.querySelector('#history-chart .chart-tooltip'); return tip.scrollTop + tip.clientHeight >= tip.scrollHeight - 1; }")
+    await page.wait_for_function(at_bottom)
     bounds = await scroll_and_measure_tooltip(chart, -30)
     await expect(tooltip).to_be_visible()
     assert bounds['tipTop'] >= bounds['visibleTop'] - 1 and bounds['tipBottom'] <= bounds['visibleBottom'] + 1, bounds
     await page.keyboard.press('Escape')
     await expect(tooltip).to_be_hidden()
     await expect(hit).to_be_focused()
+
+
+async def test_tooltip_stays_in_visual_viewport_after_touch_and_zoom(chart_page):
+    from playwright.async_api import expect
+
+    page, _ = chart_page
+    await page.set_viewport_size({'width': 320, 'height': 600})
+    session = await page.context.new_cdp_session(page)
+    await session.send('Emulation.setDeviceMetricsOverride',
+                       {'width': 320, 'height': 600, 'deviceScaleFactor': 2, 'mobile': True})
+    await session.send('Emulation.setTouchEmulationEnabled', {'enabled': True, 'maxTouchPoints': 5})
+    chart = page.locator('#history-chart')
+    hit = chart.locator('.chart-hit-area')
+    tooltip = chart.locator('.chart-tooltip')
+    await chart.scroll_into_view_if_needed()
+    await session.send('Emulation.setPageScaleFactor', {'pageScaleFactor': 1.25})
+    await page.wait_for_function('visualViewport.width === 256')
+    await chart.evaluate('''host => {
+        const scroll = host.closest('#content-scroll');
+        scroll.scrollTop += host.getBoundingClientRect().top - scroll.getBoundingClientRect().top - 10;
+    }''')
+    point = await hit.evaluate('''node => {
+        const box = node.getBoundingClientRect();
+        return {x: box.x + 2, y: box.y + 4};
+    }''')
+    assert 0 < point['x'] < 256 and 0 < point['y'] < 480
+    await session.send('Input.dispatchTouchEvent', {'type': 'touchStart', 'touchPoints': [point]})
+    await session.send('Input.dispatchTouchEvent', {'type': 'touchEnd', 'touchPoints': []})
+    await expect(tooltip).to_be_visible()
+    selected = await hit.get_attribute('aria-valuenow')
+    guide = await chart.locator('.chart-guide').bounding_box()
+    assert 0 < guide['x'] < 256
+    before = await tooltip.evaluate('node => node.getBoundingClientRect().toJSON()')
+    assert before['left'] >= -1 and before['right'] <= 257 and before['bottom'] <= 481, before
+
+    await session.send('Emulation.setPageScaleFactor', {'pageScaleFactor': 1.375})
+    await page.wait_for_function('''() => {
+        const tip = document.querySelector('#history-chart .chart-tooltip');
+        const bounds = tip.getBoundingClientRect();
+        const viewport = visualViewport;
+        return viewport.scale === 1.375 && bounds.height > 0
+            && getComputedStyle(tip).visibility === 'visible'
+            && bounds.left >= viewport.offsetLeft - 1 && bounds.top >= viewport.offsetTop - 1
+            && bounds.right <= viewport.offsetLeft + viewport.width + 1
+            && bounds.bottom <= viewport.offsetTop + viewport.height + 1;
+    }''', timeout=2000)
+    await expect(hit).to_have_attribute('aria-valuenow', selected)
 
 
 async def test_keyboard_tooltip_repositions_after_height_only_resize(chart_page):

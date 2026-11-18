@@ -82,7 +82,10 @@ async def test_daily_slots_zero_gaps_cutoff_and_viewport(browser_workspace, widt
     bars = chart.locator('.daily-column').last.locator('.daily-bar')
     last_bar = await bars.last.bounding_box()
     pointer_x = last_bar['x'] + last_bar['width'] / 2
+    await page.keyboard.press('Home')
+    await expect(hit).to_have_attribute('aria-valuenow', '0')
     await page.mouse.move(pointer_x, last_bar['y'] + 5)
+    await expect(hit).to_have_attribute('aria-valuenow', str(count - 1))
     bounds = await tip.bounding_box()
     assert bounds['x'] + bounds['width'] <= min(pointer_x, (await bars.first.bounding_box())['x']) - 11
     # All dates retain independent hit columns despite sparse axis labels.
@@ -185,6 +188,43 @@ async def test_dashboard_single_day_energy_tooltip_clears_focus(browser_workspac
                 return box.top >= view.top && box.bottom <= view.bottom;
             }'''), value
         assert await tip.evaluate('node => node.scrollTop > 0')
+
+
+async def test_dashboard_short_viewport_wheel_keeps_selected_date(browser_workspace):
+    from playwright.async_api import expect
+
+    page, _, _ = browser_workspace
+    await page.set_viewport_size({'width': 320, 'height': 600})
+    await page.locator('#language-select').select_option('fr')
+    chart = page.locator('#dashboard-energy-chart')
+    await expect(chart.locator('.daily-column')).to_have_count(7)
+    await chart.scroll_into_view_if_needed()
+    await chart.evaluate('''host => {
+        const scroll = host.closest('#content-scroll');
+        scroll.scrollTop += host.getBoundingClientRect().top - innerHeight + 90;
+    }''')
+    await page.wait_for_function("""() => Math.abs(
+        document.querySelector('#dashboard-energy-chart').getBoundingClientRect().top - innerHeight + 90
+    ) < 1""")
+    hit = chart.locator('.chart-hit-area')
+    box = await hit.bounding_box()
+    await page.mouse.move(box['x'] + box['width'] - 4, box['y'] + 15)
+    await expect(hit).to_have_attribute('aria-valuenow', '6')
+    tip = chart.locator('.chart-tooltip')
+    await expect(tip).to_be_visible()
+    assert await tip.evaluate('node => node.scrollHeight > node.clientHeight')
+
+    scroll = page.locator('#content-scroll')
+    scroll_top = await scroll.evaluate('node => node.scrollTop')
+    await page.mouse.wheel(0, 200)
+    await page.wait_for_function("""() => {
+        const tip = document.querySelector('#dashboard-energy-chart .chart-tooltip');
+        return tip.scrollTop > 0 && tip.scrollTop + tip.clientHeight >= tip.scrollHeight - 1;
+    }""", timeout=2000)
+    await expect(hit).to_have_attribute('aria-valuenow', '6')
+    assert await scroll.evaluate('node => node.scrollTop') == scroll_top
+    await page.mouse.wheel(0, 60)
+    await page.wait_for_function("before => document.querySelector('#content-scroll').scrollTop > before", arg=scroll_top)
 
 
 async def test_ha_midnight_refreshes_without_settlement(browser_workspace, monkeypatch):
