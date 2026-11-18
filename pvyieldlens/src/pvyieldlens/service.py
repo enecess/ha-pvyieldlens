@@ -11,8 +11,8 @@ from websockets.exceptions import WebSocketException
 from .engine import calculate, calculate_live, calculate_live_series, input_spans
 from .forecast_service import ForecastController
 from .home_assistant import HomeAssistantClient, entity_payloads, parse_state
-from .open_meteo import OPEN_METEO_TIMEOUT_SECONDS, OpenMeteoClient
-from .settings import AmbientSite, HALocation, MonitoringSettings
+from .open_meteo import AMBIENT_LOOKBACK_SECONDS, OPEN_METEO_TIMEOUT_SECONDS, OpenMeteoClient
+from .settings import AMBIENT_SAMPLE_SECONDS, AmbientSite, HALocation, MonitoringSettings
 from .storage import Store
 
 LOGGER = logging.getLogger(__name__)
@@ -69,8 +69,9 @@ class Service:
             if previous_target != self._ambient_target():
                 self._ambient_attempted = None
                 self._ambient_wake.set()
-                if self._ambient_request_scope is not None:
-                    self._ambient_request_scope.reschedule(asyncio.get_running_loop().time())
+                request_scope = self._ambient_request_scope
+                if request_scope is not None and not request_scope.expired():
+                    request_scope.reschedule(asyncio.get_running_loop().time())
         self.forecast.configure(monitoring_settings, self.forecast.settings, origin, location)
 
     def _ambient_target(self) -> tuple[str, AmbientSite] | None:
@@ -117,6 +118,7 @@ class Service:
         ambient_pending = self._ambient_target() if self.tasks else None
         if ambient_pending == self._ambient_attempted:
             ambient_pending = None
+        ambient_start = (now - AMBIENT_LOOKBACK_SECONDS) // AMBIENT_SAMPLE_SECONDS * AMBIENT_SAMPLE_SECONDS
         periods = self.store.configuration_history(cursor, now)
         for index, period in enumerate(periods):
             limit = periods[index+1].effective_at if index+1 < len(periods) else now
@@ -124,6 +126,10 @@ class Service:
             pending_temperature = config.temperature_input if (
                 config.module_temperature_entity is None and ambient_pending == (period.origin, config.ambient_site)
             ) else None
+            pending_inputs = (
+                tuple((entity, age) for _, entity, age in config.ha_sources) + (pending_temperature,)
+                if pending_temperature else ()
+            )
             step = config.settlement_interval_minutes * 60
             while cursor < limit:
                 boundary = (int(cursor // step) + 1) * step
@@ -131,10 +137,13 @@ class Service:
                     break
                 end = min(boundary, limit)
                 observations = self.store.observations(cursor, end, config.observation_entities, period.origin)
-                # Give the active site's first fetch a chance to fill gaps before committing this window.
-                if pending_temperature and any(value is None for _, _, (value,) in input_spans(
-                    observations, (pending_temperature,), cursor, end,
-                )):
+                # Wait for the first fetch where weather could make the other inputs usable.
+                if pending_inputs and end > ambient_start and any(
+                    power is not None and irradiance is not None and temperature is None
+                    for _, _, (power, irradiance, temperature) in input_spans(
+                        observations, pending_inputs, max(cursor, ambient_start), end,
+                    )
+                ):
                     break
                 result = calculate(config, observations, cursor, end)
                 self.store.settle(result, period.revision, self.monitoring_settings.home_timezone)

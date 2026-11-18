@@ -254,3 +254,31 @@ def test_ambient_cache_preserves_settled_inputs_and_accepts_pending_predecessor(
         assert store.history(60, 120)[0]['estimated_power_w'] == pytest.approx(3720)
     finally:
         store.close()
+
+
+def test_ambient_pruning_keeps_coverage_at_the_ha_retention_boundary(tmp_path):
+    from pvyieldlens.engine import Observation
+    from pvyieldlens.settings import AmbientSite
+
+    store = Store(tmp_path / 'data.sqlite')
+    origin = 'http://ha.test'
+    site = AmbientSite(latitude=31.2, longitude=121.5)
+    config = settings(module_temperature_entity=None, ambient_site=site)
+    store.save_monitoring_settings(config, 60, origin)
+    weather = Observation(site.observation_entity_id, 0, 20)
+    old_power = Observation('sensor.power', 0, 3300)
+    retained_power = Observation('sensor.power', 60, 3348)
+    irradiance = Observation('sensor.sun', 60, 800)
+    store.add_observations([old_power, retained_power, irradiance], origin)
+    store.cache_ambient_temperature((weather,), origin)
+
+    try:
+        store.prune(7 * 86400 + 60)
+        observations = store.observations(60, 120, config.observation_entities, origin)
+        assert set(observations) == {weather, retained_power, irradiance}
+        assert calculate(config, observations, 60, 120).estimated_power_w == pytest.approx(3720)
+
+        store.prune(7 * 86400 + 900)
+        assert store.observations(900, 960, (site.observation_entity_id,), origin) == []
+    finally:
+        store.close()

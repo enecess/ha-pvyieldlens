@@ -11,6 +11,7 @@ Longitude = Annotated[float, Field(ge=-180, le=180)]
 ModuleTemperatureNoct = Annotated[float, Field(gt=20, le=80)]
 DEFAULT_NOCT_C = 45.0
 AMBIENT_SAMPLE_SECONDS = 900
+AMBIENT_OBSERVATION_PREFIX = 'weather:ambient:'
 
 
 class AmbientSite(BaseModel):
@@ -21,7 +22,7 @@ class AmbientSite(BaseModel):
 
     @property
     def observation_entity_id(self) -> str:
-        return f'weather:ambient:{self.latitude or 0.0}:{self.longitude or 0.0}'
+        return f'{AMBIENT_OBSERVATION_PREFIX}{self.latitude or 0.0}:{self.longitude or 0.0}'
 
 
 class MonitoringSettings(BaseModel):

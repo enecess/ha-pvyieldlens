@@ -9,6 +9,7 @@ from .forecast import ForecastData, ForecastInput, WeatherSample, calculate_fore
 from .settings import AMBIENT_SAMPLE_SECONDS, AmbientSite
 
 OPEN_METEO_TIMEOUT_SECONDS = 20
+AMBIENT_LOOKBACK_SECONDS = 7 * 86400
 _FORECAST_URL = 'https://api.open-meteo.com/v1/forecast'
 
 
@@ -106,7 +107,7 @@ class OpenMeteoClient:
         response = await self.http.get(_FORECAST_URL, params={
             'latitude': site.latitude, 'longitude': site.longitude, 'minutely_15': 'temperature_2m',
             'temperature_unit': 'celsius', 'timezone': 'UTC', 'timeformat': 'unixtime',
-            'past_minutely_15': 672, 'forecast_minutely_15': 8,
+            'past_minutely_15': AMBIENT_LOOKBACK_SECONDS // AMBIENT_SAMPLE_SECONDS, 'forecast_minutely_15': 8,
         }, timeout=OPEN_METEO_TIMEOUT_SECONDS)
         response.raise_for_status()
         series = _AmbientResponse.model_validate(response.json()).minutely_15

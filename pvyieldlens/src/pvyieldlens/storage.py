@@ -9,7 +9,7 @@ from zoneinfo import ZoneInfo
 from pydantic import BaseModel, ConfigDict
 
 from .engine import Observation, WindowResult
-from .settings import AMBIENT_SAMPLE_SECONDS, ForecastSettings, MonitoringSettings
+from .settings import AMBIENT_OBSERVATION_PREFIX, AMBIENT_SAMPLE_SECONDS, ForecastSettings, MonitoringSettings
 
 
 class DayAllocation(TypedDict):
@@ -296,7 +296,10 @@ class Store:
         return windows
 
     def prune(self, now: float):
+        cutoff = now - 7 * 86400
         with self.db:
-            self.db.execute("DELETE FROM observations WHERE at<?", (now - 7 * 86400,))
+            self.db.execute("""
+                DELETE FROM observations WHERE at<? AND (at<=? OR entity_id NOT GLOB ?)
+            """, (cutoff, cutoff - AMBIENT_SAMPLE_SECONDS, f'{AMBIENT_OBSERVATION_PREFIX}*'))
             self.db.execute("DELETE FROM windows WHERE end<?", (now - 90 * 86400,))
             self.db.execute("DELETE FROM window_segments WHERE end<?", (now - 3 * 86400,))
