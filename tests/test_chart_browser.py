@@ -557,6 +557,41 @@ async def test_partially_visible_tooltip_keeps_all_rows_reachable(chart_page):
     await expect(hit).to_be_focused()
 
 
+async def test_keyboard_tooltip_repositions_after_height_only_resize(chart_page):
+    from playwright.async_api import expect
+
+    page, _ = chart_page
+    await page.set_viewport_size({'width': 390, 'height': 760})
+    chart = page.locator('#history-chart')
+    await chart.scroll_into_view_if_needed()
+    await page.evaluate('() => new Promise(resolve => requestAnimationFrame(resolve))')
+    chart_before = await chart.bounding_box()
+    hit = chart.locator('.chart-hit-area')
+    tooltip = chart.locator('.chart-tooltip')
+    await hit.evaluate('node => node.focus({preventScroll: true})')
+    await page.keyboard.press('ArrowLeft')
+    await expect(hit).to_have_attribute('aria-valuenow', '900')
+    await expect(tooltip).to_be_visible()
+    assert await tooltip.evaluate('node => node.scrollHeight === node.clientHeight')
+    tooltip_id = await tooltip.get_attribute('id')
+
+    reduced_height = int(chart_before['y']) + 75
+    assert reduced_height < 760
+    await page.set_viewport_size({'width': 390, 'height': reduced_height})
+    await page.evaluate('() => new Promise(resolve => requestAnimationFrame(resolve))')
+    assert await chart.bounding_box() == chart_before
+    await expect(tooltip).to_have_attribute('id', tooltip_id)
+    await expect(tooltip).to_contain_text('125 %')
+    tip = await tooltip.bounding_box()
+    assert tip['y'] >= chart_before['y'] - 1 and tip['y'] + tip['height'] <= reduced_height + 1, tip
+    assert await tooltip.evaluate('node => node.scrollHeight > node.clientHeight')
+    await page.keyboard.press('Tab')
+    await expect(tooltip).to_be_focused()
+    await page.keyboard.press('Escape')
+    await expect(tooltip).to_be_hidden()
+    await expect(hit).to_be_focused()
+
+
 async def test_tooltip_on_top_clipped_chart_stays_below_header(chart_page):
     from playwright.async_api import expect
 

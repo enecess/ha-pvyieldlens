@@ -193,7 +193,10 @@ export function plot(host: HTMLElement, data: ChartPoint[], series: ChartSeries[
   };
   const hide = () => {
     active = undefined;
-    if (!tip.hidden) scrollHost?.removeEventListener('scroll', positionTip);
+    if (!tip.hidden) {
+      scrollHost?.removeEventListener('scroll', positionTip);
+      window.removeEventListener('resize', positionTip);
+    }
     tip.hidden = true;
     guide.setAttribute('visibility', 'hidden');
     markers.forEach(marker => marker.setAttribute('visibility', 'hidden'));
@@ -232,7 +235,10 @@ export function plot(host: HTMLElement, data: ChartPoint[], series: ChartSeries[
       line.append(label, value);
       tip.append(line);
     });
-    if (tip.hidden) scrollHost?.addEventListener('scroll', positionTip, events);
+    if (tip.hidden) {
+      scrollHost?.addEventListener('scroll', positionTip, events);
+      window.addEventListener('resize', positionTip, events);
+    }
     tip.hidden = false;
     hit.setAttribute('aria-valuenow', String(at));
     hit.setAttribute('aria-valuetext', tip.textContent!);
