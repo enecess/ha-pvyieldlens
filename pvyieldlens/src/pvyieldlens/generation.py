@@ -64,8 +64,9 @@ def generation_view(store: Store, now: float, home_timezone: str) -> GenerationV
             observations = store.observations(windows[0]['start'], windows[-1]['end'], config.entities, period.origin)
             irradiance = _input_averages(observations, config.irradiance_entity,
                                          config.irradiance_max_age_seconds, windows)
-            temperature = _input_averages(observations, config.module_temperature_entity,
-                                          config.module_temperature_max_age_seconds, windows)
+            temperature = (_input_averages(observations, config.module_temperature_entity,
+                                           config.module_temperature_max_age_seconds, windows)
+                           if config.module_temperature_entity is not None else [None] * len(windows))
             inputs.extend(GenerationInputPoint(start=window['start'], end=window['end'],
                                                irradiance_w_m2=sun, module_temperature_c=temp)
                           for window, sun, temp in zip(windows, irradiance, temperature))

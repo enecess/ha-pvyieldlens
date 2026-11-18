@@ -31,6 +31,52 @@ def test_datasheet_percent_and_roundtrip():
     assert result.estimated_energy_wh == pytest.approx(62)
 
 
+def test_optional_temperature_source_preserves_ha_roles():
+    legacy = MonitoringSettings.model_validate_json("""{
+        "total_max_power_at_stc_w": 5000,
+        "pmax_temperature_coefficient_pct_per_c": -0.35,
+        "actual_power_entity": "sensor.power",
+        "module_temperature_entity": "sensor.temp",
+        "irradiance_entity": "sensor.sun"
+    }""")
+    assert legacy.entities == ('sensor.power', 'sensor.temp', 'sensor.sun')
+    assert legacy.module_temperature_noct_c == 45.0
+    assert legacy.ambient_site is None
+    assert MonitoringSettings.model_validate_json(legacy.model_dump_json()) == legacy
+
+    config = settings(module_temperature_entity=None)
+    assert config.ha_sources == (('power', 'sensor.power', 900), ('irradiance', 'sensor.sun', 900))
+    assert config.entities == ('sensor.power', 'sensor.sun')
+    assert config.max_ages == (900, 900)
+    raw = config.model_dump(exclude={'module_temperature_entity'})
+    assert MonitoringSettings.model_validate(raw) == config
+
+
+@pytest.mark.parametrize('changes', [
+    {'module_temperature_entity': ''},
+    {'module_temperature_entity': None, 'irradiance_entity': 'sensor.power'},
+    {'module_temperature_entity': 'sensor.sun'},
+    {'module_temperature_entity': 'sensor.pvyieldlens_live_pr'},
+    {'module_temperature_entity': None, 'irradiance_entity': 'sensor.pvyieldlens_live_pr'},
+])
+def test_rejects_invalid_configured_sources_with_optional_temperature(changes):
+    with pytest.raises(ValidationError):
+        settings(**changes)
+
+
+def test_monitoring_without_measured_temperature_is_unavailable():
+    from pvyieldlens.engine import calculate_live, calculate_live_series
+
+    config = settings(module_temperature_entity=None)
+    result = calculate(config, samples(), 0, 60)
+    assert result.quality == 'unavailable'
+    assert result.estimated_power_w is None
+    assert result.valid_seconds == 0
+    live = calculate_live(config, samples(), 60)
+    assert live.reason == 'current_source_unavailable'
+    assert calculate_live_series(config, samples(), [60]) == [live]
+
+
 def test_weights_duration_not_record_count():
     result = calculate(settings(), samples(power=1000) + [Observation('sensor.power', 540, 0)], 0, 600)
     assert result.actual_power_w == pytest.approx(900)

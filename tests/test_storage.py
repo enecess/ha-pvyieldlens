@@ -69,6 +69,19 @@ def test_observation_sources_origin_and_inclusive_bounds_keep_strict_predecessor
     store.close()
 
 
+def test_observations_with_two_sources_keep_only_their_strict_predecessors(tmp_path):
+    store = Store(tmp_path / 'data.sqlite')
+    store.add_observations(samples(at=1) + samples(at=5) + samples(at=10) + samples(at=20) + samples(at=30), 'active')
+    store.add_observations(samples(at=8), 'other')
+    records = store.observations(10, 20, ('sensor.power', 'sensor.sun'), 'active')
+    assert [(item.at, item.entity_id) for item in records] == [
+        (5, 'sensor.power'), (5, 'sensor.sun'),
+        (10, 'sensor.power'), (10, 'sensor.sun'),
+        (20, 'sensor.power'), (20, 'sensor.sun'),
+    ]
+    store.close()
+
+
 def test_retention_keeps_totals_and_latest_settled_window(tmp_path):
     store = Store(tmp_path / 'data.sqlite')
     revision = store.save_monitoring_settings(settings(), 0)

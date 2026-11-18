@@ -23,7 +23,7 @@ from .generation import generation_view
 from .home_assistant import HomeAssistantClient, source_value
 from .history import HistoryPeriod, history_view
 from .service import NETWORK_ERRORS, Service
-from .settings import ForecastSettings, MonitoringSettings
+from .settings import DEFAULT_NOCT_C, AmbientSite, ForecastSettings, MonitoringSettings
 from .storage import Store, summarize_history
 
 
@@ -77,7 +77,7 @@ def create_app(service: Service, runtime: Runtime, run_background=True) -> FastA
 
     def config_response():
         connection = saved_connection()
-        return {'monitoring_settings': service.monitoring_settings.model_dump() if service.monitoring_settings else None,
+        return {'monitoring_settings': service.monitoring_settings.public() if service.monitoring_settings else None,
                 'forecast_settings': service.forecast.settings.model_dump(),
                 'location': service.forecast.location.model_dump() if service.forecast.location else None,
                 'mode': 'app' if runtime.supervisor_token else 'docker',
@@ -151,11 +151,20 @@ def create_app(service: Service, runtime: Runtime, run_background=True) -> FastA
             connection = Connection(url=update.connection.url, token=token)
         if not connection or not connection.token.get_secret_value():
             return JSONResponse({'error': 'connection_required'}, status_code=422)
-        monitoring_changed = service.monitoring_settings != update.monitoring_settings or service.origin != connection.url or connection != previous_connection
+        monitoring_settings = update.monitoring_settings
+        estimated = monitoring_settings.module_temperature_entity is None
+        location = service.forecast.location
+        site = (AmbientSite(latitude=location.latitude, longitude=location.longitude)
+                if estimated and location is not None and location.origin == connection.url else None)
+        monitoring_settings = monitoring_settings.model_copy(update={
+            'module_temperature_noct_c': update.forecast_settings.noct_c if estimated else DEFAULT_NOCT_C,
+            'ambient_site': site,
+        })
+        monitoring_changed = service.monitoring_settings != monitoring_settings or service.origin != connection.url or connection != previous_connection
         if monitoring_changed and run_background:
             await service.stop()
         if monitoring_changed:
-            await service.configure(update.monitoring_settings, origin=connection.url)
+            await service.configure(monitoring_settings, origin=connection.url)
             if not runtime.supervisor_token:
                 service.store.set_meta('connection', json.dumps({'url': connection.url, 'token': connection.token.get_secret_value()}))
         async with service.lock:
@@ -218,7 +227,9 @@ def create_app(service: Service, runtime: Runtime, run_background=True) -> FastA
         if client is None:
             return JSONResponse({'error': 'ha_connection_failed'}, status_code=502)
         try:
-            return await client.source_diagnostics(monitoring_settings.entities)
+            sources = monitoring_settings.ha_sources
+            return await client.source_diagnostics(tuple(entity for _, entity, _ in sources),
+                                                   roles=tuple(role for role, _, _ in sources))
         except NETWORK_ERRORS:
             return JSONResponse({'error': 'ha_connection_failed'}, status_code=502)
 

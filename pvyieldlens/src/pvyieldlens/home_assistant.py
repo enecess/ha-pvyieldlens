@@ -11,7 +11,7 @@ from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, JsonValue, Typ
 from websockets.asyncio.client import connect
 
 from .engine import Observation
-from .settings import HALocation
+from .settings import HALocation, MonitoringRole
 
 
 class StateAttributes(BaseModel):
@@ -40,7 +40,7 @@ class SourceReports(BaseModel):
     model_config = ConfigDict(strict=True, allow_inf_nan=False)
 
     observed_at: float
-    sources: list[SourceReport | None] = Field(min_length=3, max_length=3)
+    sources: list[SourceReport | None]
 
 
 class HAConfig(BaseModel):
@@ -65,7 +65,7 @@ class WSMessage(BaseModel):
 
 
 def source_value(state: str, unit: str | None,
-                 role: Literal['power', 'temperature', 'irradiance', 'tilt', 'azimuth']) -> float | None:
+                 role: MonitoringRole | Literal['tilt', 'azimuth']) -> float | None:
     value = None
     if re.fullmatch(r"[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?", state):
         number = float(state)
@@ -86,7 +86,7 @@ def source_value(state: str, unit: str | None,
     return value
 
 
-def parse_state(state: HAState, role: Literal['power', 'temperature', 'irradiance'], historical=False) -> list[Observation]:
+def parse_state(state: HAState, role: MonitoringRole, historical=False) -> list[Observation]:
     value = source_value(state.state, state.attributes.unit_of_measurement, role)
     at = state.last_updated.timestamp()
     points = [Observation(state.entity_id, at, value, at)]
@@ -146,7 +146,8 @@ class HomeAssistantClient:
         return [state or HAState(entity_id=entity, state='unavailable', last_changed=now, last_updated=now)
                 for entity, state in zip(entities, result, strict=True)]
 
-    async def source_diagnostics(self, entities: tuple[str, str, str]):
+    async def source_diagnostics(self, entities: tuple[str, ...], *,
+                                 roles: tuple[MonitoringRole, ...] = ('power', 'temperature', 'irradiance')):
         result = SourceReports.model_validate(await self.request('POST', 'template', json={
             'template': '''{"observed_at": {{ as_timestamp(now()) | to_json }}, "sources": [
                 {% for entity in entities %}{% set s = states[entity] %}
@@ -159,7 +160,7 @@ class HomeAssistantClient:
             {'entity_id': entity, **source.model_dump(), 'valid': source_value(source.state, source.unit, role) is not None}
             if source is not None else
             {'entity_id': entity, 'state': 'unavailable', 'unit': None, 'reported_at': None, 'valid': False}
-            for entity, source, role in zip(entities, result.sources, ('power', 'temperature', 'irradiance'))]}
+            for entity, source, role in zip(entities, result.sources, roles, strict=True)]}
 
     async def history(self, entities: list[str], start: float, end: float) -> list[HAState]:
         stamp = datetime.fromtimestamp(start, timezone.utc).isoformat()

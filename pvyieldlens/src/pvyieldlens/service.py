@@ -117,7 +117,7 @@ class Service:
                 points[-1].update(estimated_power_w=None, actual_power_w=None, pr=None, optimizable_power_w=None,
                                   quality='unavailable', reason='current_source_unavailable')
         return {'configured': True, 'recovering': self._recovery_needed, 'range': {'start': start, 'end': now},
-                'step_seconds': monitoring_settings.update_interval_seconds, 'context': {'revision': revision, 'monitoring_settings': monitoring_settings.model_dump()},
+                'step_seconds': monitoring_settings.update_interval_seconds, 'context': {'revision': revision, 'monitoring_settings': monitoring_settings.public()},
                 'points': points}
 
     def snapshot(self, now: float | None = None):
@@ -134,7 +134,7 @@ class Service:
         async with self.lock:
             if not self.monitoring_settings:
                 return
-            roles = dict(zip((monitoring_settings or self.monitoring_settings).entities, ('power', 'temperature', 'irradiance')))
+            roles = {entity: role for role, entity, _ in (monitoring_settings or self.monitoring_settings).ha_sources}
             parsed = [(state, parse_state(state, roles[state.entity_id], historical)) for state in states if state.entity_id in roles]
             items = [item for _, points in parsed for item in points]
             self.store.add_observations(items, self.origin if origin is None else origin)

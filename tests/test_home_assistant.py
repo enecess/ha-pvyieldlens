@@ -230,6 +230,23 @@ async def test_source_diagnostics_batches_configured_sources_and_reads_unchanged
     assert all(request.headers['Authorization'] == 'Bearer secret' for request in requests)
 
 
+async def test_source_diagnostics_with_two_monitoring_roles():
+    def respond(request):
+        assert json.loads(request.content)['variables']['entities'] == ['sensor.power', 'sensor.sun']
+        return httpx.Response(200, json={'observed_at': 110.0, 'sources': [
+            {'state': '1.5', 'unit': 'kW', 'reported_at': 100},
+            {'state': '0.8', 'unit': 'kW/m²', 'reported_at': 110},
+        ]})
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(respond)) as http:
+        client = HomeAssistantClient('http://ha.test', 'secret', http=http)
+        result = await client.source_diagnostics(('sensor.power', 'sensor.sun'), roles=('power', 'irradiance'))
+    assert result == {'observed_at': 110.0, 'sources': [
+        {'entity_id': 'sensor.power', 'state': '1.5', 'unit': 'kW', 'reported_at': 100, 'valid': True},
+        {'entity_id': 'sensor.sun', 'state': '0.8', 'unit': 'kW/m²', 'reported_at': 110, 'valid': True},
+    ]}
+
+
 @pytest.mark.parametrize('role,value,unit,valid', [
     ('power', '0', 'W', True), ('power', '1.5', 'kW', True),
     ('power', '-1', 'W', False), ('power', '3', 'kWh', False),

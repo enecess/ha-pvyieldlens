@@ -49,6 +49,8 @@ def estimated_power(total_max_power_at_stc_w: float, pmax_temperature_coefficien
 
 def calculate(monitoring_settings: MonitoringSettings, observations: list[Observation], start: float, end: float) -> WindowResult:
     """Integrate the intersection of valid, piecewise constant source intervals."""
+    if monitoring_settings.module_temperature_entity is None:
+        return _window_result(start, end, 0, 0, 0, ())
     sources = [sorted({item.at: item for item in observations if item.entity_id == entity and item.at < end}.values(),
                       key=lambda item: item.at) for entity in monitoring_settings.entities]
     points = sorted({start, end} | {

@@ -43,8 +43,9 @@ async def test_configuration_validation_preserves_settings_and_secrets(service):
         response = await client.put('/api/config', json=body)
         assert response.status_code == 200
         assert set(response.json()) == {'monitoring_settings', 'forecast_settings', 'location', 'mode', 'connection', 'monitoring_changed'}
-        assert response.json()['monitoring_settings'] == body['monitoring_settings']
-        assert (await client.get('/api/config')).json()['monitoring_settings'] == body['monitoring_settings']
+        public_settings = settings().model_dump(exclude={'module_temperature_noct_c', 'ambient_site'})
+        assert response.json()['monitoring_settings'] == public_settings
+        assert (await client.get('/api/config')).json()['monitoring_settings'] == public_settings
         body['monitoring_settings']['total_max_power_at_stc_w'] = -1
         response = await client.put('/api/config', json=body)
         assert response.status_code == 422
@@ -686,6 +687,91 @@ async def test_save_reports_effective_monitoring_change(service, change, monitor
         assert response.json()['monitoring_changed'] is monitoring_changed
         assert 'private-token' not in response.text and 'replacement-token' not in response.text
     await service.client.close()
+
+
+@pytest.mark.parametrize('same_origin', [True, False])
+async def test_optional_temperature_config_snapshots_estimation_inputs(service, same_origin):
+    from pvyieldlens.settings import HALocation
+
+    origin = 'http://ha.test'
+    await service.configure(settings(), now=0, origin=origin)
+    location = HALocation(origin=origin, latitude=31.23, longitude=121.47, location_name='Home', home_timezone='UTC')
+    service.forecast.configure(service.monitoring_settings, service.forecast.settings, origin, location)
+    app = create_app(service, Runtime(web_password='test-pass'), run_background=False)
+    monitoring = settings().model_dump(exclude={'module_temperature_entity', 'module_temperature_noct_c', 'ambient_site'})
+    update = {'monitoring_settings': monitoring, 'forecast_settings': {'noct_c': 52},
+              'connection': {'url': origin if same_origin else 'http://new-ha.test', 'token': 'secret'}}
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url='http://app',
+                                 auth=('admin', 'test-pass')) as client:
+        response = await client.put('/api/config', json=update)
+        assert response.status_code == 200
+        public_settings = {**monitoring, 'module_temperature_entity': None}
+        assert response.json()['monitoring_settings'] == public_settings
+        assert response.json()['monitoring_changed']
+        assert service.store.revision == 2
+
+        monitoring['module_temperature_entity'] = None
+        update['forecast_settings']['noct_c'] = 55
+        response = await client.put('/api/config', json=update)
+        assert response.status_code == 200
+        assert response.json()['monitoring_changed']
+        assert service.store.revision == 3
+        assert (await client.get('/api/config')).json()['monitoring_settings'] == public_settings
+        assert (await client.get('/api/live-series')).json()['context']['monitoring_settings'] == public_settings
+
+        monitoring['module_temperature_entity'] = 'sensor.temp'
+        response = await client.put('/api/config', json=update)
+        assert response.status_code == 200
+        assert response.json()['monitoring_changed']
+        assert service.store.revision == 4
+        update['forecast_settings']['noct_c'] = 57
+        response = await client.put('/api/config', json=update)
+        assert response.status_code == 200
+        assert not response.json()['monitoring_changed']
+        assert service.store.revision == 4
+
+    persisted = [period.monitoring_settings for period in service.store.configuration_history(0, float('inf'))]
+    assert [config.module_temperature_noct_c for config in persisted] == [45.0, 52.0, 55.0, 45.0]
+    site = {'latitude': 31.23, 'longitude': 121.47} if same_origin else None
+    assert [config.ambient_site.model_dump() if config.ambient_site else None for config in persisted] == [
+        None, site, site, None,
+    ]
+    await service.client.close()
+
+
+async def test_optional_temperature_routes_irradiance_through_ingest_and_diagnostics(service):
+    from pvyieldlens.home_assistant import HomeAssistantClient
+    from test_home_assistant import state
+
+    await service.configure(settings(module_temperature_entity=None, settlement_interval_minutes=1),
+                            now=0, origin='http://ha.test')
+    await service.ingest([
+        state('1.5', 'kW'),
+        state('77', '°F').model_copy(update={'entity_id': 'sensor.temp'}),
+        state('0.8', 'kW/m²').model_copy(update={'entity_id': 'sensor.sun'}),
+    ])
+    assert [(source['entity_id'], source['valid']) for source in service.sources] == [
+        ('sensor.power', True), ('sensor.sun', True),
+    ]
+    records = service.store.observations(0, 2_000_000_000, ('sensor.power', 'sensor.temp', 'sensor.sun'), service.origin)
+    assert {item.entity_id: item.value for item in records} == {'sensor.power': 1500.0, 'sensor.sun': 800.0}
+
+    def respond(request):
+        return httpx.Response(200, json={'observed_at': 110.0, 'sources': [
+            {'state': '1.5', 'unit': 'kW', 'reported_at': 100},
+            {'state': '0.8', 'unit': 'kW/m²', 'reported_at': 110},
+        ]})
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(respond)) as ha_http:
+        service.client = HomeAssistantClient('http://ha.test', 'secret', http=ha_http)
+        app = create_app(service, Runtime(web_password='test-pass'), run_background=False)
+        async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url='http://app',
+                                     auth=('admin', 'test-pass')) as client:
+            response = await client.get('/api/source-diagnostics')
+    assert response.status_code == 200
+    assert [(source['entity_id'], source['valid']) for source in response.json()['sources']] == [
+        ('sensor.power', True), ('sensor.sun', True),
+    ]
 
 
 async def test_full_configuration_requires_forecast_settings_without_partial_writes(service):

@@ -166,9 +166,12 @@ class Store:
             self.db.executemany("INSERT OR REPLACE INTO observations VALUES (?,?,?,?,?)",
                                 [(origin, item.entity_id, item.at, item.value, item.reported_at) for item in items])
 
-    def observations(self, start: float, end: float, entities: tuple[str, str, str], origin='') -> list[Observation]:
-        rows = self.db.execute("""
-            WITH sources(entity_id) AS (VALUES (?),(?),(?))
+    def observations(self, start: float, end: float, entities: tuple[str, ...], origin='') -> list[Observation]:
+        if not entities:
+            return []
+        placeholders = ','.join(['(?)'] * len(entities))
+        rows = self.db.execute(f"""
+            WITH sources(entity_id) AS (VALUES {placeholders})
             SELECT * FROM observations WHERE origin=? AND entity_id IN (SELECT entity_id FROM sources)
                 AND at>=? AND at<=?
             UNION ALL

@@ -47,7 +47,8 @@ async def test_live_series_replays_without_settlement(service, monkeypatch):
     assert result['points'][0]['estimated_power_w'] == pytest.approx(3720)
     assert result['points'][-1]['estimated_power_w'] == pytest.approx(3720)
     assert result['points'][-1]['pr'] == pytest.approx(90)
-    assert result['context'] == {'revision': 1, 'monitoring_settings': settings().model_dump()}
+    public_settings = settings().model_dump(exclude={'module_temperature_noct_c', 'ambient_site'})
+    assert result['context'] == {'revision': 1, 'monitoring_settings': public_settings}
     assert result['configured'] is True
     assert result['recovering'] is True
     service._recovery_needed = False
