@@ -158,9 +158,16 @@ async def test_single_forecast_row_keeps_quarter_hour_interval_selection(forecas
     end = float(await hit.get_attribute('aria-valuemax'))
     reads = []
     for at in [row['start'] + 60, row['end'] - 60, row['end'] + 60]:
-        await page.mouse.move(box['x'] + (at - start) / (end - start) * box['width'], box['y'] + 3)
-        reads.append({'at': at, 'text': await chart.locator('.chart-tooltip').inner_text(),
+        pointer_x = box['x'] + (at - start) / (end - start) * box['width']
+        await page.mouse.move(pointer_x, box['y'] + 3)
+        tooltip = chart.locator('.chart-tooltip')
+        reads.append({'at': at, 'text': await tooltip.inner_text(),
                       'markers': await chart.locator('.active-series-marker[visibility=visible]').count()})
+        if at < row['end']:
+            guide_x = await chart.locator('.chart-guide[visibility=visible]').evaluate('node => node.getBoundingClientRect().x')
+            tip = await tooltip.bounding_box()
+            assert abs(guide_x - pointer_x) > 2
+            assert tip['x'] >= max(pointer_x, guide_x) + 11 or tip['x'] + tip['width'] <= min(pointer_x, guide_x) - 11
     print('forecast-single-interval', json.dumps(reads))
     assert all(read['markers'] == 2 and '3,720 W' in read['text'] and '3,348 W' in read['text'] for read in reads[:2])
     assert reads[-1]['markers'] == 0 and reads[-1]['text'].count('— W') == 2
@@ -304,6 +311,34 @@ async def test_tooltip_works_away_from_the_line(chart_page):
     await expect(tooltip).to_be_hidden()
 
 
+async def test_tooltip_clears_pointer_and_guide_at_both_edges(chart_page):
+    from playwright.async_api import expect
+
+    page, _ = chart_page
+    chart = page.locator('#history-chart')
+    hit = chart.locator('.chart-hit-area')
+    tooltip = chart.locator('.chart-tooltip')
+    guide = chart.locator('.chart-guide[visibility=visible]')
+    box = await hit.bounding_box()
+
+    pointer_x = box['x'] + 1
+    await page.mouse.move(pointer_x, box['y'] + 3)
+    await expect(hit).to_have_attribute('aria-valuenow', '60')
+    await expect(tooltip).to_contain_text('0 W')
+    await expect(tooltip).to_contain_text('125 %')
+    guide_x = await guide.evaluate('node => node.getBoundingClientRect().x')
+    assert (await tooltip.bounding_box())['x'] >= max(pointer_x, guide_x) + 11
+
+    pointer_x = box['x'] + box['width'] - 1
+    await page.mouse.move(pointer_x, box['y'] + 3)
+    await expect(hit).to_have_attribute('aria-valuenow', '900')
+    await expect(tooltip).to_contain_text('0 W')
+    await expect(tooltip).to_contain_text('125 %')
+    guide_x = await guide.evaluate('node => node.getBoundingClientRect().x')
+    tip = await tooltip.bounding_box()
+    assert tip['x'] + tip['width'] <= min(pointer_x, guide_x) - 11
+
+
 async def test_missing_settlement_gap_is_unavailable_but_valid_edges_remain_inspectable(chart_page):
     from playwright.async_api import expect
 
@@ -415,29 +450,70 @@ async def test_keyboard_and_touch_inspection(chart_page):
 async def test_tooltip_stays_inside_narrow_chart(chart_page, language):
     from playwright.async_api import expect
 
-    page, _ = chart_page
-    await page.set_viewport_size({'width': 320, 'height': 844})
+    page, state = chart_page
     await page.locator('#language-select').select_option(language)
     await page.locator('#theme-select').select_option('dark')
+    # Inspect the same first record near the center and near the left edge.
+    state.update(ends=[60, 920], values=[123456.7, 20])
+    await page.locator('#history-range [data-value="24h"]').click()
     chart = page.locator('#history-chart')
     hit = chart.locator('.chart-hit-area')
-    await expect(hit).to_be_visible()
+    tooltip = chart.locator('.chart-tooltip')
+    await expect(hit).to_have_attribute('aria-valuemax', '920')
     await chart.scroll_into_view_if_needed()
     box = await hit.bounding_box()
-    await page.mouse.move(box['x'] + box['width'] - 1, box['y'] + 10)
-    await expect(chart.locator('.chart-tooltip')).to_be_visible()
-    bounds = await chart.evaluate('''host => {
-        const chart = host.getBoundingClientRect(), tip = host.querySelector('.chart-tooltip').getBoundingClientRect();
-        return {left: chart.left, right: chart.right, top: chart.top, bottom: chart.bottom,
-            tipLeft: tip.left, tipRight: tip.right, tipTop: tip.top, tipBottom: tip.bottom,
-            tipScroll: host.querySelector('.chart-tooltip').scrollHeight, tipHeight: host.querySelector('.chart-tooltip').clientHeight};
-    }''')
-    assert bounds['tipLeft'] >= bounds['left'] and bounds['tipRight'] <= bounds['right'] + 1
-    assert bounds['tipTop'] >= bounds['top'] and bounds['tipBottom'] <= bounds['bottom'] + 1
-    assert bounds['tipScroll'] <= bounds['tipHeight']
+    await page.mouse.move(box['x'] + 1, box['y'] + 10)
+    await expect(hit).to_have_attribute('aria-valuenow', '60')
+    natural_width = (await tooltip.bounding_box())['width']
+    natural_content = await tooltip.inner_text()
+
+    await page.set_viewport_size({'width': 320, 'height': 844})
+    await chart.scroll_into_view_if_needed()
+    box = await hit.bounding_box()
+    widths = []
+    contents = []
+    for index, pointer_x in enumerate([box['x'] + 1, box['x'] + box['width'] * 0.5, box['x'] + 1]):
+        await page.mouse.move(pointer_x, box['y'] + 10)
+        await expect(hit).to_have_attribute('aria-valuenow', '60')
+        await expect(tooltip).to_contain_text('125 %')
+        bounds = await chart.evaluate('''host => {
+            const chart = host.getBoundingClientRect(), tooltip = host.querySelector('.chart-tooltip');
+            const tip = tooltip.getBoundingClientRect();
+            const guide = host.querySelector('.chart-guide[visibility=visible]').getBoundingClientRect();
+            return {left: chart.left, right: chart.right, top: chart.top, bottom: chart.bottom,
+                tipLeft: tip.left, tipRight: tip.right, tipTop: tip.top, tipBottom: tip.bottom,
+                tipWidth: tip.width, guideX: guide.x,
+                scrollWidth: tooltip.scrollWidth, clientWidth: tooltip.clientWidth,
+                scrollHeight: tooltip.scrollHeight, clientHeight: tooltip.clientHeight};
+        }''')
+        assert bounds['tipLeft'] >= bounds['left'] and bounds['tipRight'] <= bounds['right'] + 1
+        assert bounds['tipTop'] >= bounds['top'] and bounds['tipBottom'] <= bounds['bottom'] + 1
+        assert bounds['tipLeft'] >= max(pointer_x, bounds['guideX']) + 11
+        assert bounds['scrollWidth'] <= bounds['clientWidth']
+        if index != 1:
+            assert bounds['scrollHeight'] <= bounds['clientHeight']
+        widths.append(bounds['tipWidth'])
+        contents.append(await tooltip.inner_text())
+    assert contents[0] == contents[1] == contents[2] == natural_content
+    assert widths[1] < widths[0] <= natural_width
+    assert widths[2] == widths[0]
     assert await page.evaluate('document.documentElement.scrollWidth <= innerWidth')
     Path('artifacts').mkdir(exist_ok=True)
     await page.screenshot(path=f'artifacts/chart-inspection-{language}-320-dark.png')
+
+
+async def scroll_and_measure_tooltip(chart, distance):
+    return await chart.evaluate('''async (host, distance) => {
+        const scroll = document.querySelector('#content-scroll');
+        scroll.scrollBy(0, distance);
+        await new Promise(resolve => requestAnimationFrame(resolve));
+        const chart = host.getBoundingClientRect(), content = scroll.getBoundingClientRect();
+        const tip = host.querySelector('.chart-tooltip').getBoundingClientRect();
+        const contentTop = content.top + scroll.clientTop;
+        return {visibleTop: Math.max(chart.top, contentTop, 0),
+            visibleBottom: Math.min(chart.bottom, contentTop + scroll.clientHeight, innerHeight),
+            tipTop: tip.top, tipBottom: tip.bottom};
+    }''', distance)
 
 
 async def test_partially_visible_tooltip_keeps_all_rows_reachable(chart_page):
@@ -463,13 +539,19 @@ async def test_partially_visible_tooltip_keeps_all_rows_reachable(chart_page):
     await page.mouse.wheel(0, 200)
     await page.wait_for_function("() => document.querySelector('#history-chart .chart-tooltip').scrollTop > 0")
     assert await tooltip.evaluate('node => node.scrollTop + node.clientHeight >= node.scrollHeight - 1')
-    await hit.focus()
+    await page.mouse.move(0, 0)
+    await expect(tooltip).to_be_hidden()
+    await hit.evaluate('node => node.focus({preventScroll: true})')
+    await page.keyboard.press('ArrowLeft')
     await page.keyboard.press('Tab')
     await expect(tooltip).to_be_focused()
     await page.keyboard.press('Home')
     await expect(tooltip).to_be_visible()
     await page.keyboard.press('End')
     await page.wait_for_function("() => { const tip = document.querySelector('#history-chart .chart-tooltip'); return tip.scrollTop + tip.clientHeight >= tip.scrollHeight - 1; }")
+    bounds = await scroll_and_measure_tooltip(chart, -30)
+    await expect(tooltip).to_be_visible()
+    assert bounds['tipTop'] >= bounds['visibleTop'] - 1 and bounds['tipBottom'] <= bounds['visibleBottom'] + 1, bounds
     await page.keyboard.press('Escape')
     await expect(tooltip).to_be_hidden()
     await expect(hit).to_be_focused()
@@ -496,6 +578,13 @@ async def test_tooltip_on_top_clipped_chart_stays_below_header(chart_page):
     box = await tooltip.bounding_box()
     assert box['y'] >= header['height'], {'tooltip': box, 'header': header}
     assert box['y'] + box['height'] <= 600
+    await page.mouse.move(0, 0)
+    await expect(tooltip).to_be_hidden()
+    await chart.locator('.chart-hit-area').evaluate('node => node.focus({preventScroll: true})')
+    await page.keyboard.press('ArrowRight')
+    bounds = await scroll_and_measure_tooltip(chart, 35)
+    await expect(tooltip).to_be_visible()
+    assert bounds['tipTop'] >= bounds['visibleTop'] - 1 and bounds['tipBottom'] <= bounds['visibleBottom'] + 1, bounds
     evidence = Path(os.getenv('PVYL_LAYOUT_ARTIFACTS', 'artifacts/task-6-layout'))
     evidence.mkdir(parents=True, exist_ok=True)
     await page.screenshot(path=str(evidence / 'tooltip-top-clipped-390.png'))

@@ -114,9 +114,8 @@ p { margin: 8px 0; }
 .chart-tooltip[hidden] { display: none; }
 .chart-tooltip strong { display: block; max-width: 320px; margin-bottom: 7px; font-weight: 600; overflow-wrap: anywhere; }
 .chart-tooltip > div { display: flex; justify-content: space-between; gap: 12px; margin-top: 4px; }
-.chart-tooltip > div span:first-child { min-width: 0; overflow-wrap: anywhere; }
-.chart-tooltip > div span:last-child { flex-shrink: 0; font-variant-numeric: tabular-nums; }
-#history-page .chart-tooltip > div span:last-child { flex-shrink: 1; min-width: 0; text-align: right; overflow-wrap: anywhere; }
+.chart-tooltip > div span { min-width: 0; overflow-wrap: anywhere; }
+.chart-tooltip > div span:last-child { text-align: right; font-variant-numeric: tabular-nums; }
 .daily-span { overflow-wrap: anywhere; }
 .daily-cutoff { position: absolute; right: 0; max-width: 100%; text-align: right; bottom: -22px; margin: 0; font-size: 10px; }
 .daily-history-chart { margin-bottom: 22px; }

@@ -1,5 +1,6 @@
 import type { ForecastInterval, WindowResult } from './models';
 import type { Language } from './i18n';
+import { positionChartTooltip } from './chartTooltip';
 import { formatTimes } from './timezones';
 
 export interface ChartPoint {
@@ -180,17 +181,28 @@ export function plot(host: HTMLElement, data: ChartPoint[], series: ChartSeries[
   hit.setAttribute('aria-describedby', tip.id);
   tip.hidden = true;
   host.append(svg, tip);
+  const listeners = new AbortController();
+  const events = { signal: listeners.signal };
+  const scrollHost = host.closest('#content-scroll');
   let active: ChartPoint | undefined;
+  let activePointerX: number | undefined;
+  const positionTip = () => {
+    tip.tabIndex = positionChartTooltip(host, tip, {
+      guideX: guide.getBoundingClientRect().x, pointerX: activePointerX, topOffset: 24,
+    }) ? 0 : -1;
+  };
   const hide = () => {
     active = undefined;
+    if (!tip.hidden) scrollHost?.removeEventListener('scroll', positionTip);
     tip.hidden = true;
     guide.setAttribute('visibility', 'hidden');
     markers.forEach(marker => marker.setAttribute('visibility', 'hidden'));
   };
-  const show = (point: ChartPoint | undefined, inspectedAt = point?.at) => {
+  const show = (point: ChartPoint | undefined, inspectedAt = point?.at, inputX?: number) => {
     const at = point?.at ?? inspectedAt;
     if (at === undefined || at < start || at > end) { hide(); return; }
     active = point;
+    activePointerX = inputX;
     guide.setAttribute('x1', String(x(at)));
     guide.setAttribute('x2', String(x(at)));
     guide.setAttribute('visibility', 'visible');
@@ -220,20 +232,11 @@ export function plot(host: HTMLElement, data: ChartPoint[], series: ChartSeries[
       line.append(label, value);
       tip.append(line);
     });
+    if (tip.hidden) scrollHost?.addEventListener('scroll', positionTip, events);
     tip.hidden = false;
     hit.setAttribute('aria-valuenow', String(at));
     hit.setAttribute('aria-valuetext', tip.textContent!);
-    const bounds = host.getBoundingClientRect();
-    const visibleLeft = Math.max(0, -bounds.left), visibleRight = Math.min(width, window.innerWidth - bounds.left);
-    const viewportTop = host.closest('#content-scroll')?.getBoundingClientRect().top ?? 0;
-    const visibleTop = Math.max(0, viewportTop - bounds.top), visibleBottom = Math.min(height, window.innerHeight - bounds.top);
-    tip.style.maxWidth = `${Math.max(0, visibleRight - visibleLeft)}px`;
-    tip.style.maxHeight = `${Math.max(0, visibleBottom - visibleTop)}px`;
-    tip.style.left = `${Math.max(visibleLeft, Math.min(x(at) + 12, visibleRight - tip.offsetWidth))}px`;
-    tip.style.top = `${Math.max(visibleTop, Math.min(top + 8, visibleBottom - tip.offsetHeight))}px`;
-    const scrollable = tip.scrollHeight > tip.clientHeight;
-    tip.style.pointerEvents = scrollable ? 'auto' : 'none';
-    tip.tabIndex = scrollable ? 0 : -1;
+    positionTip();
   };
   const inspectionRuns = data.reduce<ChartPoint[][]>((runs, point) => {
     const previous = runs.at(-1)?.at(-1);
@@ -247,26 +250,24 @@ export function plot(host: HTMLElement, data: ChartPoint[], series: ChartSeries[
     const pointerX = (event.clientX - bounds.left) * scale;
     const at = start + Math.max(0, Math.min(1, (pointerX - left) / (width - left - right))) * (end - start);
     if (selection === 'interval') {
-      show(data.find(point => point.interval && point.interval.start <= at && (at < point.interval.end || at === end && point.interval.end === end)), at);
+      show(data.find(point => point.interval && point.interval.start <= at && (at < point.interval.end || at === end && point.interval.end === end)), at, event.clientX);
       return;
     }
     const run = inspectionRuns.find(points => at >= (coverage === 'windows' ? points[0].window!.start : points[0].at) &&
       at <= (coverage === 'windows' ? points.at(-1)!.window!.end : points.at(-1)!.at));
     const point = run?.reduce((nearest, point) => Math.abs(point.at - at) < Math.abs(nearest.at - at) ? point : nearest);
     if (point && point.at >= start && point.at <= end && series.some(item => Number.isFinite(point[item.key]))) {
-      show(point);
+      show(point, at, event.clientX);
       return;
     }
     const tolerance = (event.pointerType === 'touch' ? 12 : 6) * scale;
     const targets = singletonTargets.filter(target => Math.abs(target.x - pointerX) <= tolerance);
     if (targets.length) {
-      show(targets.reduce((nearest, target) => Math.abs(target.x - pointerX) < Math.abs(nearest.x - pointerX) ? target : nearest).point);
+      show(targets.reduce((nearest, target) => Math.abs(target.x - pointerX) < Math.abs(nearest.x - pointerX) ? target : nearest).point, at, event.clientX);
       return;
     }
-    show(point, at);
+    show(point, at, event.clientX);
   };
-  const listeners = new AbortController();
-  const events = { signal: listeners.signal };
   let touchStart: { x: number; y: number } | undefined;
   hit.addEventListener('pointermove', event => { if (event.pointerType !== 'touch') inspect(event); }, events);
   host.addEventListener('pointerleave', event => { if (event.pointerType !== 'touch') hide(); }, events);
