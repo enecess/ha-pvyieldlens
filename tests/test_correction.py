@@ -5,6 +5,7 @@ from zoneinfo import ZoneInfo
 import pytest
 
 from pvyieldlens.engine import calculate
+from pvyieldlens.settings import AmbientSite
 from pvyieldlens.storage import Store
 from test_engine import samples, settings
 
@@ -80,6 +81,28 @@ def test_correction_starts_latest_contiguous_physical_epoch(store, changes):
     assert correction_view(store, config, ORIGIN, NOW, 14).pr is None
 
 
+@pytest.mark.parametrize('changes', [
+    {'module_temperature_noct_c': 55},
+    {'ambient_site': AmbientSite(latitude=32.0, longitude=121.5)},
+    {'module_temperature_entity': 'sensor.temp'},
+])
+def test_correction_starts_new_epoch_when_effective_temperature_model_changes(store, changes):
+    from pvyieldlens.correction import correction_view
+
+    measured = settings()
+    config = settings(module_temperature_entity=None, ambient_site={'latitude': 31.2, 'longitude': 121.5})
+    first = TODAY - 3 * 86400
+    revision = store.save_monitoring_settings(config, first, ORIGIN)
+    # Seed committed results using the equivalent 45 C measurement independently of estimation.
+    for start in (first, first + 86400, first + 2 * 86400):
+        store.settle(calculate(measured, samples(at=start), start, start + 86400), revision, config.home_timezone)
+    assert correction_view(store, config, ORIGIN, NOW, 14).pr == pytest.approx(90)
+
+    changed = config.model_copy(update=changes)
+    store.save_monitoring_settings(changed, TODAY, ORIGIN)
+    assert correction_view(store, changed, ORIGIN, NOW, 14).pr is None
+
+
 def test_correction_source_change_excludes_prior_source(store):
     from pvyieldlens.correction import correction_view
 
@@ -91,6 +114,7 @@ def test_correction_source_change_excludes_prior_source(store):
 @pytest.mark.parametrize('changes', [
     {'live_window_seconds': 120}, {'update_interval_seconds': 10},
     {'settlement_interval_minutes': 10}, {'actual_power_max_age_seconds': 600},
+    {'module_temperature_noct_c': 55}, {'ambient_site': AmbientSite(latitude=31.2, longitude=121.5)},
 ])
 def test_correction_retains_committed_history_for_nonphysical_changes(store, changes):
     from pvyieldlens.correction import correction_view

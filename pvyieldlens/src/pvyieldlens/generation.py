@@ -1,9 +1,10 @@
-from bisect import bisect_right
+from collections.abc import Iterator
 
 from pydantic import BaseModel, ConfigDict
 
-from .engine import Observation
+from .engine import Observation, input_spans, noct_temperature
 from .history import HistoryRange, history_view
+from .settings import MonitoringSettings
 from .storage import HistoryWindow, Store
 
 
@@ -25,25 +26,39 @@ class GenerationView(BaseModel):
     home_timezone: str
 
 
-def _input_averages(observations: list[Observation], entity: str, max_age: int,
-                    windows: list[HistoryWindow]) -> list[float | None]:
-    """Average each input over its own known duration, including a valid predecessor."""
-    source = [item for item in observations if item.entity_id == entity]
-    averages = []
+def _generation_inputs(observations: list[Observation], config: MonitoringSettings,
+                       windows: list[HistoryWindow]) -> Iterator[GenerationInputPoint]:
+    """Clip one sequence of input spans to the ordered settlement windows."""
+    sources = ((config.irradiance_entity, config.irradiance_max_age_seconds),)
+    temperature_input = config.temperature_input
+    if temperature_input is not None:
+        sources = (*sources, temperature_input)
+    noct = config.module_temperature_noct_c if config.module_temperature_entity is None else None
+    spans = input_spans(observations, sources, windows[0]['start'], windows[-1]['end'])
+    span = next(spans, None)
     for window in windows:
-        weighted = duration = 0.0
-        index = max(0, bisect_right(source, window['start'], key=lambda item: item.at) - 1)
-        while index < len(source) and source[index].at < window['end']:
-            item = source[index]
-            right = min(window['end'], item.at + max_age,
-                        source[index + 1].at if index + 1 < len(source) else window['end'])
-            known = max(0, right - max(window['start'], item.at))
-            if item.value is not None:
-                weighted += item.value * known
-                duration += known
-            index += 1
-        averages.append(weighted / duration if duration else None)
-    return averages
+        start, end = window['start'], window['end']
+        sun_total = sun_seconds = temperature_total = temperature_seconds = 0.0
+        while span is not None and span[0] < end:
+            left, right, values = span
+            duration = min(end, right) - max(start, left)
+            if duration > 0:
+                sun = values[0]
+                temperature = values[1] if temperature_input is not None else None
+                if sun is not None:
+                    sun_total += sun * duration
+                    sun_seconds += duration
+                if temperature is not None and noct is not None:
+                    temperature = noct_temperature(temperature, sun, noct) if sun is not None else None
+                if temperature is not None:
+                    temperature_total += temperature * duration
+                    temperature_seconds += duration
+            if right > end:
+                break
+            span = next(spans, None)
+        yield GenerationInputPoint(start=start, end=end,
+                                   irradiance_w_m2=sun_total / sun_seconds if sun_seconds else None,
+                                   module_temperature_c=temperature_total / temperature_seconds if temperature_seconds else None)
 
 
 def generation_view(store: Store, now: float, home_timezone: str) -> GenerationView:
@@ -61,15 +76,9 @@ def generation_view(store: Store, now: float, home_timezone: str) -> GenerationV
         for revision, windows in grouped.items():
             period = configurations[revision]
             config = period.monitoring_settings
-            observations = store.observations(windows[0]['start'], windows[-1]['end'], config.entities, period.origin)
-            irradiance = _input_averages(observations, config.irradiance_entity,
-                                         config.irradiance_max_age_seconds, windows)
-            temperature = (_input_averages(observations, config.module_temperature_entity,
-                                           config.module_temperature_max_age_seconds, windows)
-                           if config.module_temperature_entity is not None else [None] * len(windows))
-            inputs.extend(GenerationInputPoint(start=window['start'], end=window['end'],
-                                               irradiance_w_m2=sun, module_temperature_c=temp)
-                          for window, sun, temp in zip(windows, irradiance, temperature))
+            observations = store.observations(windows[0]['start'], windows[-1]['end'],
+                                              config.observation_entities, period.origin)
+            inputs.extend(_generation_inputs(observations, config, windows))
     else:
         end = now
     return GenerationView(windows=history.windows, inputs=sorted(inputs, key=lambda point: point.start),

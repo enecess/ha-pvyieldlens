@@ -10,6 +10,7 @@ Latitude = Annotated[float, Field(ge=-90, le=90)]
 Longitude = Annotated[float, Field(ge=-180, le=180)]
 ModuleTemperatureNoct = Annotated[float, Field(gt=20, le=80)]
 DEFAULT_NOCT_C = 45.0
+AMBIENT_SAMPLE_SECONDS = 900
 
 
 class AmbientSite(BaseModel):
@@ -80,6 +81,22 @@ class MonitoringSettings(BaseModel):
     @property
     def max_ages(self) -> tuple[int, ...]:
         return tuple(max_age for _, _, max_age in self.ha_sources)
+
+    @property
+    def temperature_input(self) -> tuple[str, int] | None:
+        if self.module_temperature_entity is not None:
+            return self.module_temperature_entity, self.module_temperature_max_age_seconds
+        if self.ambient_site is not None:
+            return self.ambient_site.observation_entity_id, AMBIENT_SAMPLE_SECONDS
+        return None
+
+    @property
+    def observation_entities(self) -> tuple[str, ...]:
+        entities = self.entities
+        temperature = self.temperature_input
+        if self.module_temperature_entity is None and temperature is not None:
+            return (*entities, temperature[0])
+        return entities
 
     def public(self):
         return self.model_dump(exclude={'module_temperature_noct_c', 'ambient_site'})

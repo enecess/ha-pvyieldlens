@@ -18,8 +18,10 @@ class ForecastCorrection(BaseModel):
 
 
 def physical_context(settings: MonitoringSettings, origin: str):
+    temperature_model = ((settings.module_temperature_noct_c, settings.ambient_site)
+                         if settings.module_temperature_entity is None else None)
     return (origin, settings.entities, settings.total_max_power_at_stc_w,
-            settings.pmax_temperature_coefficient_pct_per_c)
+            settings.pmax_temperature_coefficient_pct_per_c, temperature_model)
 
 
 def correction_view(store: Store, monitoring_settings: MonitoringSettings, origin: str,

@@ -1,4 +1,5 @@
 from bisect import bisect_left, bisect_right
+from collections.abc import Iterator
 from dataclasses import dataclass, fields, replace
 from itertools import accumulate
 
@@ -47,27 +48,45 @@ def estimated_power(total_max_power_at_stc_w: float, pmax_temperature_coefficien
     return total_max_power_at_stc_w * temperature_correction_factor * irradiance_w_m2 / 1000 if temperature_correction_factor >= 0 else None
 
 
-def calculate(monitoring_settings: MonitoringSettings, observations: list[Observation], start: float, end: float) -> WindowResult:
-    """Integrate the intersection of valid, piecewise constant source intervals."""
-    if monitoring_settings.module_temperature_entity is None:
-        return _window_result(start, end, 0, 0, 0, ())
-    sources = [sorted({item.at: item for item in observations if item.entity_id == entity and item.at < end}.values(),
-                      key=lambda item: item.at) for entity in monitoring_settings.entities]
+def noct_temperature(air_temperature_c: float, irradiance_w_m2: float, noct_c: float) -> float:
+    return air_temperature_c + (noct_c - 20) * irradiance_w_m2 / 800
+
+
+def input_spans(observations: list[Observation], sources: tuple[tuple[str, int], ...],
+                start: float, end: float) -> Iterator[tuple[float, float, tuple[float | None, ...]]]:
+    """Yield piecewise constant inputs over the requested half-open range."""
+    samples = [(sorted({item.at: item for item in observations if item.entity_id == entity and item.at < end}.values(),
+                       key=lambda item: item.at), age) for entity, age in sources]
     points = sorted({start, end} | {
-        point for source, age in zip(sources, monitoring_settings.max_ages)
+        point for source, age in samples
         for item in source for point in (item.at, item.at + age) if start < point < end
     })
-    segments = []
-    coefficient = monitoring_settings.pmax_temperature_coefficient_per_c
     for left, right in zip(points, points[1:]):
         values = []
-        for source, age in zip(sources, monitoring_settings.max_ages):
+        for source, age in samples:
             index = bisect_right(source, left, key=lambda item: item.at) - 1
             item = source[index] if index >= 0 else None
             values.append(item.value if item and left < item.at + age else None)
-        power, temperature, irradiance = values
+        yield left, right, tuple(values)
+
+
+def calculate(monitoring_settings: MonitoringSettings, observations: list[Observation], start: float, end: float) -> WindowResult:
+    """Integrate the intersection of valid, piecewise constant source intervals."""
+    temperature_input = monitoring_settings.temperature_input
+    if temperature_input is None:
+        return _window_result(start, end, 0, 0, 0, ())
+    sources = (
+        (monitoring_settings.actual_power_entity, monitoring_settings.actual_power_max_age_seconds),
+        temperature_input,
+        (monitoring_settings.irradiance_entity, monitoring_settings.irradiance_max_age_seconds),
+    )
+    segments = []
+    coefficient = monitoring_settings.pmax_temperature_coefficient_per_c
+    for left, right, (power, temperature, irradiance) in input_spans(observations, sources, start, end):
         if power is None or temperature is None or irradiance is None:
             continue
+        if monitoring_settings.module_temperature_entity is None:
+            temperature = noct_temperature(temperature, irradiance, monitoring_settings.module_temperature_noct_c)
         estimated = estimated_power(monitoring_settings.total_max_power_at_stc_w, coefficient, temperature, irradiance)
         if estimated is None:
             continue

@@ -6,7 +6,7 @@ from zoneinfo import ZoneInfo
 from pydantic import BaseModel, ConfigDict, Field
 
 from .correction import ForecastCorrection
-from .engine import estimated_power
+from .engine import estimated_power, noct_temperature
 from .settings import AngleEntityId, ForecastSettings, HALocation
 
 FORECAST_MODEL_VERSION = 2
@@ -71,7 +71,7 @@ def calculate_forecast(inputs: ForecastInput, samples: tuple[WeatherSample, ...]
         air = (left.air_temperature_c + right.air_temperature_c) / 2 if (
             left.air_temperature_c is not None and right.air_temperature_c is not None
         ) else None
-        cell = air + (inputs.noct_c - 20) * irradiance / 800 if air is not None and irradiance is not None else None
+        cell = noct_temperature(air, irradiance, inputs.noct_c) if air is not None and irradiance is not None else None
         power = estimated_power(inputs.total_max_power_at_stc_w, inputs.pmax_temperature_coefficient_pct_per_c / 100, cell, irradiance) if (
             cell is not None and irradiance is not None
         ) else None

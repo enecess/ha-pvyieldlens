@@ -19,6 +19,39 @@ async def test_live_does_not_increment_energy_and_statistic_settles_once(tmp_pat
     store.close()
 
 
+async def test_saved_temperature_changes_apply_to_adjacent_settlement_revisions(tmp_path):
+    from pvyieldlens.engine import Observation
+    from pvyieldlens.generation import generation_view
+    from pvyieldlens.settings import AmbientSite
+
+    site = AmbientSite(latitude=31.2, longitude=121.5)
+    initial = settings(module_temperature_entity=None, ambient_site=site, settlement_interval_minutes=1)
+    store = Store(tmp_path / 'data.sqlite')
+    service = Service(store)
+    await service.configure(initial, now=0)
+    store.add_observations(samples(temp=None) + [Observation(site.observation_entity_id, 0, 20)])
+
+    await service.tick(60)
+    [first] = store.history(0, 60)
+    assert first['estimated_power_w'] == pytest.approx(3720)
+    assert service.snapshot(60)['live_window']['estimated_power_w'] == pytest.approx(3720)
+    assert service.live_series(60)['points'][-2]['estimated_power_w'] == pytest.approx(3720)
+
+    await service.configure(initial.model_copy(update={'module_temperature_noct_c': 55}), now=60)
+    await service.tick(120)
+    await service.configure(settings(settlement_interval_minutes=1), now=120)
+    store.add_observations([Observation('sensor.temp', 120, 25)])
+    await service.tick(180)
+
+    windows = store.history(0, 180)
+    assert windows[0] == first
+    assert [(row['revision'], row['start'], row['end']) for row in windows] == [(1, 0, 60), (2, 60, 120), (3, 120, 180)]
+    assert [row['estimated_power_w'] for row in windows] == pytest.approx([3720, 3580, 4000])
+    assert service.snapshot(180)['energy_totals']['estimated_energy_lifetime_kwh'] == pytest.approx(0.1883333333333333)
+    assert [point.module_temperature_c for point in generation_view(store, 180, 'UTC').inputs] == pytest.approx([45, 55, 25])
+    store.close()
+
+
 async def test_timezone_reprojects_committed_midnight_segments_after_late_history_and_restart(tmp_path):
     from datetime import datetime, timezone
 

@@ -4,6 +4,7 @@ import pytest
 
 from pvyieldlens.engine import Observation, calculate
 from pvyieldlens.generation import generation_view
+from pvyieldlens.settings import AmbientSite
 from pvyieldlens.storage import Store
 from test_engine import samples, settings
 from test_history import settle_cross_midnight, timestamp
@@ -34,6 +35,44 @@ def test_input_averages_survive_missing_actual_power(store):
     assert view.inputs[0].module_temperature_c == pytest.approx(25)
     assert view.inputs[0].irradiance_w_m2 == pytest.approx(200)
     assert view.requested_range.model_dump() == {'start': 0, 'end': 60}
+
+
+def test_estimated_temperature_uses_joint_coverage_without_actual_power(store):
+    site = AmbientSite(latitude=31.2, longitude=121.5)
+    config = settings(module_temperature_entity=None, ambient_site=site)
+    observations = [Observation(site.observation_entity_id, 0, 20),
+                    Observation(site.observation_entity_id, 900, None), Observation('sensor.sun', 890, 800)]
+    commit_windows(store, config, observations, [880, 920])
+
+    view = generation_view(store, now=920, home_timezone='UTC')
+
+    assert view.windows[0]['actual_power_w'] is None
+    assert view.inputs[0].module_temperature_c == pytest.approx(45)
+    assert view.inputs[0].irradiance_w_m2 == pytest.approx(800)
+
+
+def test_estimated_temperature_weights_unequal_known_durations(store):
+    site = AmbientSite(latitude=31.2, longitude=121.5)
+    config = settings(module_temperature_entity=None, ambient_site=site)
+    observations = [Observation(site.observation_entity_id, 0, 10),
+                    Observation(site.observation_entity_id, 45, 30), Observation('sensor.sun', 0, 800)]
+    commit_windows(store, config, observations, [0, 60])
+
+    point = generation_view(store, now=60, home_timezone='UTC').inputs[0]
+
+    assert point.module_temperature_c == pytest.approx(40)
+
+
+def test_configured_unavailable_temperature_does_not_use_cached_ambient(store):
+    site = AmbientSite(latitude=31.2, longitude=121.5)
+    observations = samples(temp=None) + [Observation(site.observation_entity_id, 0, 20)]
+    commit_windows(store, settings(ambient_site=site), observations, [0, 60])
+
+    view = generation_view(store, now=60, home_timezone='UTC')
+
+    assert view.windows[0]['estimated_power_w'] is None
+    assert view.inputs[0].irradiance_w_m2 == pytest.approx(800)
+    assert view.inputs[0].module_temperature_c is None
 
 
 def test_independent_input_average_weights_unequal_durations_in_a_startup_window(store):
@@ -150,6 +189,22 @@ def test_midnight_fragment_uses_exact_calendar_and_original_revision(store):
     assert point.module_temperature_c == pytest.approx(35)
     assert window['actual_power_w'] == pytest.approx(1200)
     assert view.requested_range.model_dump() == {'start': midnight, 'end': end}
+
+
+def test_estimated_spans_are_clipped_to_the_midnight_fragment_and_next_window(store):
+    midnight = timestamp('2026-11-11T00:00:00')
+    start, end = midnight - 120, midnight + 180
+    site = AmbientSite(latitude=31.2, longitude=121.5)
+    config = settings(module_temperature_entity=None, ambient_site=site, home_timezone='Asia/Shanghai')
+    observations = samples(at=start) + [Observation(site.observation_entity_id, start, 10),
+                                       Observation(site.observation_entity_id, midnight + 45, 30)]
+    commit_windows(store, config, observations, [start, end, end + 60])
+
+    view = generation_view(store, now=end + 60, home_timezone=config.home_timezone)
+
+    assert [(point.start, point.end) for point in view.inputs] == [(midnight, end), (end, end + 60)]
+    assert [point.module_temperature_c for point in view.inputs] == pytest.approx([50, 55])
+    assert [point.irradiance_w_m2 for point in view.inputs] == pytest.approx([800, 800])
 
 
 def test_unallocated_midnight_boundary_window_is_excluded(store):

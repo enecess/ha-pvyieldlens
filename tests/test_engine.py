@@ -1,7 +1,8 @@
 import pytest
 from pydantic import ValidationError
 
-from pvyieldlens.settings import MonitoringSettings
+from pvyieldlens import engine
+from pvyieldlens.settings import AmbientSite, MonitoringSettings
 from pvyieldlens.engine import Observation, calculate, estimated_power
 
 
@@ -75,6 +76,36 @@ def test_monitoring_without_measured_temperature_is_unavailable():
     live = calculate_live(config, samples(), 60)
     assert live.reason == 'current_source_unavailable'
     assert calculate_live_series(config, samples(), [60]) == [live]
+
+
+@pytest.mark.parametrize('irradiance,temperature,power', [(800, 45, 3720), (0, 20, 0)])
+def test_noct_temperature_drives_live_and_settled_power(irradiance, temperature, power):
+    site = AmbientSite(latitude=31.2, longitude=121.5)
+    config = settings(module_temperature_entity=None, module_temperature_noct_c=45, ambient_site=site)
+    observations = samples(sun=irradiance) + [Observation(site.observation_entity_id, 0, 20)]
+
+    settled = calculate(config, observations, 0, 60)
+    live = engine.calculate_live(config, observations, 60)
+    [series] = engine.calculate_live_series(config, observations, [60])
+
+    for result in (settled, live, series):
+        assert result.estimated_power_w == pytest.approx(power)
+        assert result.valid_seconds == 60
+    assert engine.noct_temperature(20, irradiance, 45) == temperature
+
+
+@pytest.mark.parametrize('next_sample', [[], [Observation('weather:ambient:31.2:121.5', 900, None)]])
+def test_ambient_sample_expires_at_fifteen_minutes(next_sample):
+    site = AmbientSite(latitude=31.2, longitude=121.5)
+    config = settings(module_temperature_entity=None, module_temperature_max_age_seconds=30, ambient_site=site)
+    observations = samples(at=860) + [Observation(site.observation_entity_id, 0, 20)] + next_sample
+
+    assert calculate(config, observations, 880, 920).valid_seconds == 20
+    endpoints = [899, 900, 910]
+    results = engine.calculate_live_series(config, observations, endpoints)
+    assert [result.estimated_power_w for result in results] == [pytest.approx(3720), None, None]
+    for at in endpoints[1:]:
+        assert engine.calculate_live(config, observations, at).reason == 'current_source_unavailable'
 
 
 def test_weights_duration_not_record_count():

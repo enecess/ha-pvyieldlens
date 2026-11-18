@@ -64,13 +64,15 @@ class Service:
         periods = self.store.configuration_history(cursor, now)
         for index, period in enumerate(periods):
             limit = periods[index+1].effective_at if index+1 < len(periods) else now
-            step = period.monitoring_settings.settlement_interval_minutes * 60
+            config = period.monitoring_settings
+            step = config.settlement_interval_minutes * 60
             while cursor < limit:
                 boundary = (int(cursor // step) + 1) * step
                 if boundary > limit and index == len(periods)-1:
                     break
                 end = min(boundary, limit)
-                result = calculate(period.monitoring_settings, self.store.observations(cursor, end, period.monitoring_settings.entities, period.origin), cursor, end)
+                observations = self.store.observations(cursor, end, config.observation_entities, period.origin)
+                result = calculate(config, observations, cursor, end)
                 self.store.settle(result, period.revision, self.monitoring_settings.home_timezone)
                 cursor = end
                 await asyncio.sleep(0)
@@ -85,7 +87,8 @@ class Service:
             if not self.monitoring_settings:
                 return
             await self._settle(now)
-            observations = self.store.observations(now - self.monitoring_settings.live_window_seconds, now, self.monitoring_settings.entities, self.origin)
+            observations = self.store.observations(now - self.monitoring_settings.live_window_seconds, now,
+                                                   self.monitoring_settings.observation_entities, self.origin)
             started_at = self.store.get_meta('started_at')
             result = calculate_live(self.monitoring_settings, observations, now,
                                         started_at=float(started_at) if started_at is not None else None)
@@ -101,7 +104,8 @@ class Service:
                     'step_seconds': None, 'context': None, 'points': []}
         revision = self.store.revision
         period = self.store.configuration_history(now, now)[-1]
-        observations = self.store.observations(start - monitoring_settings.live_window_seconds, now, monitoring_settings.entities, self.origin)
+        observations = self.store.observations(start - monitoring_settings.live_window_seconds, now,
+                                               monitoring_settings.observation_entities, self.origin)
         anchor = self.calculated_at if self.calculated_at is not None and start <= self.calculated_at <= now else now
         first = max(start, period.effective_at)
         started_at = self.store.get_meta('started_at')
