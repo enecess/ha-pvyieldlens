@@ -143,7 +143,8 @@ def main():
         fresh = request('/api/config')
         assert fresh['monitoring_settings'] is None
         assert fresh['forecast_settings'] == {
-            'enabled': False, 'tilt_deg': None, 'azimuth_deg': None, 'noct_c': 45.0, 'pr_history_days': 14}
+            'enabled': False, 'tilt_deg': None, 'azimuth_deg': None,
+            'tilt_entity': None, 'azimuth_entity': None, 'noct_c': 45.0, 'pr_history_days': 14}
         request('/api/config', {'monitoring_settings':{
             'total_max_power_at_stc_w':5000, 'pmax_temperature_coefficient_pct_per_c':-0.35,
             'actual_power_entity':'sensor.power', 'module_temperature_entity':'sensor.temp', 'irradiance_entity':'sensor.sun',
@@ -156,7 +157,8 @@ def main():
         assert request('/api/snapshot')['forecast']['status'] == 'disabled'
         config = request('/api/config')
         assert config['forecast_settings'] == {
-            'enabled': False, 'tilt_deg': None, 'azimuth_deg': None, 'noct_c': 45.0, 'pr_history_days': 14}
+            'enabled': False, 'tilt_deg': None, 'azimuth_deg': None,
+            'tilt_entity': None, 'azimuth_entity': None, 'noct_c': 45.0, 'pr_history_days': 14}
         assert config['location']['latitude'] == 31.23
         assert config['location']['longitude'] == 121.47
         assert config['location']['home_timezone'] == 'Asia/Shanghai'
@@ -179,7 +181,8 @@ def main():
         retained = request('/api/config')
         assert retained['monitoring_settings'] == config['monitoring_settings']
         assert retained['forecast_settings'] == {
-            'enabled': False, 'tilt_deg': 25.0, 'azimuth_deg': 180.0, 'noct_c': 47.0, 'pr_history_days': 14}
+            'enabled': False, 'tilt_deg': 25.0, 'azimuth_deg': 180.0,
+            'tilt_entity': None, 'azimuth_entity': None, 'noct_c': 47.0, 'pr_history_days': 14}
         forecast = request('/api/forecast')
         assert forecast['status'] == 'disabled' and forecast['fetched_at'] is None
         assert forecast['intervals'] == []

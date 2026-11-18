@@ -233,7 +233,8 @@ async def test_forecast_settings_round_trip_and_server_error_category(browser_wo
     await page.locator('[name=forecast_noct_c]').fill('46')
     await page.locator('#save-button').click()
     await expect(page.locator('#save-result')).to_have_text('Configuration saved')
-    assert service.forecast.settings.model_dump() == {'enabled': True, 'tilt_deg': 25, 'azimuth_deg': 123.5, 'noct_c': 46, 'pr_history_days': 14}
+    assert service.forecast.settings.model_dump() == {'enabled': True, 'tilt_deg': 25, 'azimuth_deg': 123.5,
+        'tilt_entity': None, 'azimuth_entity': None, 'noct_c': 46, 'pr_history_days': 14}
     await page.reload()
     await page.locator('#settings-button').click()
     await page.locator('button[data-settings-category=forecast]').click()

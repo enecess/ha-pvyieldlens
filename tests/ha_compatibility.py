@@ -17,7 +17,7 @@ import uuid
 import httpx
 
 from pvyieldlens.engine import calculate
-from pvyieldlens.home_assistant import HAState, HomeAssistantClient, entity_payloads, parse_state
+from pvyieldlens.home_assistant import HAState, HomeAssistantClient, entity_payloads, parse_state, source_value
 from pvyieldlens.service import Service
 from pvyieldlens.settings import MonitoringSettings
 from pvyieldlens.storage import Store
@@ -94,6 +94,15 @@ async def exercise(client, directory):
     assert selected[-1].state == 'unavailable'
     assert parse_state(selected[-1], 'power')[0].value is None
     checks['rest_states_units_404'] = True
+
+    tilt, azimuth = 'sensor.compat_tracker_tilt', 'input_number.compat_tracker_azimuth'
+    await post(tilt, '0', '°')
+    await post(azimuth, '90', '°')
+    angles = await client.states((tilt, azimuth))
+    assert [row.entity_id for row in angles] == [tilt, azimuth]
+    assert [source_value(row.state, row.attributes.unit_of_measurement, axis)
+            for row, axis in zip(angles, ('tilt', 'azimuth'), strict=True)] == [0, 90]
+    checks['rest_tracker_angles'] = True
 
     await post(power, '2.5', 'kW')
     changed = await event(power)

@@ -7,7 +7,10 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from .correction import ForecastCorrection
 from .engine import estimated_power
-from .settings import ForecastSettings, HALocation
+from .settings import AngleEntityId, ForecastSettings, HALocation
+
+FORECAST_MODEL_VERSION = 2
+ForecastAxis = Literal['tilt', 'azimuth']
 
 
 class _ForecastModel(BaseModel):
@@ -22,7 +25,7 @@ class ForecastInput(_ForecastModel):
     azimuth_deg: float = Field(ge=0, lt=360)
     noct_c: float = Field(gt=20, le=80)
     # Decode hourly caches so normal input matching can discard them.
-    model_version: Literal[1, 2] = 2
+    model_version: Literal[1, 2] = FORECAST_MODEL_VERSION
 
 
 class WeatherSample(_ForecastModel):
@@ -56,6 +59,9 @@ class ForecastData(_ForecastModel):
 class ForecastBatch(ForecastData):
     inputs: ForecastInput
     fetched_at: float
+    tilt_entity: AngleEntityId | None = None
+    azimuth_entity: AngleEntityId | None = None
+    angles_read_at: float | None = None
 
 
 def calculate_forecast(inputs: ForecastInput, samples: tuple[WeatherSample, ...]) -> tuple[ForecastInterval, ...]:
@@ -99,6 +105,17 @@ class ForecastDay(EnergyForecast):
     weather: DailyWeather | None = None
 
 
+class ForecastGeometry(_ForecastModel):
+    tilt_deg: float
+    azimuth_deg: float
+    read_at: float
+
+
+class ForecastAngleIssue(_ForecastModel):
+    axis: ForecastAxis
+    entity_id: AngleEntityId
+
+
 class ForecastView(_ForecastModel):
     status: Literal['disabled', 'location_unavailable', 'loading', 'ready', 'partial', 'stale', 'unavailable']
     refreshing: bool
@@ -113,28 +130,33 @@ class ForecastView(_ForecastModel):
     days: tuple[ForecastDay, ...]
     intervals: tuple[CorrectedForecastInterval, ...]
     correction: ForecastCorrection | None
+    geometry: ForecastGeometry | None = None
+    unavailable_angles: tuple[ForecastAngleIssue, ...] = ()
 
 
-def forecast_view(batch: ForecastBatch | None, inputs: ForecastInput | None, settings: ForecastSettings,
-                  now: float, *, correction: ForecastCorrection | None = None, refreshing: bool = False, last_error: str | None = None) -> ForecastView:
-    if inputs is None:
+def forecast_view(batch: ForecastBatch | None, location: HALocation | None, settings: ForecastSettings,
+                  now: float, *, correction: ForecastCorrection | None = None, refreshing: bool = False,
+                  last_error: str | None = None, unavailable_angles: tuple[ForecastAngleIssue, ...] = ()) -> ForecastView:
+    if location is None:
         return ForecastView(
             status='location_unavailable' if settings.enabled else 'disabled',
             refreshing=refreshing, fetched_at=None, calculated_at=now, last_error=last_error,
             home_timezone=None, today=None, remaining_today=None, tomorrow=None, seven_days=None,
-            days=(), intervals=(), correction=correction,
+            days=(), intervals=(), correction=correction, unavailable_angles=unavailable_angles,
         )
     ratio = correction.pr / 100 if correction is not None and correction.pr is not None else None
-    zone = ZoneInfo(inputs.location.home_timezone)
+    zone = ZoneInfo(location.home_timezone)
     today = datetime.fromtimestamp(now, zone).date()
     boundaries = tuple(datetime.combine(today + timedelta(days=offset), time.min, zone).timestamp()
                        for offset in range(8))
-    usable = batch if settings.enabled and batch is not None and batch.inputs == inputs else None
+    usable = batch if settings.enabled else None
     intervals = tuple(row.model_copy(update={
         'start': max(row.start, boundaries[0]), 'end': min(row.end, boundaries[-1]),
         'forecast_energy_kwh': row.forecast_power_w * (min(row.end, boundaries[-1]) - max(row.start, boundaries[0])) / 3_600_000
         if row.forecast_power_w is not None else None,
     }) for row in usable.intervals if row.end > boundaries[0] and row.start < boundaries[-1]) if usable else ()
+    if last_error == 'forecast_angle_unavailable' and not intervals:
+        usable = None
 
     intervals = tuple(CorrectedForecastInterval(**row.model_dump(),
         corrected_forecast_power_w=row.forecast_power_w * ratio if row.forecast_power_w is not None and ratio is not None else None,
@@ -183,9 +205,12 @@ def forecast_view(batch: ForecastBatch | None, inputs: ForecastInput | None, set
         status = 'ready' if seven_days.quality == 'complete' else seven_days.quality
     return ForecastView(
         status=status, refreshing=refreshing, fetched_at=usable.fetched_at if usable else None,
-        calculated_at=now, last_error=last_error, home_timezone=inputs.location.home_timezone,
+        calculated_at=now, last_error=last_error, home_timezone=location.home_timezone,
         today=EnergyForecast(**days[0].model_dump(exclude={'day', 'weather'})),
         remaining_today=total(now, boundaries[1]),
         tomorrow=EnergyForecast(**days[1].model_dump(exclude={'day', 'weather'})),
         seven_days=seven_days, days=tuple(days), intervals=intervals, correction=correction,
+        geometry=ForecastGeometry(tilt_deg=usable.inputs.tilt_deg, azimuth_deg=usable.inputs.azimuth_deg,
+                                  read_at=usable.angles_read_at) if usable and usable.angles_read_at is not None else None,
+        unavailable_angles=unavailable_angles,
     )

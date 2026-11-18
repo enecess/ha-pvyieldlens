@@ -64,12 +64,17 @@ class WSMessage(BaseModel):
     event: Event | None = None
 
 
-def source_value(state: str, unit: str | None, role: Literal['power', 'temperature', 'irradiance']):
+def source_value(state: str, unit: str | None,
+                 role: Literal['power', 'temperature', 'irradiance', 'tilt', 'azimuth']) -> float | None:
     value = None
     if re.fullmatch(r"[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?", state):
         number = float(state)
-        unit = (unit or '').replace('²', '2').replace('^', '').replace(' ', '')
         if math.isfinite(number):
+            if role == 'tilt':
+                return number if unit == '°' and 0 <= number <= 90 else None
+            if role == 'azimuth':
+                return number if unit == '°' and 0 <= number < 360 else None
+            unit = (unit or '').replace('²', '2').replace('^', '').replace(' ', '')
             if role == 'power' and unit in ('W', 'kW') and number >= 0:
                 value = number * (1000 if unit == 'kW' else 1)
             elif role == 'irradiance' and unit in ('W/m2', 'kW/m2') and number >= 0:

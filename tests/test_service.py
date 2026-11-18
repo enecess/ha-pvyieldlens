@@ -669,8 +669,8 @@ async def test_shared_monitoring_inputs_update_forecast_and_new_origin_drops_sit
                                service.origin, HALocation(origin=service.origin, latitude=0.0, longitude=0.0,
                                                           home_timezone='UTC'))
     await service.configure(settings(total_max_power_at_stc_w=6000, pmax_temperature_coefficient_pct_per_c=-0.4), now=30)
-    assert service.forecast.inputs.total_max_power_at_stc_w == 6000
-    assert service.forecast.inputs.pmax_temperature_coefficient_pct_per_c == -0.4
+    assert service.forecast.context.total_max_power_at_stc_w == 6000
+    assert service.forecast.context.pmax_temperature_coefficient_pct_per_c == -0.4
     await service.configure(service.monitoring_settings, now=60, origin='http://new-ha.test')
     assert service.forecast.location is None
     assert service.forecast.view(60).status == 'location_unavailable'

@@ -4,6 +4,7 @@ from zoneinfo import available_timezones
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 EntityId = Annotated[str, Field(pattern=r"^sensor\.[a-z0-9_]+$")]
+AngleEntityId = Annotated[str, Field(pattern=r"^(?:sensor|number|input_number)\.[a-z0-9_]+$")]
 
 
 class MonitoringSettings(BaseModel):
@@ -63,13 +64,25 @@ class ForecastSettings(BaseModel):
     enabled: bool = False
     tilt_deg: float | None = Field(default=None, ge=0, le=90)
     azimuth_deg: float | None = Field(default=None, ge=0, lt=360)
+    tilt_entity: AngleEntityId | None = None
+    azimuth_entity: AngleEntityId | None = None
     noct_c: float = Field(default=45.0, gt=20, le=80)
     pr_history_days: int = Field(default=14, ge=3, le=90)
 
+    @field_validator("tilt_entity", "azimuth_entity")
+    @classmethod
+    def reject_feedback(cls, value: str | None) -> str | None:
+        if value is not None and value.startswith("sensor.pvyieldlens_"):
+            raise ValueError("output_entity_as_source")
+        return value
+
     @model_validator(mode="after")
-    def require_enabled_geometry(self) -> Self:
-        if self.enabled and (self.tilt_deg is None or self.azimuth_deg is None):
-            raise ValueError("forecast_geometry_required")
+    def validate_geometry(self) -> Self:
+        for fixed, entity in ((self.tilt_deg, self.tilt_entity), (self.azimuth_deg, self.azimuth_entity)):
+            if fixed is not None and entity is not None:
+                raise ValueError("forecast_angle_sources_conflict")
+            if self.enabled and fixed is None and entity is None:
+                raise ValueError("forecast_geometry_required")
         return self
 
 

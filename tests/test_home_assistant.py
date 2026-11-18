@@ -3,7 +3,7 @@ import json
 import httpx
 import pytest
 
-from pvyieldlens.home_assistant import HAState, HomeAssistantClient, parse_state, entity_payloads
+from pvyieldlens.home_assistant import HAState, HomeAssistantClient, parse_state, entity_payloads, source_value
 
 
 def state(value='1.5', unit='kW', changed='2026-10-28T00:00:00+00:00', reported='2026-10-28T00:10:00+00:00'):
@@ -26,6 +26,18 @@ def test_invalid_values_end_validity(value, unit):
 
 def test_fahrenheit_temperature_conversion():
     assert parse_state(state('77', '°F'), 'temperature')[0].value == 25
+
+
+@pytest.mark.parametrize('value,unit,role,expected', [
+    ('0', '°', 'tilt', 0), ('90', '°', 'tilt', 90), ('359.9', '°', 'azimuth', 359.9),
+    ('unknown', '°', 'tilt', None), ('unavailable', '°', 'azimuth', None),
+    ('NaN', '°', 'tilt', None), ('1e999', '°', 'azimuth', None),
+    ('1', 'rad', 'tilt', None), ('1', None, 'azimuth', None),
+    ('90.1', '°', 'tilt', None), ('360', '°', 'azimuth', None),
+    ('-0.1', '°', 'tilt', None), ('-0.1', '°', 'azimuth', None),
+])
+def test_angle_source_value_uses_degree_units_and_axis_bounds(value, unit, role, expected):
+    assert source_value(value, unit, role) == expected
 
 
 async def test_selected_states_read_live_reports_and_keep_missing_sources_unavailable():
@@ -158,7 +170,7 @@ def test_forecast_entities_have_no_state_class(fetched_at, status):
 
     inputs = forecast_input()
     view = forecast_view(ForecastBatch(inputs=inputs, fetched_at=fetched_at,
-        intervals=constant_intervals(0, 2 * 86400), weather_samples=()), inputs,
+        intervals=constant_intervals(0, 2 * 86400), weather_samples=()), inputs.location,
         ForecastSettings(enabled=True, tilt_deg=25.0, azimuth_deg=180.0), 43200)
     payloads = entity_payloads({'latest_settled_window': None, 'live_window': None, 'energy_totals': {},
         'calculated_at': 123, 'revision': 1, 'forecast': view.model_dump(mode='json', exclude={'days', 'intervals'})})

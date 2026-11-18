@@ -34,7 +34,7 @@ class Service:
         self._recovery_needed = True
         self.origin = store.latest_origin()
         self.subscribed = asyncio.Event()
-        self.forecast = ForecastController(store)
+        self.forecast = ForecastController(store, ha_client=lambda: self.client)
 
     async def configure(self, monitoring_settings: MonitoringSettings, now: float | None = None, origin: str | None = None):
         now = time.time() if now is None else now

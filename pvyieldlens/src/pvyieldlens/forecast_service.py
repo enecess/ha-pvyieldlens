@@ -1,34 +1,51 @@
 import asyncio
 import time
+from collections.abc import Callable
 from contextlib import suppress
+from dataclasses import dataclass
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
 import httpx
 
 from .correction import ForecastCorrection, correction_view, physical_context
-from .forecast import ForecastBatch, ForecastInput, ForecastView, forecast_view
+from .forecast import FORECAST_MODEL_VERSION, ForecastAngleIssue, ForecastAxis, ForecastBatch, ForecastInput, ForecastView, forecast_view
+from .home_assistant import HomeAssistantClient, source_value
 from .open_meteo import OpenMeteoClient
 from .settings import ForecastSettings, HALocation, MonitoringSettings
 from .storage import Store
 
 
+@dataclass(frozen=True)
+class ForecastContext:
+    location: HALocation
+    total_max_power_at_stc_w: float
+    pmax_temperature_coefficient_pct_per_c: float
+    noct_c: float
+    tilt: float | str
+    azimuth: float | str
+    model_version: int = FORECAST_MODEL_VERSION
+
+
 class ForecastController:
-    def __init__(self, store: Store, client: OpenMeteoClient | None = None):
+    def __init__(self, store: Store, client: OpenMeteoClient | None = None, *,
+                 ha_client: Callable[[], HomeAssistantClient | None] | None = None):
         self.store = store
         self.client = client
+        self.ha_client = ha_client
         self._owns_client = client is None
         self.settings = store.forecast_settings()
         location = store.get_meta('ha_location')
         self.location = HALocation.model_validate_json(location) if location and location != 'null' else None
         cache = store.get_meta('forecast_cache')
         self.batch = ForecastBatch.model_validate_json(cache) if cache else None
-        self.inputs: ForecastInput | None = None
+        self.context: ForecastContext | None = None
         self.monitoring_settings: MonitoringSettings | None = None
         self.origin = ''
         self._correction: ForecastCorrection | None = None
         self._correction_key = None
         self.last_error: str | None = None
+        self.unavailable_angles: tuple[ForecastAngleIssue, ...] = ()
         self._task: asyncio.Task[None] | None = None
         self._request_task: asyncio.Task[None] | None = None
         self._inflight: asyncio.Future[None] | None = None
@@ -44,13 +61,15 @@ class ForecastController:
             self.store.save_forecast_settings(settings)
         if location != self.location:
             self.store.set_meta('ha_location', location.model_dump_json() if location else 'null')
-        inputs = ForecastInput(
+        tilt = settings.tilt_entity or settings.tilt_deg
+        azimuth = settings.azimuth_entity or settings.azimuth_deg
+        context = ForecastContext(
             location=location.model_copy(update={'location_name': None}),
             total_max_power_at_stc_w=monitoring_settings.total_max_power_at_stc_w,
             pmax_temperature_coefficient_pct_per_c=monitoring_settings.pmax_temperature_coefficient_pct_per_c,
-            tilt_deg=settings.tilt_deg, azimuth_deg=settings.azimuth_deg, noct_c=settings.noct_c,
-        ) if monitoring_settings and location and settings.tilt_deg is not None and settings.azimuth_deg is not None else None
-        changed = inputs != self.inputs or settings.enabled != self.settings.enabled
+            noct_c=settings.noct_c, tilt=tilt, azimuth=azimuth,
+        ) if monitoring_settings and location and tilt is not None and azimuth is not None else None
+        changed = context != self.context or settings.enabled != self.settings.enabled
         if (monitoring_settings != self.monitoring_settings or origin != self.origin
                 or settings.pr_history_days != self.settings.pr_history_days):
             self.invalidate_correction()
@@ -60,11 +79,22 @@ class ForecastController:
         if not settings.enabled and self._request_scope is not None and self._request_scope.when() is None:
             self._request_scope.reschedule(asyncio.get_running_loop().time())
         self.location = location
-        self.inputs = inputs
-        if self.batch and self.batch.inputs != inputs:
-            self.batch = None
+        self.context = context
+        if self.batch is not None:
+            cached = self.batch.inputs
+            if ForecastContext(
+                location=cached.location,
+                total_max_power_at_stc_w=cached.total_max_power_at_stc_w,
+                pmax_temperature_coefficient_pct_per_c=cached.pmax_temperature_coefficient_pct_per_c,
+                noct_c=cached.noct_c,
+                tilt=self.batch.tilt_entity or cached.tilt_deg,
+                azimuth=self.batch.azimuth_entity or cached.azimuth_deg,
+                model_version=cached.model_version,
+            ) != context:
+                self.batch = None
         if changed:
             self.last_error = None
+            self.unavailable_angles = ()
             self._next_refresh = 0.0
             self._wake.set()
 
@@ -81,11 +111,12 @@ class ForecastController:
                 self._correction = correction_view(self.store, config, self.origin, now, self.settings.pr_history_days)
                 self._correction_key = key
             correction = self._correction
-        return forecast_view(self.batch, self.inputs, self.settings, now,
-                             correction=correction, refreshing=self.settings.enabled and self._inflight is not None, last_error=self.last_error)
+        return forecast_view(self.batch, self.context.location if self.context else None, self.settings, now,
+                             correction=correction, refreshing=self.settings.enabled and self._inflight is not None,
+                             last_error=self.last_error, unavailable_angles=self.unavailable_angles)
 
     def request_refresh(self) -> bool:
-        if not self.settings.enabled or self.inputs is None:
+        if not self.settings.enabled or self.context is None:
             return False
         if self._inflight is None:
             self._next_refresh = 0.0
@@ -95,32 +126,67 @@ class ForecastController:
         return True
 
     async def refresh(self, now: float | None = None) -> None:
-        if not self.settings.enabled or self.inputs is None:
+        context = self.context
+        if not self.settings.enabled or context is None:
             return
         if self._inflight is not None:
             await asyncio.shield(self._inflight)
             return
-        inputs = self.inputs
+        axes: tuple[tuple[ForecastAxis, float | str], ...] = (('tilt', context.tilt), ('azimuth', context.azimuth))
+        entities = tuple(dict.fromkeys(source for _, source in axes if isinstance(source, str)))
         self._inflight = asyncio.get_running_loop().create_future()
         self._request_task = asyncio.current_task()
         self._request_scope = asyncio.timeout(None)
         try:
-            if self.client is None:
-                self.client = OpenMeteoClient()
+            batch = error = read_at = None
+            issues = []
             try:
                 async with self._request_scope:
-                    data = await self.client.fetch(inputs)
+                    states_by_id = {}
+                    if entities:
+                        ha = self.ha_client() if self.ha_client is not None else None
+                        if ha is not None and ha.base_url == context.location.origin:
+                            try:
+                                states = await ha.states(entities)
+                            except (httpx.HTTPError, OSError, ValueError):
+                                pass
+                            else:
+                                read_at = time.time() if now is None else now
+                                states_by_id = {state.entity_id: state for state in states}
+                    angles = {}
+                    for axis, source in axes:
+                        if isinstance(source, str):
+                            state = states_by_id.get(source)
+                            angle = source_value(state.state, state.attributes.unit_of_measurement, axis) if state else None
+                            if angle is None:
+                                issues.append(ForecastAngleIssue(axis=axis, entity_id=source))
+                                continue
+                            angles[axis] = angle
+                        else:
+                            angles[axis] = source
+                    if issues:
+                        error = 'forecast_angle_unavailable'
+                    else:
+                        inputs = ForecastInput(location=context.location,
+                            total_max_power_at_stc_w=context.total_max_power_at_stc_w,
+                            pmax_temperature_coefficient_pct_per_c=context.pmax_temperature_coefficient_pct_per_c,
+                            tilt_deg=angles['tilt'], azimuth_deg=angles['azimuth'], noct_c=context.noct_c)
+                        if self.client is None:
+                            self.client = OpenMeteoClient()
+                        data = await self.client.fetch(inputs)
+                        batch = ForecastBatch(inputs=inputs, fetched_at=time.time() if now is None else now,
+                            tilt_entity=context.tilt if isinstance(context.tilt, str) else None,
+                            azimuth_entity=context.azimuth if isinstance(context.azimuth, str) else None,
+                            angles_read_at=read_at, intervals=data.intervals, weather_samples=data.weather_samples)
             except (httpx.HTTPError, OSError, ValueError):
-                if self._request_scope.when() is None and self.settings.enabled and self.inputs == inputs:
-                    self.last_error = 'forecast_fetch_failed'
-                    self._next_refresh = asyncio.get_running_loop().time() + 900
-            else:
-                if self._request_scope.when() is None and self.settings.enabled and self.inputs == inputs:
-                    self.batch = ForecastBatch(inputs=inputs, fetched_at=time.time() if now is None else now,
-                                               intervals=data.intervals, weather_samples=data.weather_samples)
-                    self.store.set_meta('forecast_cache', self.batch.model_dump_json())
-                    self.last_error = None
-                    self._next_refresh = asyncio.get_running_loop().time() + 3600
+                error = 'forecast_fetch_failed'
+            if self._request_scope.when() is None and self.settings.enabled and self.context == context:
+                if batch is not None:
+                    self.batch = batch
+                    self.store.set_meta('forecast_cache', batch.model_dump_json())
+                self.last_error = error
+                self.unavailable_angles = tuple(issues)
+                self._next_refresh = asyncio.get_running_loop().time() + (900 if error else 3600)
         finally:
             self._inflight.set_result(None)
             self._inflight = None
@@ -131,7 +197,7 @@ class ForecastController:
     async def _run(self) -> None:
         while True:
             delay = max(0.0, self._next_refresh - asyncio.get_running_loop().time()) if (
-                self.settings.enabled and self.inputs is not None
+                self.settings.enabled and self.context is not None
             ) else None
             if delay == 0:
                 self._wake.clear()

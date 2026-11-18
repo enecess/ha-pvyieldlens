@@ -20,7 +20,7 @@ from pydantic import BaseModel, ConfigDict, SecretStr, ValidationError, field_va
 from starlette.middleware.gzip import GZipMiddleware
 
 from .generation import generation_view
-from .home_assistant import HomeAssistantClient
+from .home_assistant import HomeAssistantClient, source_value
 from .history import HistoryPeriod, history_view
 from .service import NETWORK_ERRORS, Service
 from .settings import ForecastSettings, MonitoringSettings
@@ -180,10 +180,24 @@ def create_app(service: Service, runtime: Runtime, run_background=True) -> FastA
         try:
             config = await client.configuration()
             states = await client.states()
-            return {'home_timezone': config.time_zone, 'location': config.location.model_dump() if config.location else None, 'entities': [
-                {'entity_id': state.entity_id, 'name': state.attributes.friendly_name or state.entity_id,
-                 'unit': state.attributes.unit_of_measurement, 'state': state.state}
-                for state in states if state.entity_id.startswith('sensor.') and not state.entity_id.startswith('sensor.pvyieldlens_')]}
+            forecast_settings = service.forecast.settings
+            selected = {entity for entity in (forecast_settings.tilt_entity, forecast_settings.azimuth_entity)
+                        if entity is not None} if connection == saved else set()
+            entities = {}
+            for state in states:
+                entity = state.entity_id
+                unit = state.attributes.unit_of_measurement
+                is_angle = unit == '°' and entity.startswith(('sensor.', 'number.', 'input_number.'))
+                if entity.startswith('sensor.pvyieldlens_') or not (is_angle or entity.startswith('sensor.')):
+                    continue
+                row = {'entity_id': entity, 'name': state.attributes.friendly_name or entity, 'unit': unit, 'state': state.state}
+                if is_angle or entity in selected:
+                    row['angle_deg'] = source_value(state.state, unit, 'azimuth')
+                entities[entity] = row
+            for entity in sorted(selected - entities.keys()):
+                entities[entity] = {'entity_id': entity, 'name': entity, 'unit': None, 'state': 'unavailable', 'angle_deg': None}
+            return {'home_timezone': config.time_zone, 'location': config.location.model_dump() if config.location else None,
+                    'entities': list(entities.values())}
         except NETWORK_ERRORS:
             return JSONResponse({'error': 'ha_connection_failed'}, status_code=502)
         finally:
@@ -225,7 +239,7 @@ def create_app(service: Service, runtime: Runtime, run_background=True) -> FastA
             forecast = service.forecast
             if not forecast.settings.enabled:
                 return JSONResponse({'error': 'forecast_disabled'}, status_code=409)
-            if forecast.inputs is None:
+            if forecast.context is None:
                 return JSONResponse({'error': 'forecast_location_required'}, status_code=422)
             scheduled = forecast.request_refresh()
             return JSONResponse({'scheduled': scheduled, 'status': forecast.view(time.time()).status}, status_code=202)
