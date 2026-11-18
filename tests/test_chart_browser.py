@@ -56,7 +56,7 @@ async def test_singleton_glyph_pixel_picking(browser_workspace, scenario, chart_
         await route.fulfill(json={
             'configured': True, 'recovering': False, 'range': {'start': now - 600, 'end': now},
             'step_seconds': 60, 'context': {'revision': service.store.revision,
-                                          'monitoring_settings': service.monitoring_settings.model_dump()},
+                                          'monitoring_settings': service.monitoring_settings.public()},
             'points': [{'at': point['end'], **point} for point in records],
         })
 
