@@ -73,7 +73,7 @@ Il menu **Modalità tema**, in alto a destra, offre Auto, Chiaro e Scuro. Auto s
 | Aggiorna ogni | Ricalcola e aggiorna i valori in tempo reale ogni 5 secondi per impostazione predefinita. |
 | Tempo senza nuovi dati | Imposta quanto attendere la prossima lettura di ogni sensore. I periodi oltre il limite contano come mancanti e riducono la completezza dei dati. |
 
-Salva e apri **Panoramica**. Il primo risultato consolidato appare in **Efficienza** alla fine del periodo in corso.
+In **Impostazioni > Moduli fotovoltaici**, scegli **Valore fisso** o **Entità HA** separatamente per inclinazione e direzione. Salva e apri **Panoramica**. Il primo risultato consolidato appare in **Efficienza** alla fine del periodo in corso.
 
 La Panoramica precarica gli ultimi dieci minuti all’apertura o alla riconnessione. I dati di produzione mostrano oggi potenza stimata/effettiva consolidata, irradianza e temperatura dei moduli. Il grafico energetico propone 7 giorni predefiniti, 30 giorni o un intervallo personalizzato inclusivo di massimo 90 date domestiche, non oltre oggi. I dati mancanti restano vuoti e lo zero misurato rimane zero; contabilizzazioni e energia cumulativa non cambiano.
 
@@ -85,7 +85,7 @@ Lo smussamento riguarda solo il disegno. Mouse, tocco e tastiera mostrano i reco
 
 La posizione e il fuso orario provengono dalla connessione Home Assistant salvata e si impostano in HA.
 
-In **Impostazioni > Moduli fotovoltaici**, scegli **Valore fisso** o **Entità HA** separatamente per inclinazione e direzione. L’inclinazione va da 0° a 90° inclusi. L’azimut si misura in senso orario dal nord (0°) fino a 360° esclusi. Le direzioni fisse comprendono anche est (90°), sud (180°) e ovest (270°). Le entità angolari sono `sensor.*`, `number.*` o `input_number.*` con unità `°`. Seleziona **Aggiorna entità** nelle impostazioni della connessione per trovarle.
+L’inclinazione va da 0° a 90° inclusi. L’azimut si misura in senso orario dal nord (0°) fino a 360° esclusi. Le direzioni fisse comprendono anche est (90°), sud (180°) e ovest (270°). Le entità angolari sono `sensor.*`, `number.*` o `input_number.*` con unità `°`. Seleziona **Aggiorna entità** nelle impostazioni della connessione per trovarle.
 
 In **Moduli fotovoltaici**, inserisci la NOCT della scheda tecnica (oltre 20°C, massimo 80°C, valore predefinito 45°C). La potenza massima totale in STC e il coefficiente di temperatura di Pmax servono anche al monitoraggio. Per moduli identici, moltiplica la potenza nominale di un modulo per il numero di moduli, ad esempio 500 W × 10 = 5000 W.
 

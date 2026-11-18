@@ -73,7 +73,7 @@ Der **Darstellungsmodus** oben rechts bietet Auto, Hell und Dunkel. Auto folgt d
 | Update alle | Berechnet und aktualisiert Livewerte standardmäßig alle 5 Sekunden. |
 | Zeit ohne neue Daten | Legt die Frist für den nächsten Messwert je Sensor fest. Nach Ablauf gelten die betroffenen Zeiträume als fehlend und verringern die Datenvollständigkeit. |
 
-Speichern Sie die Werte und öffnen Sie **Übersicht**. Der erste abgeschlossene Eintrag erscheint unter **Effizienz** am Ende des laufenden Zeitraums.
+Wählen Sie unter **Einstellungen > PV-Module** für Neigung und Ausrichtung jeweils **Fester Wert** oder **HA-Entität**. Speichern Sie die Werte und öffnen Sie **Übersicht**. Der erste abgeschlossene Eintrag erscheint unter **Effizienz** am Ende des laufenden Zeitraums.
 
 Die Übersicht lädt beim Öffnen oder Wiederverbinden die letzten zehn Minuten. Die Erzeugungsdaten zeigen heute abgeschlossene geschätzte/tatsächliche Leistung, Bestrahlungsstärke und Modultemperatur. Das Energiediagramm bietet standardmäßig 7 Tage, außerdem 30 Tage oder einen eigenen Zeitraum mit einschließlich beider Grenzen höchstens 90 Hauskalendertagen bis maximal heute. Fehlende Werte bleiben leer, gemessene Null bleibt Null; gespeicherte Abrechnungen und kumulierte Energie bleiben erhalten.
 
@@ -85,7 +85,7 @@ Die Glättung betrifft nur die Zeichnung. Maus, Touch und Tastatur zeigen Origin
 
 Standort und Zeitzone stammen aus der gespeicherten Home-Assistant-Verbindung und werden in HA eingestellt.
 
-Wählen Sie unter **Einstellungen > PV-Module** für Neigung und Ausrichtung jeweils **Fester Wert** oder **HA-Entität**. Die Neigung reicht von 0° bis einschließlich 90°. Der Kompassazimut zählt im Uhrzeigersinn ab Nord (0°) bis unter 360°. Als feste Richtungen stehen auch Ost (90°), Süd (180°) und West (270°) zur Auswahl. Winkelentitäten sind `sensor.*`, `number.*` oder `input_number.*` mit der Einheit `°`. Über **Entitäten aktualisieren** in den Verbindungseinstellungen finden Sie passende Entitäten.
+Die Neigung reicht von 0° bis einschließlich 90°. Der Kompassazimut zählt im Uhrzeigersinn ab Nord (0°) bis unter 360°. Als feste Richtungen stehen auch Ost (90°), Süd (180°) und West (270°) zur Auswahl. Winkelentitäten sind `sensor.*`, `number.*` oder `input_number.*` mit der Einheit `°`. Über **Entitäten aktualisieren** in den Verbindungseinstellungen finden Sie passende Entitäten.
 
 Tragen Sie unter **PV-Module** die NOCT laut Datenblatt ein (über 20°C bis einschließlich 80°C, Standard 45°C). Die maximale Gesamtleistung unter STC und der Temperaturkoeffizient von Pmax gelten auch für die Überwachung. Bei identischen Modulen ergibt sich die Gesamtleistung aus Nennleistung pro Modul mal Modulanzahl, zum Beispiel 500 W × 10 = 5000 W.
 

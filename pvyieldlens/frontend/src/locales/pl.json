@@ -185,7 +185,6 @@
   "forecast_status_loading": "Ładowanie pierwszej prognozy pogody…",
   "forecast_status_ready": "Prognoza jest gotowa.",
   "forecast_status_unavailable": "Brak dostępnej prognozy pogody. Ponów odświeżanie.",
-  "forecast_disabled": "Prognoza produkcji jest wyłączona.",
   "forecast_location_required": "Wymagana jest prawidłowa lokalizacja HA.",
   "forecast_configuration_required": "Wymagane są ustawienia modułów fotowoltaicznych.",
   "forecast_scroll": "Przewiń w poziomie, aby zobaczyć wszystkie wartości. ↔",

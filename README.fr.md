@@ -73,7 +73,7 @@ Le menu **Mode du thème**, en haut à droite, propose Auto, Clair et Sombre. Au
 | Mise à jour toutes les | Recalcule et actualise les valeurs en direct toutes les 5 secondes par défaut. |
 | Délai sans données | Définit le délai pour la prochaine mesure de chaque capteur. Les périodes après expiration comptent comme manquantes et réduisent la complétude des données. |
 
-Enregistrez, puis ouvrez **Tableau de bord**. Le premier résultat clôturé apparaît dans **Efficacité** à la fin de la période en cours.
+Dans **Paramètres > Modules photovoltaïques**, choisissez **Valeur fixe** ou **Entité HA** indépendamment pour l’inclinaison et l’orientation. Enregistrez, puis ouvrez **Tableau de bord**. Le premier résultat clôturé apparaît dans **Efficacité** à la fin de la période en cours.
 
 Le Tableau de bord précharge les dix dernières minutes à l’ouverture ou à la reconnexion. Les données de production montrent aujourd’hui les puissances estimée/réelle clôturées, l’irradiance et la température des modules. Le graphique d’énergie propose 7 jours par défaut, 30 jours ou une période personnalisée inclusive de 90 dates du foyer au maximum, sans dépasser aujourd’hui. Une absence reste vide et zéro reste zéro ; les règlements et cumuls conservés ne changent pas.
 
@@ -85,7 +85,7 @@ Le lissage concerne seulement le dessin. Souris, toucher et clavier inspectent l
 
 Le lieu et le fuseau horaire proviennent de la connexion Home Assistant enregistrée et se règlent dans HA.
 
-Dans **Paramètres > Modules photovoltaïques**, choisissez **Valeur fixe** ou **Entité HA** indépendamment pour l’inclinaison et l’orientation. L’inclinaison va de 0° à 90° inclus. L’azimut se mesure dans le sens horaire depuis le nord (0°), jusqu’à 360° exclus. Les orientations fixes comprennent aussi l’est (90°), le sud (180°) et l’ouest (270°). Les entités d’angle sont de type `sensor.*`, `number.*` ou `input_number.*` et utilisent l’unité `°`. Cliquez sur **Actualiser les entités** dans les paramètres de connexion pour les trouver.
+L’inclinaison va de 0° à 90° inclus. L’azimut se mesure dans le sens horaire depuis le nord (0°), jusqu’à 360° exclus. Les orientations fixes comprennent aussi l’est (90°), le sud (180°) et l’ouest (270°). Les entités d’angle sont de type `sensor.*`, `number.*` ou `input_number.*` et utilisent l’unité `°`. Cliquez sur **Actualiser les entités** dans les paramètres de connexion pour les trouver.
 
 Dans **Modules photovoltaïques**, saisissez le NOCT de la fiche technique (plus de 20°C, au maximum 80°C, 45°C par défaut). La puissance maximale totale aux STC et le coefficient de température de Pmax servent aussi à la surveillance. Pour des modules identiques, multipliez la puissance nominale d’un module par leur nombre, par exemple 500 W × 10 = 5000 W.
 

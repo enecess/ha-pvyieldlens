@@ -185,7 +185,6 @@
   "forecast_status_loading": "Chargement des premières prévisions météo…",
   "forecast_status_ready": "Prévisions disponibles.",
   "forecast_status_unavailable": "Aucune prévision météo utilisable. Réessayez l’actualisation.",
-  "forecast_disabled": "Les prévisions sont désactivées.",
   "forecast_location_required": "Une position HA valide est requise.",
   "forecast_configuration_required": "Les paramètres des modules photovoltaïques sont requis.",
   "forecast_scroll": "Faites défiler horizontalement pour voir toutes les valeurs. ↔",

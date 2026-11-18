@@ -185,7 +185,6 @@
   "forecast_status_loading": "正在加载首次天气预测…",
   "forecast_status_ready": "预测已就绪。",
   "forecast_status_unavailable": "暂无可用天气预测，请重试刷新。",
-  "forecast_disabled": "发电预测已关闭。",
   "forecast_location_required": "需要有效的 HA 位置。",
   "forecast_configuration_required": "需要光伏组件设置。",
   "forecast_scroll": "左右滚动查看所有数值。↔",

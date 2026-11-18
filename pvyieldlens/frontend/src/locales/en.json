@@ -185,7 +185,6 @@
   "forecast_status_loading": "Loading the first weather forecast…",
   "forecast_status_ready": "Forecast is ready.",
   "forecast_status_unavailable": "No usable weather forecast is available. Retry the refresh.",
-  "forecast_disabled": "Generation forecast is disabled.",
   "forecast_location_required": "A valid HA location is required.",
   "forecast_configuration_required": "PV module settings are required.",
   "forecast_scroll": "Scroll horizontally to see all values. ↔",

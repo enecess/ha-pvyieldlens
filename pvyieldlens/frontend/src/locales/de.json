@@ -185,7 +185,6 @@
   "forecast_status_loading": "Erste Wetterprognose wird geladen…",
   "forecast_status_ready": "Prognose verfügbar.",
   "forecast_status_unavailable": "Keine nutzbare Wetterprognose verfügbar. Erneut aktualisieren.",
-  "forecast_disabled": "Ertragsprognose deaktiviert.",
   "forecast_location_required": "Ein gültiger HA-Standort ist erforderlich.",
   "forecast_configuration_required": "Einstellungen für die PV-Module sind erforderlich.",
   "forecast_scroll": "Horizontal scrollen, um alle Werte zu sehen. ↔",

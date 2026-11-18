@@ -73,7 +73,7 @@ Menu **Tryb motywu** u góry po prawej oferuje Auto, Jasny i Ciemny. Auto śledz
 | Odświeżaj co | Domyślnie przelicza i odświeża wartości bieżące co 5 sekund. |
 | Limit czasu bez danych | Ustala czas oczekiwania na kolejny odczyt każdego czujnika. Okresy po przekroczeniu limitu są liczone jako brak danych i obniżają kompletność danych. |
 
-Zapisz ustawienia i otwórz **Pulpit**. Pierwszy rozliczony wynik pojawi się w widoku **Sprawność** po zakończeniu bieżącego okresu.
+W **Ustawienia > Moduły fotowoltaiczne** wybierz osobno dla nachylenia i kierunku **Wartość stała** lub **Encja HA**. Zapisz ustawienia i otwórz **Pulpit**. Pierwszy rozliczony wynik pojawi się w widoku **Sprawność** po zakończeniu bieżącego okresu.
 
 Pulpit wczytuje ostatnie dziesięć minut przy otwarciu lub ponownym połączeniu. Dane produkcji pokazują dzisiejszą rozliczoną moc szacowaną/rzeczywistą, natężenie promieniowania i temperaturę modułów. Wykres energii domyślnie obejmuje 7 dni, także 30 dni lub własny zakres do 90 domowych dat kalendarzowych włącznie z obiema granicami, najwyżej do dzisiaj. Braki pozostają puste, zmierzone zero pozostaje zerem; zapisane rozliczenia i energia skumulowana nie zmieniają się.
 
@@ -85,7 +85,7 @@ Wygładzanie dotyczy tylko rysunku. Mysz, dotyk i klawiatura pokazują oryginaln
 
 Lokalizacja i strefa czasowa pochodzą z zapisanego połączenia Home Assistant i są ustawiane w HA.
 
-W **Ustawienia > Moduły fotowoltaiczne** wybierz osobno dla nachylenia i kierunku **Wartość stała** lub **Encja HA**. Nachylenie wynosi od 0° do 90° włącznie. Azymut kompasowy jest liczony zgodnie z ruchem wskazówek zegara od północy (0°) do wartości poniżej 360°. Stałe kierunki obejmują także wschód (90°), południe (180°) i zachód (270°). Encje kątów to `sensor.*`, `number.*` lub `input_number.*` z jednostką `°`. Wybierz **Odśwież encje** w ustawieniach połączenia, aby je znaleźć.
+Nachylenie wynosi od 0° do 90° włącznie. Azymut kompasowy jest liczony zgodnie z ruchem wskazówek zegara od północy (0°) do wartości poniżej 360°. Stałe kierunki obejmują także wschód (90°), południe (180°) i zachód (270°). Encje kątów to `sensor.*`, `number.*` lub `input_number.*` z jednostką `°`. Wybierz **Odśwież encje** w ustawieniach połączenia, aby je znaleźć.
 
 W sekcji **Moduły fotowoltaiczne** wprowadź NOCT z karty modułu (powyżej 20°C, maksymalnie 80°C, domyślnie 45°C). Łączna moc maksymalna w STC i współczynnik temperaturowy Pmax służą też do monitorowania. Dla identycznych modułów pomnóż moc znamionową jednego modułu przez liczbę modułów, na przykład 500 W × 10 = 5000 W.
 
