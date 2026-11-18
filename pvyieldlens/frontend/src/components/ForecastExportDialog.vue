@@ -27,23 +27,29 @@ const dates = computed(() => {
   const format = new Intl.DateTimeFormat(props.language, { dateStyle: 'long', timeZone: props.homeTimezone });
   return props.forecast?.days.map(day => ({ ...day, label: format.format(day.start * 1000) })) ?? [];
 });
-const startTimes = computed(() => {
-  const day = dates.value.find(day => day.day === date.value);
+const selectedDate = computed(() => dates.value.find(day => day.day === date.value));
+const startOptions = computed(() => {
+  const day = selectedDate.value;
   if (!day || !props.forecast) return [];
-  return props.forecast.intervals
-    .filter(row => row.start >= day.start && row.start < day.end && row.start % 900 === 0 && row.forecast_power_w != null)
-    .map(row => row.start);
+  const quarterSeconds = 15 * 60;
+  const first = Math.ceil(day.start / quarterSeconds) * quarterSeconds;
+  const times = Array.from({ length: Math.ceil((day.end - first) / quarterSeconds) },
+    (_, index) => first + index * quarterSeconds);
+  const labels = formatTimes(times, props.language, props.homeTimezone, {
+    hour: '2-digit', minute: '2-digit', hourCycle: 'h23',
+  });
+  const available = new Set(props.forecast.intervals.flatMap(row => row.forecast_power_w == null ? [] : [row.start]));
+  return times.flatMap((at, index) => available.has(at) ? [{ at, label: labels[index] }] : []);
 });
-const startLabels = computed(() => formatTimes(startTimes.value, props.language, props.homeTimezone, {
-  hour: '2-digit', minute: '2-digit', hourCycle: 'h23',
-}));
+const startAvailable = computed(() => startOptions.value.some(option => option.at === start.value));
 const timestamp = computed(() => new Intl.DateTimeFormat(props.language, {
   year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit',
   hourCycle: 'h23', timeZone: props.homeTimezone, timeZoneName: 'shortOffset',
 }));
 const result = computed(() => {
-  if (!props.open || !props.forecast || start.value === '' || !startTimes.value.includes(start.value) ||
-    steps.value === '' || !Number.isSafeInteger(steps.value) || steps.value <= 0 ||
+  if (!props.open || !props.forecast || start.value === '') return null;
+  if (!startAvailable.value) return { ok: false as const, unavailableAt: start.value };
+  if (steps.value === '' || !Number.isSafeInteger(steps.value) || steps.value <= 0 ||
     power.value === 'corrected_forecast_power_w' && !canCorrect.value) return null;
   return buildForecastCsv(props.forecast.intervals, {
     start: start.value, stepMinutes: stepMinutes.value, steps: steps.value, power: power.value,
@@ -98,14 +104,16 @@ function downloadForecast() {
         <label>
           <span>{{ t('forecast_export_date') }}</span>
           <select id="forecast-export-date" v-model="date" required :autofocus="open" :disabled="!dates.length" @change="start = ''">
+            <option v-if="date && !selectedDate" :value="date" disabled>{{ date }}</option>
             <option v-for="day in dates" :key="day.day" :value="day.day">{{ day.label }}</option>
           </select>
         </label>
         <label>
           <span>{{ t('forecast_export_start') }}</span>
-          <select id="forecast-export-start" v-model="start" required :disabled="!startTimes.length">
-            <option value="" disabled>{{ t(startTimes.length ? 'forecast_export_choose_start' : 'forecast_export_no_starts') }}</option>
-            <option v-for="(at, index) in startTimes" :key="at" :value="at">{{ startLabels[index] }}</option>
+          <select id="forecast-export-start" v-model="start" required :disabled="!startOptions.length">
+            <option value="" disabled>{{ t(startOptions.length ? 'forecast_export_choose_start' : 'forecast_export_no_starts') }}</option>
+            <option v-if="start !== '' && !startAvailable" :value="start" disabled>{{ timestamp.format(start * 1000) }}</option>
+            <option v-for="option in startOptions" :key="option.at" :value="option.at">{{ option.label }}</option>
           </select>
         </label>
         <label>

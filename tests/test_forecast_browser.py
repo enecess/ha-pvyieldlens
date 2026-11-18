@@ -781,3 +781,63 @@ async def test_forecast_export_repeated_start_time(forecast_page, tmp_path):
     csv_path = tmp_path / 'repeated-time.csv'
     await (await download_info.value).save_as(csv_path)
     assert csv_path.read_bytes() == b'2026-11-01 06:00:00+00:00,3720\n'
+
+
+@pytest.mark.parametrize('refresh', ['missing_power', 'rolled_day'])
+async def test_forecast_export_reports_unavailable_selected_start(forecast_page, refresh):
+    from playwright.async_api import expect
+
+    page, state, _ = forecast_page
+    await page.locator('#forecast-tab').click()
+    await page.locator('#forecast-export').click()
+    dialog = page.get_by_role('dialog')
+    date = dialog.locator('#forecast-export-date')
+    start = dialog.locator('#forecast-export-start')
+    selected = await start.select_option(label='00:30')
+    await dialog.locator('#forecast-export-steps').fill('1')
+    download = dialog.get_by_role('button', name='Download', exact=True)
+    await expect(download).to_be_enabled()
+
+    view = copy.deepcopy(state['view'])
+    if refresh == 'rolled_day':
+        view = forecast_payload('2026-11-02')
+    else:
+        view['status'] = 'partial'
+        view['intervals'][2].update(forecast_power_w=None, corrected_forecast_power_w=None,
+                                    forecast_energy_kwh=None, corrected_forecast_energy_kwh=None,
+                                    quality='unavailable')
+        view['fetched_at'] += 1
+        view['calculated_at'] += 1
+    state['view'] = view
+
+    await expect(download).to_be_disabled(timeout=6000)
+    await expect(dialog.get_by_role('status')).to_contain_text('step starting at', timeout=6000)
+    await expect(dialog.get_by_role('status')).to_contain_text('00:30')
+    await expect(date).to_have_value('2026-11-01')
+    await expect(start).to_have_value(selected[0])
+    if refresh == 'rolled_day':
+        await date.select_option('2026-11-02')
+    await start.select_option(label='01:00')
+    await expect(download).to_be_enabled()
+
+
+async def test_forecast_export_labels_repeated_start_with_missing_power(forecast_page, tmp_path):
+    from playwright.async_api import expect
+
+    page, state, _ = forecast_page
+    view = state['view'] = forecast_payload('2026-11-01', 'America/New_York')
+    view['intervals'][5].update(forecast_power_w=None, corrected_forecast_power_w=None,
+                                forecast_energy_kwh=None, corrected_forecast_energy_kwh=None,
+                                quality='unavailable')
+    await page.locator('#forecast-tab').click()
+    await page.locator('#forecast-export').click()
+    dialog = page.get_by_role('dialog')
+    start = dialog.locator('#forecast-export-start')
+    await expect(start.get_by_role('option', name='01:15', exact=False)).to_have_text(['01:15 GMT-5'])
+    await start.select_option(label='01:15 GMT-5')
+    await dialog.locator('#forecast-export-steps').fill('1')
+    async with page.expect_download() as download_info:
+        await dialog.get_by_role('button', name='Download', exact=True).click()
+    csv_path = tmp_path / 'remaining-repeated-time.csv'
+    await (await download_info.value).save_as(csv_path)
+    assert csv_path.read_bytes() == b'2026-11-01 06:15:00+00:00,3720\n'
