@@ -505,8 +505,14 @@ async def test_tooltip_stays_inside_narrow_chart(chart_page, language):
 async def scroll_and_measure_tooltip(chart, distance):
     return await chart.evaluate('''async (host, distance) => {
         const scroll = document.querySelector('#content-scroll');
-        scroll.scrollBy(0, distance);
-        await new Promise(resolve => requestAnimationFrame(resolve));
+        await new Promise((resolve, reject) => {
+            const timeout = AbortSignal.timeout(2000);
+            timeout.addEventListener('abort', () => reject(new Error('Timed out waiting for the content scroll event')), {once: true});
+            scroll.addEventListener('scroll', resolve, {once: true, signal: timeout});
+            const before = scroll.scrollTop;
+            scroll.scrollBy({top: distance, behavior: 'instant'});
+            if (scroll.scrollTop === before) reject(new Error(`Content did not scroll from ${before} by ${distance}px`));
+        });
         const chart = host.getBoundingClientRect(), content = scroll.getBoundingClientRect();
         const tip = host.querySelector('.chart-tooltip').getBoundingClientRect();
         const contentTop = content.top + scroll.clientTop;
