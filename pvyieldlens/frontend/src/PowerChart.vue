@@ -28,9 +28,14 @@ function draw() {
   });
   if (focused) host.value.querySelector<SVGElement>('.chart-hit-area')?.focus({ preventScroll: true });
 }
-watch(() => [props.points, props.series, props.unit, props.active, props.language, props.timezone, props.theme, props.tooltip, props.range, props.selection, props.coverage],
-  () => nextTick(draw), { flush: 'post' });
-watch(() => props.currentTime, value => { if (props.active && value !== undefined) handle?.updateTime(value); });
+watch([
+  () => props.points, () => props.series, () => props.unit, () => props.active, () => props.language,
+  () => props.timezone, () => props.theme, () => props.tooltip, () => props.range, () => props.selection,
+  () => props.coverage, () => props.currentTime !== undefined,
+], () => nextTick(draw), { flush: 'post' });
+watch(() => props.currentTime, (value, previous) => {
+  if (props.active && value !== undefined && previous !== undefined) handle?.updateTime(value);
+});
 onMounted(() => {
   resize = new ResizeObserver(() => {
     if (host.value && dimensions !== `${host.value.clientWidth},${host.value.clientHeight}`) draw();

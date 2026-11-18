@@ -23,6 +23,8 @@ const key = (view: ForecastSummary | null) => JSON.stringify([
 ]);
 const view = computed(() => props.summary && (!detail.value || props.summary.calculated_at >= detail.value.calculated_at)
   ? props.summary : detail.value);
+const todayStart = computed(() => view.value?.today?.start);
+const isToday = (day: ForecastDay) => day.start === todayStart.value;
 const homeTimezone = computed(() => new Intl.DateTimeFormat('en', {
   timeZone: view.value?.home_timezone ?? 'UTC',
 }).resolvedOptions().timeZone);
@@ -34,6 +36,7 @@ const operationalStatus = computed(() => ['disabled', 'location_unavailable', 'l
 const refreshing = computed(() => refreshPending.value !== null || Boolean(view.value?.refreshing));
 const days = computed(() => detail.value && key(view.value) === key(detail.value) ? detail.value.days : []);
 const selected = computed(() => days.value.find(day => day.day === selectedDay.value));
+const selectedIsToday = computed(() => selected.value !== undefined && isToday(selected.value));
 const number = (value: number | null | undefined, digits = 1) => value == null ? '—' :
   new Intl.NumberFormat(props.language, { maximumFractionDigits: digits }).format(value);
 const energy = (total: EnergyForecast | null | undefined, corrected = false) =>
@@ -108,6 +111,7 @@ const series: ChartSeries[] = [
   { key: 'corrected_forecast_power_w', label: 'forecast_corrected_power', color: 'var(--pv-corrected)' },
 ];
 const currentTime = computed(() => {
+  if (!selectedIsToday.value) return undefined;
   // Scalar snapshots advance the retained time marker without rebuilding the series.
   void view.value?.calculated_at;
   return Date.now() / 1000;
@@ -188,9 +192,9 @@ async function refreshForecast() {
         <p id="forecast-calendar-help" class="muted">{{ t('forecast_calendar_help') }}</p>
         <div id="forecast-days" role="group" :aria-label="t('forecast_daily')">
           <button v-for="day in days" :key="day.day" type="button" :data-day="day.day" :aria-pressed="day.day === selectedDay"
-            :aria-current="day.start === view?.today?.start ? 'date' : undefined" :aria-label="dayLabel(day)"
+            :aria-current="isToday(day) ? 'date' : undefined" :aria-label="dayLabel(day)"
             aria-describedby="forecast-calendar-help" @click="selectedDay = day.day">
-            <span class="day-label">{{ day.start === view?.today?.start ? t('today') : date(day.start) }}</span>
+            <span class="day-label">{{ isToday(day) ? t('today') : date(day.start) }}</span>
             <component :is="weatherType(day).icon" class="day-weather-icon" :size="24" aria-hidden="true" />
             <span class="day-weather">{{ t(weatherType(day).label) }}</span>
             <span class="day-temperature">{{ temperature(day.weather?.air_temperature_max_c) }} / {{ temperature(day.weather?.air_temperature_min_c) }}</span>
@@ -208,13 +212,13 @@ async function refreshForecast() {
           <span>{{ t('forecast_original_energy') }} <strong id="forecast-seven-days">{{ energy(view?.seven_days) }} kWh</strong></span>
           <span>{{ t('forecast_corrected_energy') }} <strong id="forecast-seven-days-corrected" class="corrected-value">{{ energy(view?.seven_days, true) }} kWh</strong></span></div>
       </article>
-      <article class="panel forecast-hourly"><div class="panel-heading"><h2><span id="forecast-day-heading">{{ selected ? date(selected.start) : '' }}</span> · {{ t('forecast_hourly') }}</h2>
+      <article class="panel forecast-hourly"><div class="panel-heading"><h2><span id="forecast-day-heading">{{ selected && (selectedIsToday ? t('today') : date(selected.start)) }}</span> · {{ t('forecast_hourly') }}</h2>
         <div class="legend"><span class="estimated-dot">{{ t('forecast_power') }}</span><span class="corrected-dot">{{ t('forecast_corrected_power') }}</span></div></div>
         <div class="forecast-totals muted">
           <span>{{ t('forecast_original_energy') }} <strong id="forecast-day-total">{{ energy(selected) }} kWh</strong></span>
           <span>{{ t('forecast_corrected_energy') }} <strong id="forecast-day-total-corrected" class="corrected-value">{{ energy(selected, true) }} kWh</strong></span></div>
         <PowerChart id="forecast-chart" :points="points" :series="series" unit="W" :active="active && days.length > 0" :language="language" :timezone="homeTimezone" :theme="theme" :current-time="currentTime" :tooltip="tooltip" :range="chartRange" selection="interval" />
-        <p class="muted">{{ t('forecast_marker_help') }}</p>
+        <p v-if="selectedIsToday && points.length" id="forecast-marker-help" class="muted">{{ t('forecast_marker_help') }}</p>
         <details id="forecast-details"><summary id="forecast-details-label">{{ t('forecast_details') }}</summary>
           <p id="forecast-details-help" class="muted">{{ t('forecast_details_help') }}</p><p id="forecast-scroll-hint" class="muted">{{ t('forecast_scroll') }}</p>
           <div class="table-scroll" tabindex="0" role="region" aria-labelledby="forecast-details-label"><table aria-labelledby="forecast-details-label" aria-describedby="forecast-details-help"><thead><tr>

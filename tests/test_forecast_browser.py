@@ -67,13 +67,23 @@ async def test_forecast_days_select_quarter_hour_details_and_preserve_selection(
     from playwright.async_api import expect
     page, state, _ = forecast_page
     await page.locator('#forecast-tab').click()
+    chart = page.locator('#forecast-chart')
+    heading = page.locator('#forecast-day-heading')
+    marker = chart.locator('.current-time')
+    marker_help = page.locator('#forecast-marker-help')
     await expect(page.locator('#forecast-days button')).to_have_count(7)
+    await expect(heading).to_have_text('Today')
+    # A vertical SVG line has a zero-width bounding box even when its stroke is painted.
+    await expect(marker).to_have_css('display', 'inline')
+    await expect(marker_help).to_be_visible()
     await expect(page.locator('#forecast-remaining')).to_have_text('39.68')
     await expect(page.locator('#forecast-tomorrow')).to_have_text('89.28')
     await expect(page.locator('#forecast-seven-days')).to_contain_text('624.96')
     await page.locator('#forecast-days button').nth(2).focus()
     await page.keyboard.press('Enter')
-    await expect(page.locator('#forecast-day-heading')).to_contain_text('Nov 3')
+    await expect(heading).to_have_text('Nov 3')
+    assert await marker.count() == 0
+    await expect(marker_help).to_have_count(0)
     await expect(page.locator('#forecast-day-total')).to_have_text('89.28 kWh')
     await page.locator('#forecast-details summary').click()
     await expect(page.locator('#forecast-rows tr')).to_have_count(96)
@@ -84,15 +94,19 @@ async def test_forecast_days_select_quarter_hour_details_and_preserve_selection(
     await expect(page.locator('#forecast-rows tr').first).to_contain_text('45')
     await expect(page.locator('#forecast-details th')).to_contain_text([
         'Interval', 'Irradiance', 'Air temperature', 'Estimated cell temperature', 'Original forecast power', 'Corrected forecast power', 'Original forecast energy', 'Corrected forecast energy'])
-    await expect(page.locator('#forecast-chart svg')).to_have_attribute('aria-label', 'Original forecast power / Corrected forecast power')
-    await page.locator('#forecast-chart .chart-hit-area').focus()
+    await expect(chart.locator('svg')).to_have_attribute('aria-label', 'Original forecast power / Corrected forecast power')
+    await chart.locator('.chart-hit-area').focus()
     await page.keyboard.press('ArrowRight')
-    await expect(page.locator('#forecast-chart .chart-tooltip')).to_contain_text('0.93 kWh')
-    await expect(page.locator('#forecast-chart .chart-tooltip')).to_contain_text('3,720 W')
+    await expect(chart.locator('.chart-tooltip')).to_contain_text('0.93 kWh')
+    await expect(chart.locator('.chart-tooltip')).to_contain_text('3,720 W')
     await expect(page.locator('#forecast-fetched')).to_contain_text('Nov 1')
     await page.locator('#settings-button').click()
     await page.locator('#forecast-tab').click()
     await expect(page.locator('#forecast-days button').nth(2)).to_have_attribute('aria-pressed', 'true')
+    await page.locator('#forecast-days button').first.click()
+    await expect(heading).to_have_text('Today')
+    await expect(marker).to_have_css('display', 'inline')
+    await expect(marker_help).to_be_visible()
     await page.locator('#forecast-refresh').click()
     await expect(page.locator('#forecast-refresh')).to_be_disabled()
     await page.locator('#history-tab').click()
@@ -190,11 +204,14 @@ async def test_forecast_midnight_refreshes_dates_without_changing_fetched_time(f
     before_view = copy.deepcopy(state['view'])
     state['view'] = forecast_payload('2026-11-02')
     state['view']['fetched_at'] = before_view['fetched_at']
+    await page.evaluate('now => Date.now = () => now', state['view']['calculated_at'] * 1000)
     await expect(page.locator('#forecast-days button').first).to_have_attribute('data-day', '2026-11-02')
     assert state['view']['fetched_at'] == before_view['fetched_at']
     assert state['view']['remaining_today']['forecast_energy_kwh'] >= 0
     await expect(page.locator('#forecast-days button').first).to_have_attribute('aria-pressed', 'true')
     await expect(page.locator('#forecast-days [aria-current=date]')).to_have_attribute('data-day', '2026-11-02')
+    await expect(page.locator('#forecast-day-heading')).to_have_text('Today')
+    await expect(page.locator('#forecast-chart .current-time')).to_have_css('display', 'inline')
 
 
 @pytest.mark.parametrize('width', [320, 390])
