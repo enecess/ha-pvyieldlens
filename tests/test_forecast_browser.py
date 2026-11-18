@@ -590,3 +590,194 @@ async def test_missing_zero_and_above_100_correction_bars(forecast_page, pr):
         assert await bar.evaluate('node => node.getBoundingClientRect().height') == 70
     await page.locator('#forecast-details summary').click()
     await expect(page.locator('#forecast-rows tr').first.locator('td').nth(5)).to_have_text('—' if pr is None else '0' if pr == 0 else '4,464')
+
+
+
+@pytest.mark.parametrize('width', [1440, 390])
+async def test_downloads_emhass_forecast_csv(forecast_page, width, tmp_path):
+    from fastapi import FastAPI
+    from playwright.async_api import expect
+    from test_integration import fake_server
+
+    page, state, web = forecast_page
+    view = state['view'] = forecast_payload('2026-11-18', 'Asia/Shanghai')
+    view['correction']['pr'] = 50
+    for row, watts in zip(view['intervals'][94:98], [0, 600.5, 1600, 2400.5]):
+        row.update(forecast_power_w=watts, corrected_forecast_power_w=watts / 2,
+                   forecast_energy_kwh=watts / 4000, corrected_forecast_energy_kwh=watts / 8000)
+
+    app = FastAPI()
+    mount = '/api/hassio_ingress/forecast-test' if width == 390 else ''
+    app.mount(mount, web)
+    await page.set_viewport_size({'width': width, 'height': 844})
+    async with fake_server(app) as url:
+        await page.goto(url + mount + '/')
+        await expect(page.locator('main[data-configuration-ready=true][data-snapshot-ready=true]')).to_be_visible()
+        await page.evaluate('now => Date.now = () => now', view['calculated_at'] * 1000)
+        if width == 390:
+            await page.locator('#language-select').select_option('fr')
+            await page.locator('#theme-select').select_option('dark')
+        await page.locator('#forecast-tab').click()
+        chart_day = page.locator('#forecast-days button[data-day="2026-11-19"]')
+        await chart_day.click()
+
+        trigger = page.locator('#forecast-refresh + #forecast-export')
+        await expect(trigger).to_be_enabled()
+        if width == 390:
+            await expect(trigger).to_have_text('Exporter le CSV')
+            for button in [page.locator('#forecast-refresh'), trigger]:
+                box = await button.bounding_box()
+                assert 0 <= box['x'] < box['x'] + box['width'] <= width
+        else:
+            refresh = await page.locator('#forecast-refresh').bounding_box()
+            export = await trigger.bounding_box()
+            assert refresh['x'] + refresh['width'] <= export['x']
+            assert refresh['y'] == pytest.approx(export['y'], abs=1)
+        await trigger.click()
+
+        dialog = page.get_by_role('dialog')
+        await expect(dialog).to_have_accessible_name('Exporter le CSV EMHASS' if width == 390 else 'Export EMHASS CSV')
+        if width == 390:
+            box = await dialog.bounding_box()
+            assert 0 <= box['x'] < box['x'] + box['width'] <= width
+            assert 0 <= box['y'] < box['y'] + box['height'] <= 844
+            assert await dialog.evaluate('node => node.scrollWidth <= node.clientWidth')
+        await expect(dialog.locator('#forecast-export-date')).to_have_value('2026-11-18')
+        power = dialog.locator('#forecast-export-power')
+        await expect(power.locator('option:checked')).to_have_text('Prévision originale' if width == 390 else 'Original forecast')
+        step = dialog.locator('#forecast-export-step')
+        await expect(step).to_have_value('30')
+        start = dialog.locator('#forecast-export-start')
+        await start.select_option(label='23:30')
+        await step.select_option('60')
+        await expect(start.locator('option:checked')).to_have_text('23:30')
+        await step.select_option('30')
+        steps = dialog.locator('#forecast-export-steps')
+        await steps.fill('2')
+        preview = dialog.get_by_role('status')
+        await expect(preview).to_contain_text('23:30')
+        await expect(preview).to_contain_text('00:30')
+        download_button = dialog.get_by_role('button', name='Télécharger' if width == 390 else 'Download', exact=True)
+        async with page.expect_download() as download_info:
+            await download_button.click()
+        download = await download_info.value
+        assert download.suggested_filename == 'data_weather_forecast.csv'
+        csv_path = tmp_path / download.suggested_filename
+        await download.save_as(csv_path)
+        assert csv_path.read_bytes() == b'2026-11-18 15:30:00+00:00,300.25\n2026-11-18 16:00:00+00:00,2000.25\n'
+
+        if width == 1440:
+            await power.select_option(label='Corrected forecast')
+            async with page.expect_download() as download_info:
+                await download_button.click()
+            await (await download_info.value).save_as(csv_path)
+            assert [float(row.split(b',')[1]) for row in csv_path.read_bytes().splitlines()] == [150.125, 1000.125]
+        await page.keyboard.press('Escape')
+        await expect(dialog).to_be_hidden()
+        await expect(trigger).to_be_focused()
+        await expect(chart_day).to_have_attribute('aria-pressed', 'true')
+
+
+async def test_forecast_export_availability(forecast_page, tmp_path):
+    from playwright.async_api import expect
+
+    page, state, _ = forecast_page
+    view = forecast_payload()
+    state['view'] = {**view, 'intervals': [], 'status': 'loading'}
+    await page.locator('#forecast-tab').click()
+    await expect(page.locator('#forecast-days button')).to_have_count(7)
+    trigger = page.locator('#forecast-export')
+    await expect(trigger).to_be_disabled()
+
+    view['correction']['pr'] = None
+    view.update(status='partial', fetched_at=view['fetched_at'] + 1, calculated_at=view['calculated_at'] + 1)
+    for row in view['intervals']:
+        row.update(corrected_forecast_power_w=None, corrected_forecast_energy_kwh=None)
+    view['intervals'][1].update(forecast_power_w=None, forecast_energy_kwh=None, quality='unavailable')
+    state['view'] = view
+    await expect(trigger).to_be_enabled(timeout=6000)
+    await trigger.click()
+    dialog = page.get_by_role('dialog')
+    power = dialog.locator('#forecast-export-power')
+    corrected = power.get_by_role('option', name='Corrected forecast')
+    await expect(corrected).to_have_js_property('disabled', True)
+    await expect(dialog.get_by_text('historical PR', exact=False)).to_be_visible()
+    download_button = dialog.get_by_role('button', name='Download', exact=True)
+    steps = dialog.locator('#forecast-export-steps')
+    await steps.fill('1')
+    await expect(download_button).to_be_disabled()
+    await dialog.locator('#forecast-export-start').select_option(label='00:00')
+    await dialog.locator('#forecast-export-step').select_option('15')
+    await expect(download_button).to_be_enabled()
+    await steps.fill('1.5')
+    await expect(download_button).to_be_disabled()
+    await steps.fill('0')
+    await expect(download_button).to_be_disabled()
+    await steps.fill('2')
+    await expect(download_button).to_be_disabled()
+    await expect(dialog.get_by_role('status')).to_contain_text('00:15')
+
+    stale = copy.deepcopy(view)
+    stale.update(status='stale', fetched_at=view['fetched_at'] + 1, calculated_at=view['calculated_at'] + 1)
+    stale['correction']['pr'] = 0
+    for row in stale['intervals']:
+        if row['forecast_power_w'] is not None:
+            row.update(corrected_forecast_power_w=0, corrected_forecast_energy_kwh=0)
+    state['view'] = stale
+    await expect(corrected).to_have_js_property('disabled', False, timeout=6000)
+    await expect(dialog.get_by_text('Last successful fetch:', exact=False)).to_have_text(await page.locator('#forecast-fetched').inner_text())
+    await power.select_option(label='Corrected forecast')
+    await steps.fill('1')
+    async with page.expect_download() as download_info:
+        await download_button.click()
+    csv_path = tmp_path / 'zero.csv'
+    await (await download_info.value).save_as(csv_path)
+    assert csv_path.read_bytes() == b'2026-11-01 00:00:00+00:00,0\n'
+
+    view = {**view, 'fetched_at': stale['fetched_at'] + 1, 'calculated_at': stale['calculated_at'] + 1}
+    state['view'] = view
+    await expect(corrected).to_have_js_property('disabled', True, timeout=6000)
+    await expect(dialog.get_by_text('historical PR', exact=False)).to_be_visible()
+    await expect(download_button).to_be_disabled()
+
+
+async def test_forecast_export_tracks_matching_detail(forecast_page):
+    from playwright.async_api import expect
+
+    page, state, _ = forecast_page
+    await page.locator('#forecast-tab').click()
+    await page.locator('#forecast-export').click()
+    dialog = page.get_by_role('dialog')
+    start = dialog.locator('#forecast-export-start')
+    await start.select_option(label='00:00')
+    await dialog.locator('#forecast-export-steps').fill('2')
+    download_button = dialog.get_by_role('button', name='Download', exact=True)
+    await expect(download_button).to_be_enabled()
+
+    view = state['view']
+    state['light'] = {**view, 'fetched_at': view['fetched_at'] + 1, 'calculated_at': view['calculated_at'] + 1}
+    await expect(download_button).to_be_disabled(timeout=6000)
+    await expect(dialog).to_be_visible()
+    await expect(dialog.locator('#forecast-export-steps')).to_have_value('2')
+
+
+async def test_forecast_export_repeated_start_time(forecast_page, tmp_path):
+    from playwright.async_api import expect
+
+    page, state, _ = forecast_page
+    state['view'] = forecast_payload('2026-11-01', 'America/New_York')
+    await page.locator('#forecast-tab').click()
+    await page.locator('#forecast-export').click()
+    dialog = page.get_by_role('dialog')
+    start = dialog.locator('#forecast-export-start')
+    repeated = start.get_by_role('option', name='01:00', exact=False)
+    await expect(repeated).to_have_text(['01:00 GMT-4', '01:00 GMT-5'])
+    values = await repeated.evaluate_all('options => options.map(option => Number(option.value))')
+    assert values[1] - values[0] == 3600
+    await start.select_option(label='01:00 GMT-5')
+    await dialog.locator('#forecast-export-steps').fill('1')
+    async with page.expect_download() as download_info:
+        await dialog.get_by_role('button', name='Download', exact=True).click()
+    csv_path = tmp_path / 'repeated-time.csv'
+    await (await download_info.value).save_as(csv_path)
+    assert csv_path.read_bytes() == b'2026-11-01 06:00:00+00:00,3720\n'

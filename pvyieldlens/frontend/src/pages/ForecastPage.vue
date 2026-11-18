@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { computed, ref, shallowRef, watch } from 'vue';
-import { CircleHelp, Cloud, CloudDrizzle, CloudFog, CloudLightning, CloudRain, CloudSnow, CloudSun, RefreshCw, Settings, Sun } from 'lucide-vue-next';
+import { CircleHelp, Cloud, CloudDrizzle, CloudFog, CloudLightning, CloudRain, CloudSnow, CloudSun, Download, RefreshCw, Settings, Sun } from 'lucide-vue-next';
 import PowerChart from '../PowerChart.vue';
+import ForecastExportDialog from '../components/ForecastExportDialog.vue';
 import { api, ApiError } from '../api';
 import type { ChartPoint, ChartSeries, ChartTooltip } from '../charts';
 import type { EnergyForecast, ForecastDay, ForecastSummary, ForecastView } from '../models';
@@ -14,6 +15,7 @@ defineEmits<{ 'open-settings': [section: 'modules' | 'forecast'] }>();
 const { t } = useI18n();
 const detail = shallowRef<ForecastView | null>(null);
 const selectedDay = ref<string | null>(null);
+const exportOpen = ref(false);
 const error = ref<string | null>(null);
 const refreshPending = ref<'submitting' | 'scheduled' | null>(null);
 let pendingRequest: Promise<void> | null = null;
@@ -49,7 +51,9 @@ const errorMessage = computed(() => {
   return requestError || (view.value?.last_error ? t('forecast_fetch_failed') : '');
 });
 const refreshing = computed(() => refreshPending.value !== null || Boolean(view.value?.refreshing));
-const days = computed(() => detail.value && key(view.value) === key(detail.value) ? detail.value.days : []);
+const matchingDetail = computed(() => detail.value && key(view.value) === key(detail.value) ? detail.value : null);
+const days = computed(() => matchingDetail.value?.days ?? []);
+const canExport = computed(() => matchingDetail.value?.intervals.some(row => row.forecast_power_w != null) ?? false);
 const selected = computed(() => days.value.find(day => day.day === selectedDay.value));
 const selectedIsToday = computed(() => selected.value !== undefined && isToday(selected.value));
 const number = (value: number | null | undefined, digits = 1) => value == null ? '—' :
@@ -105,8 +109,9 @@ const maximum = computed(() => Math.max(1, ...days.value.flatMap(day =>
   [day.forecast_energy_kwh ?? 0, day.corrected_forecast_energy_kwh ?? 0])));
 const rows = computed(() => {
   const day = selected.value;
-  if (!day || !detail.value) return [];
-  return detail.value.intervals.filter(row => row.end > day.start && row.start < day.end)
+  const forecast = matchingDetail.value;
+  if (!day || !forecast) return [];
+  return forecast.intervals.filter(row => row.end > day.start && row.start < day.end)
     .map(row => ({ ...row, start: Math.max(row.start, day.start), end: Math.min(row.end, day.end),
       forecast_energy_kwh: row.forecast_energy_kwh == null ? null : row.forecast_energy_kwh *
         (Math.min(row.end, day.end) - Math.max(row.start, day.start)) / (row.end - row.start),
@@ -188,8 +193,15 @@ async function refreshForecast() {
   <section id="forecast-page" aria-labelledby="forecast-heading">
     <div class="section-heading"><div><p class="eyebrow">{{ t('pv_modules') }} / {{ t('forecast') }}</p><h1 id="forecast-heading">{{ t('forecast') }}</h1>
       <p class="muted">{{ t('forecast_intro') }}</p></div>
-      <button id="forecast-refresh" class="secondary" :disabled="!view || refreshing || prerequisiteMissing" @click="refreshForecast">
-        <RefreshCw :size="15" aria-hidden="true" />{{ t('forecast_refresh') }}</button></div>
+      <div class="forecast-header-actions">
+        <button id="forecast-refresh" class="secondary" :disabled="!view || refreshing || prerequisiteMissing" @click="refreshForecast">
+          <RefreshCw :size="15" aria-hidden="true" />{{ t('forecast_refresh') }}</button>
+        <button id="forecast-export" type="button" class="secondary" aria-haspopup="dialog" :disabled="!canExport" @click="exportOpen = true">
+          <Download :size="15" aria-hidden="true" />{{ t('forecast_export') }}</button>
+      </div>
+    </div>
+    <ForecastExportDialog v-if="active" :open="exportOpen" :forecast="matchingDetail" :language="language" :home-timezone="homeTimezone"
+      :stale-fetch-label="status === 'stale' ? fetchedTime : ''" @close="exportOpen = false" />
     <div class="metrics forecast-metrics">
       <article v-for="card in [{ id: 'forecast-remaining', label: 'forecast_remaining', total: view?.remaining_today },
         { id: 'forecast-tomorrow', label: 'forecast_tomorrow', total: view?.tomorrow }]" :key="card.id" class="metric">

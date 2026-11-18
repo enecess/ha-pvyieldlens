@@ -81,6 +81,12 @@ These are estimated DC reference values for one PV module array, using plane-of-
 | Tomorrow | `sensor.pvyieldlens_forecast_energy_tomorrow` |
 | Seven days | `sensor.pvyieldlens_forecast_energy_7d` |
 
+### Export a PV power forecast to EMHASS
+
+In **Forecast**, select **Export CSV** for an EMHASS setup where a single inverter carries PV. Choose **Original forecast** or **Corrected forecast**, then select the start date and time in your Home Assistant time zone. Set the optimization interval and number of steps to match the run. The preview shows the window and row count. Each CSV row gives the UTC start time and average PV power in watts for that step.
+
+In EMHASS, set `set_use_pv=true` and `weather_forecast_method=csv`. Save the downloaded `data_weather_forecast.csv` in the `data_path` configured for EMHASS. For each run, export a window starting at its first optimization step, with the same interval and enough rows for the full horizon. The EMHASS v0.18.11 PV reader assigns rows to optimization steps in file order. [EMHASS CSV documentation](https://emhass.readthedocs.io/en/stable/forecasts.html#passing-your-own-forecast-data) · [EMHASS PV reader source](https://github.com/davidusb-geek/emhass/blob/v0.18.11/src/emhass/forecast.py#L1285-L1333)
+
 ## Installation and connection
 
 The App requires Home Assistant OS with Home Assistant 2025.9.0 or newer. Install and start PVYieldLens from **Settings > Apps > Install app**, then open its Web UI. Versions before 2026.2 use **Settings > Add-ons > Add-on Store**.
