@@ -72,7 +72,7 @@ const angleSelections = computed(() => {
     const entity = angleOptions.value.find(entity => entity.entity_id === id);
     const angle = entity?.angle_deg;
     return [axis, id && t('angle_entity_reading', { entity: entity?.name || id,
-      value: angle == null || (axis === 'tilt' && angle > 90) ? t('unavailable') : `${number.format(angle)}°`,
+      value: angle == null || (axis === 'tilt' && angle > 90) ? t('angle_reading_unavailable') : `${number.format(angle)}°`,
     })];
   }));
 });

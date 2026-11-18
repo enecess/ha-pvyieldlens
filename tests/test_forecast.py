@@ -3,7 +3,7 @@ from datetime import datetime
 import pytest
 from pydantic import ValidationError
 
-from pvyieldlens.forecast import ForecastBatch, WeatherSample, calculate_forecast, forecast_view
+from pvyieldlens.forecast import ForecastAngleIssue, ForecastBatch, WeatherSample, calculate_forecast, forecast_view
 from pvyieldlens.settings import ForecastSettings, HALocation
 from forecast_fixtures import constant_intervals, forecast_input
 
@@ -230,6 +230,37 @@ def test_view_empty_states_do_not_invent_weather():
         assert view.today.data_completeness_percent == 0
         assert view.intervals == ()
         assert view.fetched_at is None
+
+
+@pytest.mark.parametrize('irradiance', [None, 0], ids=['missing', 'zero'])
+def test_angle_failure_requires_overlapping_cached_power(irradiance):
+    inputs = forecast_input()
+    settings = ForecastSettings(enabled=True, tilt_entity='sensor.tilt', azimuth_deg=180)
+    batch = ForecastBatch(
+        inputs=inputs, fetched_at=-1, tilt_entity='sensor.tilt', angles_read_at=-2, weather_samples=(),
+        intervals=calculate_forecast(inputs, (
+            WeatherSample(at=-3600, irradiance_w_m2=800, air_temperature_c=20),
+            WeatherSample(at=0, irradiance_w_m2=800, air_temperature_c=20),
+            WeatherSample(at=3600, irradiance_w_m2=irradiance, air_temperature_c=20),
+            WeatherSample(at=7200, irradiance_w_m2=None, air_temperature_c=20),
+        )),
+    )
+    issues = (ForecastAngleIssue(axis='tilt', entity_id='sensor.tilt'),)
+    view = forecast_view(batch, inputs.location, settings, 0,
+                         last_error='forecast_angle_unavailable', unavailable_angles=issues)
+    assert view.last_error == 'forecast_angle_unavailable'
+    assert view.unavailable_angles == issues
+    if irradiance is None:
+        assert view.status == 'unavailable'
+        assert view.intervals == ()
+        assert view.geometry is None
+        assert view.fetched_at is None
+        assert view.today.forecast_energy_kwh is None
+    else:
+        assert view.status == 'stale'
+        assert tuple(row.forecast_power_w for row in view.intervals) == (0, None)
+        assert view.geometry.model_dump() == {'tilt_deg': 25, 'azimuth_deg': 180, 'read_at': -2}
+        assert view.fetched_at == -1
 
 
 @pytest.mark.parametrize('age,last_error,expected', [

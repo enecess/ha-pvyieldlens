@@ -155,8 +155,9 @@ def forecast_view(batch: ForecastBatch | None, location: HALocation | None, sett
         'forecast_energy_kwh': row.forecast_power_w * (min(row.end, boundaries[-1]) - max(row.start, boundaries[0])) / 3_600_000
         if row.forecast_power_w is not None else None,
     }) for row in usable.intervals if row.end > boundaries[0] and row.start < boundaries[-1]) if usable else ()
-    if last_error == 'forecast_angle_unavailable' and not intervals:
+    if last_error == 'forecast_angle_unavailable' and not any(row.forecast_power_w is not None for row in intervals):
         usable = None
+        intervals = ()
 
     intervals = tuple(CorrectedForecastInterval(**row.model_dump(),
         corrected_forecast_power_w=row.forecast_power_w * ratio if row.forecast_power_w is not None and ratio is not None else None,

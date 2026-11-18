@@ -187,11 +187,11 @@ def create_app(service: Service, runtime: Runtime, run_background=True) -> FastA
             for state in states:
                 entity = state.entity_id
                 unit = state.attributes.unit_of_measurement
-                is_angle = unit == '°' and entity.startswith(('sensor.', 'number.', 'input_number.'))
-                if entity.startswith('sensor.pvyieldlens_') or not (is_angle or entity.startswith('sensor.')):
+                angle_candidate = entity in selected or (unit == '°' and entity.startswith(('sensor.', 'number.', 'input_number.')))
+                if entity.startswith('sensor.pvyieldlens_') or not (angle_candidate or entity.startswith('sensor.')):
                     continue
                 row = {'entity_id': entity, 'name': state.attributes.friendly_name or entity, 'unit': unit, 'state': state.state}
-                if is_angle or entity in selected:
+                if angle_candidate:
                     row['angle_deg'] = source_value(state.state, unit, 'azimuth')
                 entities[entity] = row
             for entity in sorted(selected - entities.keys()):

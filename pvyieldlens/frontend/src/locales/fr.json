@@ -60,6 +60,7 @@
   "angle_entity_help": "Choisissez un capteur, une entité numérique ou un assistant numérique dont la valeur est en degrés (°).",
   "tilt_help": "L’inclinaison va de 0° à 90°.",
   "angle_entity_reading": "{entity} · {value}",
+  "angle_reading_unavailable": "Lecture temporairement indisponible",
   "forecast_module_settings": "Angles des modules et NOCT",
   "forecast_geometry": "Angles utilisés · Inclinaison {tilt} · Azimut {azimuth}",
   "forecast_angle_read_at": "Angles lus le {time}",

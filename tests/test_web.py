@@ -345,14 +345,18 @@ async def test_connection_preview_does_not_replace_active_forecast_location(serv
         assert (await client.get('/api/config')).json()['location'] == location.model_dump()
 
 
-async def test_connection_discovers_degree_entities_for_forecast(service, monkeypatch):
+@pytest.mark.parametrize('domain', ['number', 'input_number'])
+async def test_connection_discovers_degree_entities_for_forecast(service, monkeypatch, domain):
     from pvyieldlens.home_assistant import HomeAssistantClient
     from pvyieldlens.settings import ForecastSettings
     from test_forecast_service import angle_state
 
     service.store.set_meta('connection', '{"url":"http://ha.test","token":"saved-token"}')
-    service.forecast.configure(None, ForecastSettings(tilt_entity='number.tracker_tilt',
+    selected = f'{domain}.tracker_tilt'
+    service.forecast.configure(None, ForecastSettings(tilt_entity=selected,
         azimuth_entity='sensor.missing'), '', None)
+    tracker = angle_state(selected, '28', 'rad')
+    tracker['attributes']['friendly_name'] = 'Tracker tilt'
 
     def respond(request):
         if request.url.path == '/api/config':
@@ -363,8 +367,9 @@ async def test_connection_discovers_degree_entities_for_forecast(service, monkey
             angle_state('number.azimuth', '180'),
             angle_state('input_number.azimuth', '359.9'),
             angle_state('sensor.offline', 'unavailable'),
-            angle_state('number.tracker_tilt', 'unknown', None),
+            tracker,
             angle_state('number.power', '10', 'W'),
+            angle_state('input_number.power', '10', 'W'),
             angle_state('sensor.power', '10', 'W'),
             angle_state('sensor.pvyieldlens_output', '0'),
         ])
@@ -380,10 +385,16 @@ async def test_connection_discovers_degree_entities_for_forecast(service, monkey
     entities = {entity['entity_id']: entity for entity in response.json()['entities']}
     assert {entity: row['angle_deg'] for entity, row in entities.items() if 'angle_deg' in row} == {
         'sensor.tilt': 0, 'number.azimuth': 180, 'input_number.azimuth': 359.9, 'sensor.offline': None,
-        'number.tracker_tilt': None, 'sensor.missing': None,
+        selected: None, 'sensor.missing': None,
     }
     assert set(entities) == {'sensor.tilt', 'number.azimuth', 'input_number.azimuth', 'sensor.offline',
-                            'number.tracker_tilt', 'sensor.missing', 'sensor.power'}
+                            selected, 'sensor.missing', 'sensor.power'}
+    assert entities[selected] == {
+        'entity_id': selected, 'name': 'Tracker tilt', 'state': '28', 'unit': 'rad', 'angle_deg': None,
+    }
+    assert entities['sensor.missing'] == {
+        'entity_id': 'sensor.missing', 'name': 'sensor.missing', 'state': 'unavailable', 'unit': None, 'angle_deg': None,
+    }
 
 
 @pytest.mark.parametrize('dynamic', [False, True])

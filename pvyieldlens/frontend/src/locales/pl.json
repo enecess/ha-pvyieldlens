@@ -60,6 +60,7 @@
   "angle_entity_help": "Wybierz czujnik, encję liczbową lub pomocnika liczbowego podającego stan w stopniach (°).",
   "tilt_help": "Zakres nachylenia wynosi od 0° do 90°.",
   "angle_entity_reading": "{entity} · {value}",
+  "angle_reading_unavailable": "Odczyt chwilowo niedostępny",
   "forecast_module_settings": "Kąty modułów i NOCT",
   "forecast_geometry": "Kąty użyte w prognozie · Nachylenie {tilt} · Azymut {azimuth}",
   "forecast_angle_read_at": "Kąty odczytano {time}",

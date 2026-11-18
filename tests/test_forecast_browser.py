@@ -116,8 +116,8 @@ async def test_forecast_days_select_quarter_hour_details_and_preserve_selection(
 
 
 @pytest.mark.parametrize(('status', 'failed_angle'), [
-    ('disabled', False), ('location_unavailable', False), ('unavailable', True), ('loading', False),
-    ('partial', False), ('stale', False), ('stale', True),
+    ('disabled', False), ('location_unavailable', False), ('unavailable', False), ('unavailable', True),
+    ('loading', False), ('partial', False), ('stale', False), ('stale', True),
 ])
 async def test_forecast_states_are_truthful(forecast_page, status, failed_angle):
     from playwright.async_api import expect
@@ -134,7 +134,10 @@ async def test_forecast_states_are_truthful(forecast_page, status, failed_angle)
                                       forecast_energy_kwh=None, corrected_forecast_energy_kwh=None, quality='unavailable')
     issues = [{'axis': 'tilt', 'entity_id': 'sensor.tracker_tilt'}]
     if status == 'unavailable':
-        view.update(last_error='forecast_angle_unavailable', unavailable_angles=issues)
+        if failed_angle:
+            view.update(last_error='forecast_angle_unavailable', unavailable_angles=issues)
+        else:
+            view['last_error'] = 'forecast_fetch_failed'
     if status == 'stale':
         if failed_angle:
             clock = await page.context.new_cdp_session(page)
@@ -192,10 +195,14 @@ async def test_forecast_states_are_truthful(forecast_page, status, failed_angle)
             await expect(page.locator('#forecast-tomorrow')).to_have_text('—')
             await expect(page.locator('#forecast-geometry')).to_have_count(0)
             await expect(page.locator('#forecast-refresh')).to_be_enabled()
-            await expect(page.locator('#forecast-error')).to_contain_text('Module tilt')
-            await expect(page.locator('#forecast-error')).to_contain_text('sensor.tracker_tilt')
-            await expect(page.locator('#forecast-error')).not_to_contain_text('Showing the last forecast')
-            await expect(page.locator('#forecast-error')).not_to_contain_text('Weather refresh failed')
+            if failed_angle:
+                await expect(page.locator('#forecast-error')).to_contain_text('Module tilt')
+                await expect(page.locator('#forecast-error')).to_contain_text('sensor.tracker_tilt')
+                await expect(page.locator('#forecast-error')).not_to_contain_text('Showing the last forecast')
+                await expect(page.locator('#forecast-error')).not_to_contain_text('Weather refresh failed')
+            else:
+                await expect(page.locator('#forecast-status')).to_have_text('No usable weather forecast is available. Retry the refresh.')
+                await expect(page.locator('#forecast-error')).to_contain_text('Weather refresh failed')
     await page.locator('#open-forecast-settings').click()
     await expect(page.locator('[data-settings-section=forecast]')).to_be_visible()
 

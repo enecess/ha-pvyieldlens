@@ -59,6 +59,7 @@
   "angle_entity_help": "Choose a sensor, number or number helper that reports degrees (°).",
   "tilt_help": "Tilt range is 0° to 90°.",
   "angle_entity_reading": "{entity} · {value}",
+  "angle_reading_unavailable": "Temporarily unreadable",
   "forecast_module_settings": "Module angles and NOCT",
   "forecast_geometry": "Batch angles · Tilt {tilt} · Azimuth {azimuth}",
   "forecast_angle_read_at": "Angles read at {time}",
