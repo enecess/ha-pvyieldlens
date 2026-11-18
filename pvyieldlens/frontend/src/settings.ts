@@ -1,14 +1,20 @@
 import type { Configuration, ConfigurationUpdate, MonitoringSettings } from './models';
 
 export type SettingsSection = 'connection' | 'modules' | 'sources' | 'monitoring' | 'forecast';
+export const forecastAxes = ['tilt', 'azimuth'] as const;
+type AngleSource = 'fixed' | 'entity';
 export interface SettingsDraft {
   monitoring: { [Key in Exclude<keyof MonitoringSettings, 'home_timezone'>]: string };
   connection: { url: string; token: string };
-  forecast: { enabled: boolean; tilt_deg: string; azimuth_deg: string; noct_c: string; pr_history_days: string };
+  forecast: {
+    enabled: boolean; tilt_deg: string; azimuth_deg: string; noct_c: string; pr_history_days: string;
+    tilt_source: AngleSource; azimuth_source: AngleSource; tilt_entity: string; azimuth_entity: string;
+  };
 }
 
 export function draftFromConfiguration(value: Configuration): SettingsDraft {
   const settings = value.monitoring_settings;
+  const forecast = value.forecast_settings;
   return {
     monitoring: {
       total_max_power_at_stc_w: settings ? String(settings.total_max_power_at_stc_w) : '',
@@ -22,11 +28,15 @@ export function draftFromConfiguration(value: Configuration): SettingsDraft {
     },
     connection: { url: value.connection.url, token: '' },
     forecast: {
-      enabled: value.forecast_settings.enabled,
-      tilt_deg: value.forecast_settings.tilt_deg === null ? '' : String(value.forecast_settings.tilt_deg),
-      azimuth_deg: value.forecast_settings.azimuth_deg === null ? '' : String(value.forecast_settings.azimuth_deg),
-      noct_c: String(value.forecast_settings.noct_c),
-      pr_history_days: String(value.forecast_settings.pr_history_days),
+      enabled: forecast.enabled,
+      tilt_source: forecast.tilt_entity ? 'entity' : 'fixed',
+      azimuth_source: forecast.azimuth_entity ? 'entity' : 'fixed',
+      tilt_entity: forecast.tilt_entity ?? '',
+      azimuth_entity: forecast.azimuth_entity ?? '',
+      tilt_deg: forecast.tilt_deg === null ? '' : String(forecast.tilt_deg),
+      azimuth_deg: forecast.azimuth_deg === null ? '' : String(forecast.azimuth_deg),
+      noct_c: String(forecast.noct_c),
+      pr_history_days: String(forecast.pr_history_days),
     },
   };
 }
@@ -40,10 +50,17 @@ export function hasSettingsChanges(draft: SettingsDraft, baseline: SettingsDraft
     || urlValue(draft.connection.url) !== urlValue(baseline.connection.url)
     || draft.connection.token !== baseline.connection.token
     || draft.forecast.enabled !== baseline.forecast.enabled
-    || (['tilt_deg', 'azimuth_deg', 'noct_c', 'pr_history_days'] as const).some(key => numericValue(draft.forecast[key]) !== numericValue(baseline.forecast[key]));
+    || forecastAxes.some(axis => {
+      const source = draft.forecast[`${axis}_source`];
+      return source !== baseline.forecast[`${axis}_source`] || (source === 'entity'
+        ? draft.forecast[`${axis}_entity`].trim() !== baseline.forecast[`${axis}_entity`].trim()
+        : numericValue(draft.forecast[`${axis}_deg`]) !== numericValue(baseline.forecast[`${axis}_deg`]));
+    })
+    || (['noct_c', 'pr_history_days'] as const).some(key => numericValue(draft.forecast[key]) !== numericValue(baseline.forecast[key]));
 }
 
 export function configurationUpdateFromDraft(draft: SettingsDraft, context: { mode: 'app' | 'docker'; home_timezone: string }): ConfigurationUpdate {
+  const forecast = draft.forecast;
   return {
     monitoring_settings: {
       total_max_power_at_stc_w: Number(draft.monitoring.total_max_power_at_stc_w),
@@ -58,11 +75,13 @@ export function configurationUpdateFromDraft(draft: SettingsDraft, context: { mo
     },
     ...(context.mode === 'app' ? {} : { connection: { ...draft.connection } }),
     forecast_settings: {
-      enabled: draft.forecast.enabled,
-      tilt_deg: draft.forecast.tilt_deg === '' ? null : Number(draft.forecast.tilt_deg),
-      azimuth_deg: draft.forecast.azimuth_deg === '' ? null : Number(draft.forecast.azimuth_deg),
-      noct_c: Number(draft.forecast.noct_c),
-      pr_history_days: Number(draft.forecast.pr_history_days),
+      enabled: forecast.enabled,
+      tilt_deg: forecast.tilt_source === 'fixed' && forecast.tilt_deg !== '' ? Number(forecast.tilt_deg) : null,
+      azimuth_deg: forecast.azimuth_source === 'fixed' && forecast.azimuth_deg !== '' ? Number(forecast.azimuth_deg) : null,
+      tilt_entity: forecast.tilt_source === 'entity' ? forecast.tilt_entity.trim() : null,
+      azimuth_entity: forecast.azimuth_source === 'entity' ? forecast.azimuth_entity.trim() : null,
+      noct_c: Number(forecast.noct_c),
+      pr_history_days: Number(forecast.pr_history_days),
     },
   };
 }

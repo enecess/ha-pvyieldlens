@@ -80,7 +80,13 @@ Lo smussamento riguarda solo il disegno. Mouse, tocco e tastiera mostrano i reco
 
 ## Previsioni di produzione
 
-Le previsioni sono disattivate per impostazione predefinita alla prima installazione. In **Impostazioni > Previsioni**, attivale e inserisci inclinazione (0–90°), direzione (nord 0°, est 90°, sud 180°, ovest 270° o azimut personalizzato da 0° a meno di 360°) e NOCT della scheda tecnica (oltre 20°C, massimo 80°C; predefinito 45°C). Potenza massima totale in STC e coefficiente di temperatura di Pmax sono condivisi con il monitoraggio. Posizione e fuso provengono automaticamente dalla connessione HA salvata; modificali in HA.
+Le previsioni sono disattivate alla prima installazione. Attivale in **Impostazioni > Previsioni**. La posizione e il fuso orario provengono dalla connessione Home Assistant salvata e si impostano in HA.
+
+In **Impostazioni > Moduli fotovoltaici**, scegli **Valore fisso** o **Entità HA** separatamente per inclinazione e direzione. L’inclinazione va da 0° a 90° inclusi. L’azimut si misura in senso orario dal nord (0°) fino a 360° esclusi. Le direzioni fisse comprendono anche est (90°), sud (180°) e ovest (270°). Le entità angolari sono `sensor.*`, `number.*` o `input_number.*` con unità `°`. Seleziona **Aggiorna entità** nelle impostazioni della connessione per trovarle.
+
+In **Moduli fotovoltaici**, inserisci la NOCT della scheda tecnica (oltre 20°C, massimo 80°C, valore predefinito 45°C). La potenza massima totale in STC e il coefficiente di temperatura di Pmax servono anche al monitoraggio. Per moduli identici, moltiplica la potenza nominale di un modulo per il numero di moduli, ad esempio 500 W × 10 = 5000 W.
+
+A ogni aggiornamento gli angoli HA selezionati vengono letti una volta. La stessa coppia di angoli viene usata per stimare tutti gli intervalli di 15 minuti della previsione a sette giorni, compresi quelli già trascorsi oggi. La pagina delle previsioni mostra gli angoli usati e l’ora di lettura separatamente dall’ora di acquisizione dei dati meteo. Se un’entità è indisponibile, la pagina la indica e mostra gli intervalli ancora utilizzabili dell’ultima previsione. Senza una previsione utilizzabile, l’energia appare come **—** ed è possibile riprovare.
 
 Il monitoraggio usa la **Temperatura dei moduli** misurata. Le previsioni usano la **Temperatura dell’aria** e la **Temperatura nominale di funzionamento della cella (NOCT)** per calcolare la **Temperatura stimata delle celle**. Sono grandezze distinte; il monitoraggio non converte la temperatura dei moduli in temperatura delle celle.
 

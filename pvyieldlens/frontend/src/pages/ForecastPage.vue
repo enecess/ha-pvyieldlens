@@ -19,6 +19,7 @@ const refreshPending = ref<'submitting' | 'scheduled' | null>(null);
 let pendingRequest: Promise<void> | null = null;
 const key = (view: ForecastSummary | null) => JSON.stringify([
   view?.fetched_at, view?.home_timezone, view?.today?.start, view?.seven_days?.end,
+  view?.geometry?.tilt_deg, view?.geometry?.azimuth_deg, view?.geometry?.read_at,
   view?.correction?.pr, view?.correction?.history_days, view?.correction?.start, view?.correction?.end,
 ]);
 const view = computed(() => props.summary && (!detail.value || props.summary.calculated_at >= detail.value.calculated_at)
@@ -32,7 +33,17 @@ const differentTimezone = computed(() => homeTimezone.value !== new Intl.DateTim
   timeZone: props.displayTimezone,
 }).resolvedOptions().timeZone);
 const status = computed(() => view.value?.status ?? 'loading');
-const operationalStatus = computed(() => ['disabled', 'location_unavailable', 'loading', 'unavailable'].includes(status.value));
+const angleUnavailable = computed(() => view.value?.last_error === 'forecast_angle_unavailable');
+const operationalStatus = computed(() => ['disabled', 'location_unavailable', 'loading'].includes(status.value)
+  || status.value === 'unavailable' && !angleUnavailable.value);
+const errorMessage = computed(() => {
+  if (angleUnavailable.value) {
+    const angles = view.value!.unavailable_angles.map(({ axis, entity_id }) =>
+      `${t(axis === 'tilt' ? 'forecast_tilt' : 'forecast_direction')} (${entity_id})`).join(' · ');
+    return t(view.value!.geometry ? 'forecast_angle_unavailable_cached' : 'forecast_angle_unavailable', { angles });
+  }
+  return error.value ? t(error.value) : view.value?.last_error ? t('forecast_fetch_failed') : '';
+});
 const refreshing = computed(() => refreshPending.value !== null || Boolean(view.value?.refreshing));
 const days = computed(() => detail.value && key(view.value) === key(detail.value) ? detail.value.days : []);
 const selected = computed(() => days.value.find(day => day.day === selectedDay.value));
@@ -75,10 +86,17 @@ const dayLabel = (day: ForecastDay) => `${new Intl.DateTimeFormat(props.language
 }).format(new Date(day.start * 1000))}: ${t(weatherType(day).label)} · ${t('forecast_air_temperature_range', {
   high: number(day.weather?.air_temperature_max_c), low: number(day.weather?.air_temperature_min_c),
 })} · ${t('forecast_original_energy')} ${energy(day)} kWh · ${t('forecast_corrected_energy')} ${energy(day, true)} kWh`;
+const updateTime = (at: number) => formatTimes([at], props.language, props.displayTimezone, {
+  year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', hourCycle: 'h23',
+})[0];
 const fetchedTime = computed(() => view.value?.fetched_at == null ? t('forecast_never_fetched')
-  : t('forecast_fetched', { time: formatTimes([view.value.fetched_at], props.language, props.displayTimezone, {
-    year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', hourCycle: 'h23',
-  })[0] }));
+  : t('forecast_fetched', { time: updateTime(view.value.fetched_at) }));
+const geometryText = computed(() => {
+  if (!view.value?.geometry) return '';
+  const { tilt_deg, azimuth_deg } = view.value.geometry;
+  const degrees = new Intl.NumberFormat(props.language, { maximumSignificantDigits: 21, useGrouping: false });
+  return t('forecast_geometry', { tilt: `${degrees.format(tilt_deg)}°`, azimuth: `${degrees.format(azimuth_deg)}°` });
+});
 const maximum = computed(() => Math.max(1, ...days.value.flatMap(day =>
   [day.forecast_energy_kwh ?? 0, day.corrected_forecast_energy_kwh ?? 0])));
 const rows = computed(() => {
@@ -184,7 +202,7 @@ async function refreshForecast() {
     <div v-if="operationalStatus || refreshing" class="forecast-status-line">
       <p v-if="operationalStatus" id="forecast-status" role="status" :data-status="status">{{ t(`forecast_status_${status}`) }}</p>
       <span id="forecast-refresh-state" class="muted" role="status">{{ refreshing ? t('forecast_refreshing') : '' }}</span></div>
-    <p id="forecast-error" class="muted" role="status">{{ error ? t(error) : view?.last_error ? t('forecast_fetch_failed') : '' }}</p>
+    <p id="forecast-error" class="muted" role="status">{{ errorMessage }}</p>
     <div v-show="days.length" id="forecast-data">
       <p v-if="differentTimezone" id="forecast-home-time-note" class="muted">{{ t('forecast_home_time_note', { timezone: homeTimezone }) }}</p>
       <article class="panel"><div class="panel-heading"><h2>{{ t('forecast_daily') }}</h2>
@@ -230,7 +248,13 @@ async function refreshForecast() {
         </details>
       </article>
     </div>
-    <div class="inline-notes forecast-meta muted"><span id="forecast-fetched">{{ fetchedTime }}</span>
+    <div class="inline-notes forecast-meta muted">
+      <p v-if="view?.geometry" class="forecast-geometry-notes">
+        <span id="forecast-geometry">{{ geometryText }}</span>
+        <span id="forecast-angle-read-at">{{ t('forecast_angle_read_at', { time: updateTime(view.geometry.read_at) }) }}</span>
+        <span>{{ t('forecast_geometry_approximation') }}</span>
+      </p>
+      <span id="forecast-fetched">{{ fetchedTime }}</span>
       <a href="https://open-meteo.com/" target="_blank" rel="noopener noreferrer">{{ t('forecast_attribution') }}</a></div>
     <button id="open-forecast-settings" class="secondary" @click="$emit('open-settings', 'forecast')"><Settings :size="15" aria-hidden="true" />{{ t('forecast_configure') }}</button>
   </section>

@@ -10,6 +10,8 @@
   "fetched_at": 1793494800.0,
   "calculated_at": 1793539200.0,
   "last_error": null,
+  "geometry": null,
+  "unavailable_angles": [],
   "home_timezone": "UTC",
   "today": {
     "start": 1793491200.0,

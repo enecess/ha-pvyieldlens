@@ -17,6 +17,8 @@ export interface ForecastSettings {
   enabled: boolean;
   tilt_deg: number | null;
   azimuth_deg: number | null;
+  tilt_entity: string | null;
+  azimuth_entity: string | null;
   noct_c: number;
   pr_history_days: number;
 }
@@ -42,7 +44,7 @@ export interface ConfigurationSaveResult extends Configuration {
 }
 
 export interface ConnectionInput { url: string; token?: string }
-export interface SourceEntity { entity_id: string; name: string; unit: string | null; state: string }
+export interface SourceEntity { entity_id: string; name: string; unit: string | null; state: string; angle_deg?: number | null }
 export interface ConnectionResult { home_timezone: string; location: HALocation | null; entities: SourceEntity[] }
 export interface ConfigurationUpdate {
   monitoring_settings: MonitoringSettings;
@@ -156,6 +158,8 @@ export interface ForecastView {
   calculated_at: number;
   last_error: string | null;
   home_timezone: string | null;
+  geometry: { tilt_deg: number; azimuth_deg: number; read_at: number } | null;
+  unavailable_angles: { axis: 'tilt' | 'azimuth'; entity_id: string }[];
   today: EnergyForecast | null;
   remaining_today: EnergyForecast | null;
   tomorrow: EnergyForecast | null;

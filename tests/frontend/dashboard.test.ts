@@ -11,7 +11,7 @@ const configuration: Configuration = {
     actual_power_entity: 'sensor.power', module_temperature_entity: 'sensor.temp', irradiance_entity: 'sensor.sun',
     settlement_interval_minutes: 1, live_window_seconds: 60, update_interval_seconds: 1,
     actual_power_max_age_seconds: 300, module_temperature_max_age_seconds: 900, irradiance_max_age_seconds: 300, home_timezone: 'UTC' },
-  forecast_settings: { enabled: false, tilt_deg: null, azimuth_deg: null, noct_c: 45, pr_history_days: 14 },
+  forecast_settings: { enabled: false, tilt_deg: null, azimuth_deg: null, tilt_entity: null, azimuth_entity: null, noct_c: 45, pr_history_days: 14 },
   location: null, mode: 'docker', connection: { url: 'http://ha', token_set: true },
 };
 const snapshot: Snapshot = {
@@ -24,7 +24,7 @@ const snapshot: Snapshot = {
   energy_totals: { estimated_energy_today_kwh: 0, estimated_energy_lifetime_kwh: 0, today_allocation_complete: true, day: '2026-11-14', home_timezone: 'UTC',
     today_valid_seconds: 0, lifetime_valid_seconds: 0, settled_until: 10000 }, sources: [], home_timezone: 'UTC', location: null,
   forecast: { status: 'disabled', refreshing: false, fetched_at: null, calculated_at: 10000, last_error: null,
-    home_timezone: null, today: null, remaining_today: null, tomorrow: null, seven_days: null },
+    geometry: null, unavailable_angles: [], correction: null, home_timezone: null, today: null, remaining_today: null, tomorrow: null, seven_days: null },
 };
 const scopes: ReturnType<typeof effectScope>[] = [];
 const flushPromises = () => new Promise<void>(resolve => setImmediate(resolve));

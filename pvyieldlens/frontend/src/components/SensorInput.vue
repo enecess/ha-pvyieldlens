@@ -4,9 +4,10 @@ import { ChevronDown } from 'lucide-vue-next';
 import { useI18n } from '../i18n';
 import type { SourceEntity } from '../models';
 
-const props = defineProps<{
+const props = withDefaults(defineProps<{
   name: string; label: string; entities: SourceEntity[]; active: boolean; disabled: boolean;
-}>();
+  pattern?: string;
+}>(), { pattern: 'sensor\\.[a-z0-9_]+' });
 const model = defineModel<string>({ required: true });
 const { t } = useI18n();
 const input = ref<HTMLInputElement>();
@@ -97,7 +98,7 @@ async function keydown(event: KeyboardEvent) {
     <div class="sensor-combobox">
       <input :id="inputId" ref="input" :name="name" :value="model" role="combobox" aria-autocomplete="list"
         :aria-expanded="open" :aria-controls="listId" :aria-activedescendant="open && activeIndex >= 0 ? `${listId}-${activeIndex}` : undefined"
-        pattern="sensor\.[a-z0-9_]+" :placeholder="t('select_source')" autocomplete="off" required :disabled="disabled"
+        :pattern="pattern" :placeholder="t(name.startsWith('forecast_') ? 'search_entities' : 'select_source')" autocomplete="off" required :disabled="disabled"
         @input="edit" @focus="show" @click="show" @blur="open = false" @keydown="keydown">
       <ChevronDown :size="14" aria-hidden="true" />
     </div>
@@ -110,7 +111,7 @@ async function keydown(event: KeyboardEvent) {
             <span class="sensor-option-id">{{ entity.entity_id }}</span>
           </div>
         </div>
-        <p v-if="!filtered.length" class="sensor-empty" role="status">{{ t('no_matching_sensors') }}</p>
+        <p v-if="!filtered.length" class="sensor-empty" role="status">{{ t(name.startsWith('forecast_') ? 'no_matching_entities' : 'no_matching_sensors') }}</p>
       </div>
     </Teleport>
   </div>

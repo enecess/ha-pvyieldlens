@@ -49,7 +49,13 @@ Charts smooth only the drawing. Mouse, touch and keyboard inspection shows origi
 
 ## Generation forecast
 
-Forecast is disabled by default on first installation. Under **Settings > Forecast**, enable it, enter module tilt (0–90°), compass direction (north 0°, east 90°, south 180°, west 270°, or a custom value from 0° to below 360°), and NOCT from the datasheet (above 20°C, at most 80°C; default 45°C). Total max power at STC and Temperature coefficient of Pmax are shared with monitoring. Location and time zone come automatically from the saved Home Assistant connection; change them in HA.
+Forecast is disabled by default on first installation. Enable it under **Settings > Forecast**. Location and time zone come from the saved Home Assistant connection. Set them in HA.
+
+Under **Settings > PV modules**, choose **Fixed value** or **HA entity** independently for tilt and direction. Tilt ranges from 0° to 90° inclusive. Compass azimuth increases clockwise from north (0°) up to but excluding 360°. The fixed direction presets also include east (90°), south (180°), and west (270°). An angle entity must be a `sensor.*`, `number.*`, or `input_number.*` whose state is in degrees (`°`). Use **Refresh entities** in the connection settings to find candidates.
+
+Enter the datasheet NOCT in **PV modules** (above 20°C and at most 80°C, default 45°C). Total max power at STC and the temperature coefficient of Pmax are shared with monitoring. For identical modules, multiply the rating of one module by the module count, for example 500 W × 10 = 5000 W.
+
+For a tracker, every refresh reads the selected HA angles once. All 15-minute periods in that seven-day forecast, including earlier periods today, use that same pair of angles. The Forecast page shows the angles and their read time separately from the weather fetch time. If an entity is unavailable, the page identifies it and shows any still-usable periods from the last forecast. With no usable forecast, energy values show **—** and you can retry the refresh.
 
 Monitoring uses the measured **Module temperature**. Forecast uses **Air temperature** and **Nominal operating cell temperature (NOCT)** to calculate **Estimated cell temperature**. These are separate physical quantities; the monitoring model does not convert module temperature to cell temperature.
 

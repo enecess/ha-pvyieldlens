@@ -4,7 +4,7 @@ import { Check, Clock3, Compass, Database, Plug, RefreshCw, RotateCcw, Sun } fro
 import { api, ApiError } from '../api';
 import SensorInput from '../components/SensorInput.vue';
 import { useI18n } from '../i18n';
-import { configurationUpdateFromDraft, draftFromConfiguration, hasSettingsChanges, type SettingsSection } from '../settings';
+import { configurationUpdateFromDraft, draftFromConfiguration, forecastAxes, hasSettingsChanges, type SettingsSection } from '../settings';
 import type { Configuration, ConfigurationSaveResult, ConnectionResult, HALocation } from '../models';
 
 const props = defineProps<{ active: boolean; initialSection: SettingsSection; location: HALocation | null }>();
@@ -15,11 +15,12 @@ const emit = defineEmits<{
 const { t, language } = useI18n();
 const configuration = shallowRef<Configuration | null>(null);
 const baseline = shallowRef(draftFromConfiguration({ monitoring_settings: null, forecast_settings: {
-  enabled: false, tilt_deg: null, azimuth_deg: null, noct_c: 45, pr_history_days: 14,
+  enabled: false, tilt_deg: null, azimuth_deg: null, tilt_entity: null, azimuth_entity: null, noct_c: 45, pr_history_days: 14,
 }, location: null, mode: 'docker', connection: { url: '', token_set: false } }));
 const draft = ref(structuredClone(baseline.value));
 const form = ref<HTMLFormElement>();
 const scroll = ref<HTMLElement>();
+const modulesHeading = ref<HTMLHeadingElement>();
 const activeSection = ref<SettingsSection>('connection');
 const direction = ref('');
 const busy = ref(false);
@@ -54,9 +55,23 @@ const sensorFields = [
   { key: 'irradiance_entity', label: 'irradiance_sensor', units: ['W/m²', 'W/m2', 'W/m^2', 'kW/m²', 'kW/m2'] },
 ] as const;
 const sensorOptions = computed(() => sensorFields.map(field => ({ ...field,
-  entities: (discovered.value?.entities ?? []).filter(entity => !entity.entity_id.startsWith('sensor.pvyieldlens_')
+  entities: (discovered.value?.entities ?? []).filter(entity => entity.entity_id.startsWith('sensor.')
+    && !entity.entity_id.startsWith('sensor.pvyieldlens_')
     && (field.units as readonly string[]).includes(entity.unit ?? '')),
 })));
+const angleOptions = computed(() => (discovered.value?.entities ?? []).filter(entity => entity.angle_deg !== undefined));
+const anglePattern = '(?:sensor|number|input_number)\\.[a-z0-9_]+';
+const angleSelections = computed(() => {
+  const number = new Intl.NumberFormat(language.value, { maximumSignificantDigits: 21, useGrouping: false });
+  return Object.fromEntries(forecastAxes.map(axis => {
+    const id = draft.value.forecast[`${axis}_entity`].trim();
+    const entity = angleOptions.value.find(entity => entity.entity_id === id);
+    const angle = entity?.angle_deg;
+    return [axis, id && t('angle_entity_reading', { entity: entity?.name || id,
+      value: angle == null || (axis === 'tilt' && angle > 90) ? t('unavailable') : `${number.format(angle)}°`,
+    })];
+  }));
+});
 const timeoutFields = [
   { key: 'actual_power_max_age_seconds', label: 'actual_power_max_age' }, { key: 'module_temperature_max_age_seconds', label: 'module_temperature_max_age' },
   { key: 'irradiance_max_age_seconds', label: 'irradiance_max_age' },
@@ -74,14 +89,16 @@ onUnmounted(() => cancelAnimationFrame(scrollFrame));
 
 function inputValue(event: Event) { return (event.target as HTMLInputElement).value; }
 function clearValidation() {
-  form.value?.querySelectorAll<HTMLInputElement>('input').forEach(input => {
+  form.value?.querySelectorAll<HTMLInputElement | HTMLSelectElement>('input, select').forEach(input => {
     input.setCustomValidity(''); input.removeAttribute('aria-invalid');
   });
   saveResult.value = '';
 }
 function edit(event: Event) {
   const input = event.target;
-  if (input instanceof HTMLInputElement) { input.setCustomValidity(''); input.removeAttribute('aria-invalid'); }
+  if (input instanceof HTMLInputElement || input instanceof HTMLSelectElement) {
+    input.setCustomValidity(''); input.removeAttribute('aria-invalid');
+  }
   saveResult.value = '';
 }
 function restoreDraft() {
@@ -152,8 +169,7 @@ function scrollToSection(section: SettingsSection, smooth = true) {
     behavior: smooth && !matchMedia('(prefers-reduced-motion: reduce)').matches ? 'smooth' : 'instant' });
   trackScroll();
 }
-async function revealInvalid(input: HTMLInputElement) {
-  if (input.name === 'forecast_azimuth_deg') direction.value = 'custom';
+async function revealInvalid(input: HTMLInputElement | HTMLSelectElement) {
   await nextTick();
   const container = scroll.value!;
   container.scrollTo({ top: container.scrollTop + input.getBoundingClientRect().top - container.getBoundingClientRect().top - 60, behavior: 'instant' });
@@ -165,18 +181,24 @@ async function save() {
   if (!editable.value || !dirty.value) return;
   clearValidation();
   sensorFields.forEach(field => { draft.value.monitoring[field.key] = draft.value.monitoring[field.key].trim(); });
+  forecastAxes.forEach(axis => {
+    if (draft.value.forecast[`${axis}_source`] === 'entity') {
+      draft.value.forecast[`${axis}_entity`] = draft.value.forecast[`${axis}_entity`].trim();
+    }
+  });
   await nextTick();
-  const inputs = [...form.value!.querySelectorAll<HTMLInputElement>('input')];
-  const azimuth = inputs.find(input => input.name === 'forecast_azimuth_deg')!;
+  const inputs = [...form.value!.querySelectorAll('input')];
+  const azimuth = inputs.find(input => input.name === 'forecast_azimuth_deg');
   const noct = inputs.find(input => input.name === 'forecast_noct_c')!;
-  azimuth.setCustomValidity(azimuth.value !== '' && azimuth.valueAsNumber >= 360 ? t('azimuth_help') : '');
+  azimuth?.setCustomValidity(azimuth.valueAsNumber >= 360 ? t('azimuth_help') : '');
   noct.setCustomValidity(noct.value !== '' && noct.valueAsNumber <= 20 ? t('noct_help') : '');
-  const sources = inputs.filter(input => input.name.endsWith('_entity'));
+  const sources = inputs.filter(input => sensorFields.some(field => field.key === input.name));
   sources.forEach(input => input.setCustomValidity(input.value.startsWith('sensor.pvyieldlens_')
     || sources.some(other => other !== input && other.value === input.value && input.value !== '') ? t('invalid_configuration') : ''));
   const update = inputs.find(input => input.name === 'update_interval_seconds')!;
   update.setCustomValidity(Number(draft.value.monitoring.update_interval_seconds) > Number(draft.value.monitoring.live_window_seconds) ? t('invalid_configuration') : '');
-  const invalid = inputs.find(input => input.willValidate && !input.validity.valid);
+  const invalid = [...form.value!.querySelectorAll<HTMLInputElement | HTMLSelectElement>('input, select')]
+    .find(input => input.willValidate && !input.validity.valid);
   if (invalid) { invalid.setAttribute('aria-invalid', 'true'); await revealInvalid(invalid); invalid.reportValidity(); return; }
   const key = connectionKey.value;
   const preview = discovered.value;
@@ -195,11 +217,14 @@ async function save() {
   } catch (failure) {
     saveResult.value = failure instanceof ApiError ? failure.code : 'error';
     const fields = failure instanceof ApiError ? failure.fields : [];
-    const invalidInputs = inputs.filter(input => fields.some(field => field === `monitoring_settings.${input.name}`
+    busy.value = false;
+    if (draft.value.forecast.azimuth_source === 'fixed' && fields.includes('forecast_settings.azimuth_deg')) direction.value = 'custom';
+    await nextTick();
+    const invalidInputs = [...form.value!.querySelectorAll<HTMLInputElement | HTMLSelectElement>('input, select')]
+      .filter(input => fields.some(field => field === `monitoring_settings.${input.name}`
       || field === `forecast_settings.${input.name.replace(/^forecast_/, '')}` || field === `connection.${input.id.replace(/^ha-/, '')}`)
       || saveResult.value === 'connection_required' && input.id === 'ha-token');
     invalidInputs.forEach(input => input.setAttribute('aria-invalid', 'true'));
-    busy.value = false;
     if (invalidInputs[0]) await revealInvalid(invalidInputs[0]);
   } finally { busy.value = false; }
 }
@@ -228,10 +253,29 @@ async function save() {
                 <div class="connection-actions"><button id="load-entities" class="secondary" type="button" :disabled="discoveryRequest !== null" @click="discoverEntities(true)"><RefreshCw :size="14" aria-hidden="true" />{{ t(discoveryRequest !== null ? 'connecting' : 'connect') }}</button><span id="connection-result" role="status">{{ connectionStatus ? t(connectionStatus) : '' }}</span></div>
               </section>
               <section class="form-section panel" data-settings-section="modules">
-                <h2><Sun :size="18" aria-hidden="true" />{{ t('pv_modules') }}</h2>
+                <h2 ref="modulesHeading" tabindex="-1"><Sun :size="18" aria-hidden="true" />{{ t('pv_modules') }}</h2>
                 <div class="form-grid">
-                  <label><span>{{ t('total_max_power_at_stc') }}</span><div class="input-unit"><input name="total_max_power_at_stc_w" type="number" min="1" max="1000000000" step="any" required :value="draft.monitoring.total_max_power_at_stc_w" @input="draft.monitoring.total_max_power_at_stc_w = inputValue($event)"><span>W</span></div></label>
+                  <label><span>{{ t('total_max_power_at_stc') }}</span><div class="input-unit"><input name="total_max_power_at_stc_w" type="number" min="1" max="1000000000" step="any" required :value="draft.monitoring.total_max_power_at_stc_w" @input="draft.monitoring.total_max_power_at_stc_w = inputValue($event)"><span>W</span></div><small>{{ t('rated_power_help') }}</small></label>
                   <label><span>{{ t('pmax_temperature_coefficient') }}</span><div class="input-unit"><input name="pmax_temperature_coefficient_pct_per_c" type="number" min="-5" max="5" step="any" required :value="draft.monitoring.pmax_temperature_coefficient_pct_per_c" @input="draft.monitoring.pmax_temperature_coefficient_pct_per_c = inputValue($event)"><span>%/°C</span></div><small>{{ t('pmax_temperature_coefficient_help') }}</small></label>
+                  <div v-for="axis in forecastAxes" :key="axis" class="angle-field">
+                    <label><span>{{ t(`forecast_${axis}_source`) }}</span>
+                      <select v-model="draft.forecast[`${axis}_source`]" :name="`forecast_${axis}_source`"><option value="fixed">{{ t('angle_source_fixed') }}</option><option value="entity">{{ t('angle_source_entity') }}</option></select>
+                    </label>
+                    <div v-if="draft.forecast[`${axis}_source`] === 'entity'">
+                      <SensorInput v-model="draft.forecast[`${axis}_entity`]" :name="`forecast_${axis}_entity`" :label="t(`forecast_${axis}_entity`)"
+                        :entities="angleOptions" :pattern="anglePattern" :active="active" :disabled="!editable" />
+                      <small v-if="angleSelections[axis]" class="angle-reading">{{ angleSelections[axis] }}</small>
+                      <small>{{ t('angle_entity_help') }} {{ t(`${axis}_help`) }}</small>
+                    </div>
+                    <label v-else-if="axis === 'tilt'"><span>{{ t('forecast_tilt') }}</span>
+                      <div class="input-unit"><input name="forecast_tilt_deg" type="number" min="0" max="90" step="any" :required="draft.forecast.enabled" :value="draft.forecast.tilt_deg" @input="draft.forecast.tilt_deg = inputValue($event)"><span>°</span></div><small>{{ t('tilt_help') }}</small>
+                    </label>
+                    <template v-else>
+                      <label><span>{{ t('forecast_direction') }}</span><select id="forecast-direction" v-model="direction" :required="draft.forecast.enabled" @change="direction === 'custom' || (draft.forecast.azimuth_deg = direction)"><option value="">{{ t('direction_unset') }}</option><option value="0">{{ t('north') }}</option><option value="90">{{ t('east') }}</option><option value="180">{{ t('south') }}</option><option value="270">{{ t('west') }}</option><option value="custom">{{ t('custom') }}</option></select><small v-if="direction !== 'custom'">{{ t('azimuth_help') }}</small></label>
+                      <label v-if="direction === 'custom'" id="forecast-azimuth-row"><span>{{ t('forecast_azimuth') }}</span><div class="input-unit"><input name="forecast_azimuth_deg" type="number" min="0" step="any" :required="draft.forecast.enabled" :value="draft.forecast.azimuth_deg" @input="draft.forecast.azimuth_deg = inputValue($event)"><span>°</span></div><small>{{ t('azimuth_help') }}</small></label>
+                    </template>
+                  </div>
+                  <label><span>{{ t('forecast_noct') }}</span><div class="input-unit"><input name="forecast_noct_c" type="number" min="20" max="80" step="any" required :value="draft.forecast.noct_c" @input="draft.forecast.noct_c = inputValue($event)"><span>°C</span></div><small>{{ t('noct_help') }}</small></label>
                 </div>
               </section>
               <section class="form-section panel" data-settings-section="sources">
@@ -256,11 +300,9 @@ async function save() {
                 <p id="forecast-location" class="readonly-row">{{ locationText }}</p>
                 <p id="home-timezone" class="readonly-row">{{ t('home_timezone') }}: {{ location?.home_timezone ?? configuration?.monitoring_settings?.home_timezone ?? '—' }}</p><p class="muted">{{ t('location_help') }}</p>
                 <label class="checkbox-row"><span>{{ t('forecast_enabled') }}</span><input v-model="draft.forecast.enabled" name="forecast_enabled" type="checkbox"></label>
+                <button id="forecast-module-settings" class="secondary" type="button"
+                  @click="scrollToSection('modules'); modulesHeading?.focus({ preventScroll: true })"><Sun :size="15" aria-hidden="true" />{{ t('forecast_module_settings') }}</button>
                 <div class="form-grid">
-                  <label><span>{{ t('forecast_tilt') }}</span><div class="input-unit"><input name="forecast_tilt_deg" type="number" min="0" max="90" step="any" :required="draft.forecast.enabled" :value="draft.forecast.tilt_deg" @input="draft.forecast.tilt_deg = inputValue($event)"><span>°</span></div></label>
-                  <label><span>{{ t('forecast_direction') }}</span><select id="forecast-direction" v-model="direction" @change="direction === 'custom' || (draft.forecast.azimuth_deg = direction)"><option value="">{{ t('direction_unset') }}</option><option value="0">{{ t('north') }}</option><option value="90">{{ t('east') }}</option><option value="180">{{ t('south') }}</option><option value="270">{{ t('west') }}</option><option value="custom">{{ t('custom') }}</option></select></label>
-                  <label v-show="direction === 'custom'" id="forecast-azimuth-row"><span>{{ t('forecast_azimuth') }}</span><div class="input-unit"><input name="forecast_azimuth_deg" type="number" min="0" step="any" :required="draft.forecast.enabled" :value="draft.forecast.azimuth_deg" @input="draft.forecast.azimuth_deg = inputValue($event)"><span>°</span></div><small>{{ t('azimuth_help') }}</small></label>
-                  <label><span>{{ t('forecast_noct') }}</span><div class="input-unit"><input name="forecast_noct_c" type="number" min="20" max="80" step="any" required :value="draft.forecast.noct_c" @input="draft.forecast.noct_c = inputValue($event)"><span>°C</span></div><small>{{ t('noct_help') }}</small></label>
                   <label><span>{{ t('forecast_pr_history_days') }}</span><input name="forecast_pr_history_days" type="number" min="3" max="90" step="1" required :value="draft.forecast.pr_history_days" @input="draft.forecast.pr_history_days = inputValue($event)"><small>{{ t('pr_history_days_help') }}</small></label>
                 </div>
               </section>

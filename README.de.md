@@ -80,7 +80,13 @@ Die Glättung betrifft nur die Zeichnung. Maus, Touch und Tastatur zeigen Origin
 
 ## Ertragsprognose
 
-Die Prognose ist bei der ersten Installation standardmäßig deaktiviert. Aktivieren Sie sie unter **Einstellungen > Prognose** und tragen Sie Neigung (0–90°), Kompassrichtung (Nord 0°, Ost 90°, Süd 180°, West 270° oder eigener Azimut von 0° bis unter 360°) und NOCT laut Datenblatt ein (über 20°C, höchstens 80°C; Standard 45°C). Gesamte Maximalleistung unter STC und Temperaturkoeffizient von Pmax werden mit der Überwachung geteilt. Standort und Zeitzone stammen automatisch aus der gespeicherten HA-Verbindung; ändern Sie diese in HA.
+Die Prognose ist bei der ersten Installation deaktiviert. Aktivieren Sie sie unter **Einstellungen > Prognose**. Standort und Zeitzone stammen aus der gespeicherten Home-Assistant-Verbindung und werden in HA eingestellt.
+
+Wählen Sie unter **Einstellungen > PV-Module** für Neigung und Ausrichtung jeweils **Fester Wert** oder **HA-Entität**. Die Neigung reicht von 0° bis einschließlich 90°. Der Kompassazimut zählt im Uhrzeigersinn ab Nord (0°) bis unter 360°. Als feste Richtungen stehen auch Ost (90°), Süd (180°) und West (270°) zur Auswahl. Winkelentitäten sind `sensor.*`, `number.*` oder `input_number.*` mit der Einheit `°`. Über **Entitäten aktualisieren** in den Verbindungseinstellungen finden Sie passende Entitäten.
+
+Tragen Sie unter **PV-Module** die NOCT laut Datenblatt ein (über 20°C bis einschließlich 80°C, Standard 45°C). Die maximale Gesamtleistung unter STC und der Temperaturkoeffizient von Pmax gelten auch für die Überwachung. Bei identischen Modulen ergibt sich die Gesamtleistung aus Nennleistung pro Modul mal Modulanzahl, zum Beispiel 500 W × 10 = 5000 W.
+
+Bei jeder Aktualisierung werden die ausgewählten HA-Winkel einmal gelesen. Diese Winkel gelten für alle 15-Minuten-Abschnitte der Sieben-Tage-Prognose, einschließlich der früheren Abschnitte des heutigen Tages. Die Prognoseseite zeigt die verwendeten Winkel und ihre Lesezeit getrennt vom Wetterabruf an. Ist eine Entität vorübergehend nicht verfügbar, nennt die Seite die Entität und zeigt weiter verwendbare Abschnitte der letzten Prognose. Ohne verwendbare Prognose steht bei den Energiewerten **—** und die Aktualisierung kann wiederholt werden.
 
 Die Überwachung nutzt die gemessene **Modultemperatur**. Die Prognose berechnet aus **Lufttemperatur** und **Nominaler Zellbetriebstemperatur (NOCT)** die **Geschätzte Zelltemperatur**. Diese Größen sind verschieden; die Überwachung rechnet Modultemperatur nicht in Zelltemperatur um.
 

@@ -80,7 +80,13 @@ Wygładzanie dotyczy tylko rysunku. Mysz, dotyk i klawiatura pokazują oryginaln
 
 ## Prognoza produkcji
 
-Prognoza jest domyślnie wyłączona przy pierwszej instalacji. Włącz ją w **Ustawienia > Prognoza** i podaj nachylenie (0–90°), kierunek kompasowy (północ 0°, wschód 90°, południe 180°, zachód 270° lub własny azymut od 0° do mniej niż 360°) oraz NOCT z karty panelu (powyżej 20°C, do 80°C; domyślnie 45°C). Łączna moc maksymalna w STC i współczynnik temperaturowy Pmax są wspólne z monitorowaniem. Lokalizacja i strefa czasowa pochodzą automatycznie z zapisanego połączenia HA; zmieniaj je w HA.
+Prognoza jest domyślnie wyłączona po instalacji. Włącz ją w **Ustawienia > Prognoza**. Lokalizacja i strefa czasowa pochodzą z zapisanego połączenia Home Assistant i są ustawiane w HA.
+
+W **Ustawienia > Moduły fotowoltaiczne** wybierz osobno dla nachylenia i kierunku **Wartość stała** lub **Encja HA**. Nachylenie wynosi od 0° do 90° włącznie. Azymut kompasowy jest liczony zgodnie z ruchem wskazówek zegara od północy (0°) do wartości poniżej 360°. Stałe kierunki obejmują także wschód (90°), południe (180°) i zachód (270°). Encje kątów to `sensor.*`, `number.*` lub `input_number.*` z jednostką `°`. Wybierz **Odśwież encje** w ustawieniach połączenia, aby je znaleźć.
+
+W sekcji **Moduły fotowoltaiczne** wprowadź NOCT z karty modułu (powyżej 20°C, maksymalnie 80°C, domyślnie 45°C). Łączna moc maksymalna w STC i współczynnik temperaturowy Pmax służą też do monitorowania. Dla identycznych modułów pomnóż moc znamionową jednego modułu przez liczbę modułów, na przykład 500 W × 10 = 5000 W.
+
+Podczas każdego odświeżania wybrane kąty z HA są odczytywane raz. Ta sama para kątów służy do oszacowania wszystkich 15-minutowych okresów siedmiodniowej prognozy, w tym wcześniejszych okresów dzisiejszego dnia. Strona prognozy wyświetla użyte kąty i czas odczytu oddzielnie od czasu pobrania pogody. Jeśli encja jest niedostępna, strona wskazuje ją i pokazuje nadal dostępne okresy ostatniej prognozy. Gdy prognoza jest niedostępna, wartości energii mają oznaczenie **—** i można ponowić odświeżanie.
 
 Monitorowanie wykorzystuje zmierzoną wartość **Temperatura modułów**. Prognoza oblicza **Szacowaną temperaturę ogniw** na podstawie **Temperatury powietrza** i **Nominalnej temperatury pracy ogniwa (NOCT)**. To różne wielkości fizyczne; monitorowanie nie przelicza temperatury modułów na temperaturę ogniw.
 

@@ -204,7 +204,7 @@ async def test_settings_reveals_first_invalid_category(browser_workspace):
     await page.locator('[name=forecast_enabled]').check()
     await page.locator('#save-button').click()
     await expect(page.locator('[name=forecast_tilt_deg]')).to_be_focused()
-    await expect(page.locator('[data-settings-section=forecast]')).to_be_visible()
+    await expect(page.locator('[data-settings-section=modules] [name=forecast_tilt_deg]')).to_be_focused()
 
 
 async def test_forecast_settings_round_trip_and_server_error_category(browser_workspace):
@@ -212,21 +212,27 @@ async def test_forecast_settings_round_trip_and_server_error_category(browser_wo
 
     page, service, _ = browser_workspace
     await page.locator('#settings-button').click()
-    await page.locator('button[data-settings-category=forecast]').click()
-    await expect(page.locator('[name=forecast_noct_c]')).to_have_value('45')
-    await page.locator('[name=forecast_enabled]').check()
-    await page.locator('[name=forecast_tilt_deg]').fill('25')
-    await page.locator('#forecast-direction').select_option('180')
-    await expect(page.locator('[name=forecast_azimuth_deg]')).to_have_value('180')
-    await page.locator('#forecast-direction').select_option('custom')
-    await page.locator('[name=forecast_azimuth_deg]').fill('360')
+    modules = page.locator('[data-settings-section=modules]')
     await page.locator('button[data-settings-category=modules]').click()
+    await expect(modules.locator('[name=forecast_noct_c]')).to_have_value('45')
+    await page.locator('button[data-settings-category=forecast]').click()
+    await page.locator('[name=forecast_enabled]').check()
+    await page.locator('button[data-settings-category=modules]').click()
+    await page.locator('[name=forecast_tilt_deg]').fill('25')
+    await page.locator('#save-button').click()
+    await expect(page.locator('#forecast-direction')).to_be_focused()
+    await page.locator('#forecast-direction').select_option('180')
+    await expect(page.locator('[name=forecast_azimuth_deg]')).to_have_count(0)
+    await page.locator('#forecast-direction').select_option('custom')
+    await expect(page.locator('[name=forecast_azimuth_deg]')).to_have_value('180')
+    await page.locator('[name=forecast_azimuth_deg]').fill('360')
+    await page.locator('button[data-settings-category=forecast]').click()
     await page.locator('#save-button').click()
     await expect(page.locator('[name=forecast_azimuth_deg]')).to_be_focused()
     await expect(page.locator('#save-result')).to_be_empty()
     await page.locator('[name=forecast_azimuth_deg]').fill('123.5')
     await page.locator('[name=forecast_noct_c]').fill('20')
-    await page.locator('button[data-settings-category=modules]').click()
+    await page.locator('button[data-settings-category=forecast]').click()
     await page.locator('#save-button').click()
     await expect(page.locator('[name=forecast_noct_c]')).to_be_focused()
     await expect(page.locator('#save-result')).to_be_empty()
@@ -237,7 +243,7 @@ async def test_forecast_settings_round_trip_and_server_error_category(browser_wo
         'tilt_entity': None, 'azimuth_entity': None, 'noct_c': 46, 'pr_history_days': 14}
     await page.reload()
     await page.locator('#settings-button').click()
-    await page.locator('button[data-settings-category=forecast]').click()
+    await page.locator('button[data-settings-category=modules]').click()
     await expect(page.locator('[name=forecast_noct_c]')).to_have_value('46')
     await expect(page.locator('[name=forecast_azimuth_deg]')).to_have_value('123.5')
     await expect(page.locator('#forecast-direction')).to_have_value('custom')
@@ -249,11 +255,11 @@ async def test_forecast_settings_round_trip_and_server_error_category(browser_wo
     assert service.forecast.settings.tilt_deg is None and service.forecast.settings.azimuth_deg is None
     await page.reload()
     await page.locator('#settings-button').click()
-    await page.locator('button[data-settings-category=forecast]').click()
+    await page.locator('button[data-settings-category=modules]').click()
     await expect(page.locator('[name=forecast_noct_c]')).to_have_value('46')
     await expect(page.locator('[name=forecast_enabled]')).not_to_be_checked()
     await expect(page.locator('[name=forecast_tilt_deg]')).to_have_value('')
-    await expect(page.locator('[name=forecast_azimuth_deg]')).to_have_value('')
+    await expect(page.locator('[name=forecast_azimuth_deg]')).to_have_count(0)
     await expect(page.locator('#forecast-direction')).to_have_value('')
     await page.route('**/api/config', lambda route: route.fulfill(status=422, json={
         'error': 'invalid_configuration', 'fields': ['monitoring_settings.actual_power_max_age_seconds']}))
@@ -264,6 +270,109 @@ async def test_forecast_settings_round_trip_and_server_error_category(browser_wo
     await expect(page.locator('[name=actual_power_max_age_seconds]')).to_be_in_viewport()
     await expect(page.locator('[name=forecast_noct_c]')).to_have_value('47')
     await expect(page.locator('#save-button')).to_be_enabled()
+
+
+async def test_angle_entity_inputs_and_rated_power_help(browser_workspace):
+    from playwright.async_api import expect
+
+    page, service, _ = browser_workspace
+    response = await page.request.get(page.url + 'api/config')
+    await service.configure(service.monitoring_settings, origin=(await response.json())['connection']['url'])
+    saved = False
+
+    async def discovery(route):
+        edited = bool(route.request.post_data_json['token'])
+        await route.fulfill(json={'location': None, 'home_timezone': 'UTC', 'entities': [
+            {'entity_id': 'sensor.power', 'name': 'Power', 'state': '500', 'unit': 'W'},
+            {'entity_id': 'number.power', 'name': 'Power slider', 'state': '500', 'unit': 'W'},
+            {'entity_id': 'sensor.temp', 'name': 'Module temperature', 'state': '42', 'unit': '°C'},
+            {'entity_id': 'sensor.sun', 'name': 'Irradiance', 'state': '800', 'unit': 'W/m²'},
+            {'entity_id': 'input_number.setup_tilt' if edited else 'input_number.active_tilt',
+             'name': 'Edited tilt helper' if edited else 'Active tilt helper', 'state': '90.1', 'unit': '°', 'angle_deg': 90.1},
+            *([] if saved else [{'entity_id': 'number.tracker_axis', 'name': 'Tracker tilt', 'state': 'unavailable',
+                                'unit': '°', 'angle_deg': None}]),
+        ]})
+
+    await page.route('**/api/connection', discovery)
+    await page.locator('#language-select').select_option('zh')
+    await page.locator('#settings-button').click()
+    rated_power = page.locator('[data-settings-section=modules] label').filter(has=page.locator('[name=total_max_power_at_stc_w]'))
+    await expect(rated_power).to_contain_text('500 W × 10 = 5000 W')
+    await page.locator('#language-select').select_option('en')
+    await expect(page.locator('#load-entities')).to_have_text('Refresh entities')
+    await expect(page.locator('#connection-result')).to_have_text('Connection verified')
+    await page.locator('[data-settings-category=forecast]').click()
+    await page.locator('[name=forecast_enabled]').check()
+    await page.locator('#forecast-module-settings').press('Enter')
+    await expect(page.locator('[data-settings-category=modules]')).to_have_attribute('aria-current', 'location')
+    modules = page.locator('[data-settings-section=modules]')
+    await expect(modules.get_by_role('heading')).to_be_focused()
+    await page.keyboard.press('Tab')
+    await expect(modules.locator('[name=total_max_power_at_stc_w]')).to_be_focused()
+    tilt_source = modules.locator('[name=forecast_tilt_source]')
+    tilt_entity = modules.locator('[name=forecast_tilt_entity]')
+    tilt_deg = modules.locator('[name=forecast_tilt_deg]')
+    azimuth_source = modules.locator('[name=forecast_azimuth_source]')
+    direction = modules.locator('#forecast-direction')
+    await tilt_deg.fill('0')
+    await tilt_source.select_option('entity')
+    await expect(tilt_deg).to_have_count(0)
+    await page.locator('#save-button').click()
+    await expect(tilt_entity).to_be_focused()
+    await tilt_entity.fill('Active tilt helper')
+    await expect(page.get_by_role('option').filter(has_text='input_number.active_tilt')).to_be_visible()
+    await tilt_entity.press('ArrowDown')
+    await tilt_entity.press('Enter')
+    await expect(tilt_entity).to_have_value('input_number.active_tilt')
+    await expect(modules.get_by_text('Active tilt helper · Unavailable')).to_be_visible()
+    await page.locator('[data-settings-category=connection]').click()
+    await page.locator('#ha-token').fill('simulation-token')
+    async with page.expect_response('**/api/connection'):
+        await page.locator('#load-entities').click()
+    await tilt_entity.fill('tilt helper')
+    await expect(page.get_by_role('option').filter(has_text='input_number.setup_tilt')).to_be_visible()
+    await expect(page.get_by_role('option').filter(has_text='input_number.active_tilt')).to_have_count(0)
+    await tilt_entity.fill('Tracker tilt')
+    await page.get_by_role('option').filter(has_text='number.tracker_axis').click()
+    await expect(tilt_entity).to_have_value('number.tracker_axis')
+    await expect(modules.get_by_text('Tracker tilt · Unavailable')).to_be_visible()
+    await tilt_source.select_option('fixed')
+    await expect(tilt_deg).to_have_value('0')
+    await expect(tilt_entity).to_have_count(0)
+    await tilt_source.select_option('entity')
+    await expect(tilt_entity).to_have_value('number.tracker_axis')
+    await direction.select_option('180')
+    await azimuth_source.select_option('entity')
+    azimuth_entity = modules.locator('[name=forecast_azimuth_entity]')
+    await azimuth_entity.fill('input_number.setup_tilt')
+    await expect(modules.get_by_text('Edited tilt helper · 90.1°')).to_be_visible()
+    await azimuth_entity.fill('input_number.saved_in_draft')
+    await azimuth_source.select_option('fixed')
+    await expect(direction).to_have_value('180')
+    await azimuth_source.select_option('entity')
+    await expect(azimuth_entity).to_have_value('input_number.saved_in_draft')
+    await azimuth_source.select_option('fixed')
+    for role, entity in [('actual_power', 'sensor.power'), ('module_temperature', 'sensor.temp'), ('irradiance', 'sensor.sun')]:
+        await assert_sensor_candidates(page, role, [entity])
+    await tilt_entity.fill(' number.tracker_axis ')
+    async with page.expect_response(lambda response: response.request.method == 'PUT' and response.url.endswith('/api/config')) as result:
+        await page.locator('#save-button').click()
+    assert (await (await result.value).json())['monitoring_changed'] is False
+    await expect(page.locator('#save-result')).to_have_text('Configuration saved')
+    assert service.forecast.settings.tilt_entity == 'number.tracker_axis'
+    assert service.forecast.settings.tilt_deg is None
+    assert service.forecast.settings.azimuth_deg == 180
+    assert service.forecast.settings.azimuth_entity is None
+    saved = True
+    await page.reload()
+    await page.locator('#settings-button').click()
+    await page.locator('[data-settings-category=modules]').click()
+    await expect(tilt_source).to_have_value('entity')
+    await expect(tilt_entity).to_have_value('number.tracker_axis')
+    await expect(modules.get_by_text('number.tracker_axis · Unavailable')).to_be_visible()
+    await expect(azimuth_source).to_have_value('fixed')
+    await expect(direction).to_have_value('180')
+    await expect(page.locator('#save-button')).to_be_disabled()
 
 
 async def test_monitoring_timeouts_are_directly_visible(browser_workspace):
@@ -324,7 +433,7 @@ async def test_settings_success_expires_after_three_seconds_without_reset(browse
     await page.clock.install(time=0)
     await page.clock.pause_at(1000)
     await page.locator('#settings-button').click()
-    await page.locator('[data-settings-category=forecast]').click()
+    await page.locator('[data-settings-category=modules]').click()
     await page.locator('[name=forecast_noct_c]').fill('46')
     await page.clock.run_for(32)
     await page.locator('#save-button').click()
@@ -529,7 +638,7 @@ async def test_sensor_shifted_arrows_preserve_native_text_selection(browser_work
     await expect(power).to_have_value('sensor.roof_power')
     await expect(power).to_be_focused()
     await power.press('Shift+Tab')
-    await expect(page.locator('[name=pmax_temperature_coefficient_pct_per_c]')).to_be_focused()
+    await expect(page.locator('[name=forecast_noct_c]')).to_be_focused()
     await expect(power).to_have_attribute('aria-expanded', 'false')
     await expect(page.get_by_role('listbox')).not_to_be_visible()
 
@@ -864,6 +973,7 @@ async def test_settings_forecast_geometry_bounds_and_numeric_equivalence(browser
     await page.locator('[name=total_max_power_at_stc_w]').fill('5000')
     await page.locator('[data-settings-category=forecast]').click()
     await page.locator('[name=forecast_enabled]').check()
+    await page.locator('[data-settings-category=modules]').click()
     await page.locator('[name=forecast_tilt_deg]').fill('90')
     await page.locator('#forecast-direction').select_option('custom')
     await page.locator('[name=forecast_azimuth_deg]').fill('360')
@@ -1241,8 +1351,8 @@ async def test_settings_refreshes_active_location_without_changing_drafts(browse
     await expect(page.locator('[name=total_max_power_at_stc_w]')).to_have_value('5000')
     await page.locator('button[data-settings-category=forecast]').click()
     await expect(page.locator('#forecast-location')).to_have_text('Active · 1, 2' if initial_location else 'HA location is not available yet.')
-    await page.locator('[name=forecast_noct_c]').fill('48')
     await page.locator('button[data-settings-category=modules]').click()
+    await page.locator('[name=forecast_noct_c]').fill('48')
     await page.locator('[name=total_max_power_at_stc_w]').fill('6100')
     async with fake_server() as preview_url:
         await page.locator('button[data-settings-category=connection]').click()
@@ -1300,7 +1410,7 @@ async def test_live_curve_save_resets_only_for_monitoring_changes(browser_worksp
     page.on('request', lambda request: seeds.append(request.url) if request.url.endswith('/api/live-series') else None)
     await page.locator('#settings-button').click()
     if change == 'forecast':
-        await page.locator('button[data-settings-category=forecast]').click()
+        await page.locator('button[data-settings-category=modules]').click()
         await page.locator('[name=forecast_noct_c]').fill('48')
         # A normalized URL and explicit identical credential still mean the same connection.
         await page.locator('button[data-settings-category=connection]').click()

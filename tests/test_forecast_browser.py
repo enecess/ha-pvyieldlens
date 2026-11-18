@@ -29,6 +29,7 @@ def forecast_payload(day='2026-11-01', home_timezone='UTC'):
     return {'correction': {'pr': 90, 'history_days': 14, 'start': boundaries[0]-14*86400, 'end': boundaries[0]},
             'status': 'ready', 'refreshing': False, 'fetched_at': boundaries[0] + 3600,
             'calculated_at': boundaries[0] + 48000, 'last_error': None, 'home_timezone': home_timezone,
+            'geometry': None, 'unavailable_angles': [],
             'today': total(boundaries[0], boundaries[1]),
             'remaining_today': {**total(boundaries[0]+48000, boundaries[1]), 'forecast_energy_kwh': 39.68, 'corrected_forecast_energy_kwh': 35.712},
             'tomorrow': total(boundaries[1], boundaries[2]),
@@ -114,8 +115,11 @@ async def test_forecast_days_select_quarter_hour_details_and_preserve_selection(
     assert state['refresh'] == 1
 
 
-@pytest.mark.parametrize('status', ['disabled', 'location_unavailable', 'unavailable', 'loading', 'partial', 'stale'])
-async def test_forecast_states_are_truthful(forecast_page, status):
+@pytest.mark.parametrize(('status', 'failed_angle'), [
+    ('disabled', False), ('location_unavailable', False), ('unavailable', True), ('loading', False),
+    ('partial', False), ('stale', False), ('stale', True),
+])
+async def test_forecast_states_are_truthful(forecast_page, status, failed_angle):
     from playwright.async_api import expect
     page, state, _ = forecast_page
     view = state['view']
@@ -128,10 +132,19 @@ async def test_forecast_states_are_truthful(forecast_page, status):
         view['tomorrow'] = view['days'][1]
         view['intervals'][144].update(forecast_power_w=None, corrected_forecast_power_w=None,
                                       forecast_energy_kwh=None, corrected_forecast_energy_kwh=None, quality='unavailable')
-    if status in ('unavailable', 'stale'):
-        view['last_error'] = 'forecast_request_failed'
+    issues = [{'axis': 'tilt', 'entity_id': 'sensor.tracker_tilt'}]
+    if status == 'unavailable':
+        view.update(last_error='forecast_angle_unavailable', unavailable_angles=issues)
+    if status == 'stale':
+        if failed_angle:
+            clock = await page.context.new_cdp_session(page)
+            await clock.send('Emulation.setTimezoneOverride', {'timezoneId': 'Asia/Tokyo'})
+            view.update(status='partial', geometry={'tilt_deg': 28.4, 'azimuth_deg': 180,
+                                                   'read_at': view['fetched_at'] - 33*60})
+        else:
+            view['last_error'] = 'forecast_fetch_failed'
     await page.locator('#forecast-tab').click()
-    if status in ('disabled', 'location_unavailable', 'unavailable', 'loading'):
+    if status in ('disabled', 'location_unavailable', 'loading') or status == 'unavailable' and not failed_angle:
         await expect(page.locator('#forecast-status')).to_have_attribute('data-status', status)
     else:
         await expect(page.locator('#forecast-status')).to_have_count(0)
@@ -157,11 +170,32 @@ async def test_forecast_states_are_truthful(forecast_page, status):
         assert geometry['right'] == pytest.approx(geometry['edge'], abs=0.05)
         assert all(x <= geometry['gapStart'] + 0.05 or x >= geometry['gapEnd'] - 0.05 for x in geometry['samples'])
         await expect(page.locator('#forecast-fetched')).to_contain_text('Nov 1')
-        if status == 'stale':
-            await expect(page.locator('#forecast-error')).not_to_be_empty()
+        if status == 'stale' and failed_angle:
+            await expect(page.locator('#forecast-geometry')).to_contain_text('28.4°')
+            await expect(page.locator('#forecast-geometry')).to_contain_text('180°')
+            await expect(page.locator('#forecast-angle-read-at')).to_contain_text('09:27')
+            await expect(page.locator('#forecast-fetched')).to_contain_text('10:00')
+            await expect(page.locator('#forecast-error')).to_be_empty()
+            state['light'] = {**view, 'status': 'stale', 'last_error': 'forecast_angle_unavailable',
+                              'unavailable_angles': issues, 'calculated_at': view['calculated_at'] + 1}
+            await expect(page.locator('#forecast-error')).to_contain_text('Module tilt')
+            await expect(page.locator('#forecast-error')).to_contain_text('sensor.tracker_tilt')
+            await expect(page.locator('#forecast-error')).to_contain_text('Showing the last forecast')
+            await expect(page.locator('#forecast-angle-read-at')).to_contain_text('09:27')
+            await expect(page.locator('#forecast-chart svg')).to_be_visible()
+        elif status == 'stale':
+            await expect(page.locator('#forecast-error')).to_contain_text('Weather refresh failed')
     else:
         await expect(page.locator('#forecast-remaining')).to_have_text('—')
         await expect(page.locator('#forecast-fetched')).to_contain_text('No successful fetch')
+        if status == 'unavailable':
+            await expect(page.locator('#forecast-tomorrow')).to_have_text('—')
+            await expect(page.locator('#forecast-geometry')).to_have_count(0)
+            await expect(page.locator('#forecast-refresh')).to_be_enabled()
+            await expect(page.locator('#forecast-error')).to_contain_text('Module tilt')
+            await expect(page.locator('#forecast-error')).to_contain_text('sensor.tracker_tilt')
+            await expect(page.locator('#forecast-error')).not_to_contain_text('Showing the last forecast')
+            await expect(page.locator('#forecast-error')).not_to_contain_text('Weather refresh failed')
     await page.locator('#open-forecast-settings').click()
     await expect(page.locator('[data-settings-section=forecast]')).to_be_visible()
 

@@ -80,7 +80,13 @@ Le lissage concerne seulement le dessin. Souris, toucher et clavier inspectent l
 
 ## Prévisions de production
 
-Les prévisions sont désactivées par défaut à la première installation. Dans **Paramètres > Prévisions**, activez-les et indiquez l’inclinaison (0–90°), l’orientation (nord 0°, est 90°, sud 180°, ouest 270°, ou un azimut personnalisé de 0° à moins de 360°) et le NOCT de la fiche technique (plus de 20°C, au maximum 80°C ; 45°C par défaut). La puissance maximale totale aux STC et le coefficient de température de Pmax sont partagés avec la surveillance. Le lieu et le fuseau sont lus automatiquement depuis la connexion Home Assistant enregistrée ; modifiez-les dans HA.
+Les prévisions sont désactivées à la première installation. Activez-les dans **Paramètres > Prévisions**. Le lieu et le fuseau horaire proviennent de la connexion Home Assistant enregistrée et se règlent dans HA.
+
+Dans **Paramètres > Modules photovoltaïques**, choisissez **Valeur fixe** ou **Entité HA** indépendamment pour l’inclinaison et l’orientation. L’inclinaison va de 0° à 90° inclus. L’azimut se mesure dans le sens horaire depuis le nord (0°), jusqu’à 360° exclus. Les orientations fixes comprennent aussi l’est (90°), le sud (180°) et l’ouest (270°). Les entités d’angle sont de type `sensor.*`, `number.*` ou `input_number.*` et utilisent l’unité `°`. Cliquez sur **Actualiser les entités** dans les paramètres de connexion pour les trouver.
+
+Dans **Modules photovoltaïques**, saisissez le NOCT de la fiche technique (plus de 20°C, au maximum 80°C, 45°C par défaut). La puissance maximale totale aux STC et le coefficient de température de Pmax servent aussi à la surveillance. Pour des modules identiques, multipliez la puissance nominale d’un module par leur nombre, par exemple 500 W × 10 = 5000 W.
+
+À chaque actualisation, les angles HA sélectionnés sont lus une fois. La même paire d’angles sert à estimer tous les intervalles de 15 minutes de la prévision à sept jours, y compris ceux déjà écoulés aujourd’hui. La page des prévisions affiche les angles utilisés et l’heure de lecture séparément de l’heure de récupération de la météo. Si une entité est indisponible, la page l’indique et affiche les intervalles encore utilisables de la dernière prévision. Sans prévision utilisable, les valeurs d’énergie affichent **—** et vous pouvez relancer l’actualisation.
 
 La surveillance utilise la **Température des modules** mesurée. Les prévisions utilisent la **Température de l’air** et la **Température nominale de fonctionnement des cellules (NOCT)** pour calculer la **Température estimée des cellules**. Ces grandeurs sont distinctes ; la surveillance ne convertit pas la température des modules en température des cellules.
 
