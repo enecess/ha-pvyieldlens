@@ -53,7 +53,9 @@ Par défaut, la page est accessible sur la machine Docker. Pour y accéder depui
 
 ## Réglages
 
-Le **Tableau de bord** présente la puissance actuelle et la production du jour ; **Efficacité** compare l’énergie clôturée et le PR ; **Prévisions** compare les valeurs originales et corrigées. Les **Paramètres** restent en haut à droite et les trois vues restent accessibles. Le répertoire couvre la connexion HA, les modules, les capteurs, la surveillance et les prévisions.
+Le **Tableau de bord** présente la puissance actuelle et la production du jour ; **Efficacité** compare l’énergie clôturée et le PR ; **Prévisions** compare les valeurs originales et corrigées. Les **Paramètres** restent en haut à droite et les trois vues restent accessibles. Le répertoire couvre la connexion HA, les modules, les capteurs, les prévisions et la surveillance.
+
+La section **Surveillance** est repliée à l’ouverture des Paramètres. Sélectionnez son titre ou son entrée dans le répertoire pour afficher les réglages. Le bouton **?** à côté du titre affiche l’aide sur le règlement, la moyenne, l’actualisation et le délai des capteurs, même quand les réglages sont repliés.
 
 **Enregistrer la configuration** vous laisse dans les Paramètres. **Abandonner les modifications** recharge la configuration enregistrée sur le serveur et remplace vos modifications ; en cas d’échec, le brouillon est conservé pour réessayer. Quitter avec des modifications demande de poursuivre l’édition ou de les abandonner. Revenir aux Paramètres recharge la configuration enregistrée.
 
@@ -66,11 +68,12 @@ Le menu **Mode du thème**, en haut à droite, propose Auto, Clair et Sombre. Au
 | Puissance réelle | Capteur de production solaire (W ou kW). |
 | Température des modules | Capteur de température des panneaux (°C, °F ou K). |
 | Irradiance | Capteur dans le même plan que les panneaux (W/m² ou kW/m²). |
-| Intervalle de règlement | 1, 5 ou 10 minutes. Par défaut : 5 minutes. |
-| Moyenne sur | Durée utilisée pour la moyenne en direct. Par défaut : 60 secondes. |
-| Mise à jour toutes les | Délai entre deux mises à jour. Par défaut : 5 secondes. |
+| Intervalle de règlement | Enregistre l’énergie et le PR toutes les 1, 5 ou 10 minutes pour la vue **Efficacité**. L’intervalle par défaut est de 5 minutes. |
+| Moyenne sur | Calcule les valeurs en direct à partir des 60 dernières secondes par défaut. Une fenêtre plus longue lisse les variations à court terme. |
+| Mise à jour toutes les | Recalcule et actualise les valeurs en direct toutes les 5 secondes par défaut. |
+| Délai sans données | Définit le délai pour la prochaine mesure de chaque capteur. Les périodes après expiration comptent comme manquantes et réduisent la complétude des données. |
 
-Enregistrez, puis ouvrez **Tableau de bord**. Le premier résultat clôturé apparaît dans **Efficacité** à la fin de la période en cours. Sous **Délai sans données**, réglez le temps d’attente pour chaque capteur.
+Enregistrez, puis ouvrez **Tableau de bord**. Le premier résultat clôturé apparaît dans **Efficacité** à la fin de la période en cours.
 
 Le Tableau de bord précharge les dix dernières minutes à l’ouverture ou à la reconnexion. Les données de production montrent aujourd’hui les puissances estimée/réelle clôturées, l’irradiance et la température des modules. Le graphique d’énergie propose 7 jours par défaut, 30 jours ou une période personnalisée inclusive de 90 dates du foyer au maximum, sans dépasser aujourd’hui. Une absence reste vide et zéro reste zéro ; les règlements et cumuls conservés ne changent pas.
 

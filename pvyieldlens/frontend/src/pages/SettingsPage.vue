@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, nextTick, onUnmounted, ref, shallowReactive, shallowRef, watch } from 'vue';
-import { Check, Clock3, Compass, Database, Plug, RefreshCw, RotateCcw, Sun } from 'lucide-vue-next';
+import { Check, ChevronDown, Clock3, Compass, Database, Plug, RefreshCw, RotateCcw, Sun } from 'lucide-vue-next';
 import { api, ApiError } from '../api';
 import SensorInput from '../components/SensorInput.vue';
 import { useI18n } from '../i18n';
@@ -20,8 +20,11 @@ const baseline = shallowRef(draftFromConfiguration({ monitoring_settings: null, 
 const draft = ref(structuredClone(baseline.value));
 const form = ref<HTMLFormElement>();
 const scroll = ref<HTMLElement>();
+const actions = ref<HTMLElement>();
 const modulesHeading = ref<HTMLHeadingElement>();
 const activeSection = ref<SettingsSection>('connection');
+const monitoringOpen = ref(false);
+const monitoringHelpOpen = ref(false);
 const direction = ref('');
 const busy = ref(false);
 const saveResult = ref('');
@@ -46,8 +49,8 @@ const locationText = computed(() => {
 });
 const sections = [
   { key: 'connection', label: 'connection', icon: Plug }, { key: 'modules', label: 'pv_modules', icon: Sun },
-  { key: 'sources', label: 'inputs', icon: Database }, { key: 'monitoring', label: 'monitoring', icon: Clock3 },
-  { key: 'forecast', label: 'forecast', icon: Compass },
+  { key: 'sources', label: 'inputs', icon: Database }, { key: 'forecast', label: 'forecast', icon: Compass },
+  { key: 'monitoring', label: 'monitoring', icon: Clock3 },
 ] as const;
 const sensorFields = [
   { key: 'actual_power_entity', label: 'actual_power_sensor', units: ['W', 'kW'] },
@@ -79,7 +82,12 @@ const timeoutFields = [
 let scrollFrame = 0;
 
 watch([dirty, busy], ([dirty, busy]) => emit('state-change', { dirty, busy }), { immediate: true });
-watch(() => props.active, active => { if (active) void loadConfiguration(true); }, { immediate: true });
+watch(() => props.active, active => {
+  if (!active) return;
+  monitoringOpen.value = false;
+  monitoringHelpOpen.value = false;
+  void loadConfiguration(true);
+}, { immediate: true });
 watch(saveResult, (result, _, onCleanup) => {
   if (result !== 'saved') return;
   const timeout = setTimeout(() => { saveResult.value = ''; }, 3000);
@@ -127,7 +135,7 @@ async function loadConfiguration(entering = false) {
   } finally { busy.value = false; }
   if (entering && props.active) {
     await nextTick();
-    scrollToSection(props.initialSection, false);
+    await scrollToSection(props.initialSection, false);
     if (matchMedia('(max-width: 600px) and (max-height: 600px)').matches) {
       document.querySelector('#settings-categories')!.scrollIntoView({ block: 'start' });
     }
@@ -157,11 +165,17 @@ function trackScroll() {
     if (!container || !props.active) return;
     const headings = [...container.querySelectorAll<HTMLElement>('[data-settings-section]')];
     const activationTop = container.getBoundingClientRect().top + 24;
-    activeSection.value = container.scrollTop + container.clientHeight >= container.scrollHeight - 2 ? 'forecast'
-      : (headings.filter(section => section.querySelector('h2')!.getBoundingClientRect().top <= activationTop).at(-1)?.dataset.settingsSection as SettingsSection | undefined) ?? 'connection';
+    const atEnd = container.scrollTop + container.clientHeight >= container.scrollHeight - 2;
+    const section = atEnd ? headings.at(-1)
+      : headings.filter(section => section.querySelector('h2')!.getBoundingClientRect().top <= activationTop).at(-1);
+    activeSection.value = (section?.dataset.settingsSection as SettingsSection | undefined) ?? 'connection';
   });
 }
-function scrollToSection(section: SettingsSection, smooth = true) {
+async function scrollToSection(section: SettingsSection, smooth = true) {
+  if (section === 'monitoring') {
+    monitoringOpen.value = true;
+    await nextTick();
+  }
   const container = scroll.value;
   const heading = container?.querySelector(`[data-settings-section=${section}] h2`);
   if (!container || !heading) return;
@@ -170,10 +184,15 @@ function scrollToSection(section: SettingsSection, smooth = true) {
   trackScroll();
 }
 async function revealInvalid(input: HTMLInputElement | HTMLSelectElement) {
+  if (input.closest('#monitoring-fields')) monitoringOpen.value = true;
   await nextTick();
-  const container = scroll.value!;
-  container.scrollTo({ top: container.scrollTop + input.getBoundingClientRect().top - container.getBoundingClientRect().top - 60, behavior: 'instant' });
   input.focus({ preventScroll: true });
+  const container = scroll.value!;
+  const bounds = container.getBoundingClientRect();
+  const field = input.getBoundingClientRect();
+  const visibleBottom = Math.min(bounds.bottom, actions.value!.getBoundingClientRect().top);
+  const offset = Math.max(0, Math.min(60, visibleBottom - bounds.top - field.height - 8));
+  container.scrollTo({ top: container.scrollTop + field.top - bounds.top - offset, behavior: 'instant' });
   trackScroll();
 }
 
@@ -286,15 +305,6 @@ async function save() {
                     :active="active" :disabled="!editable" />
                 </div>
               </section>
-              <section class="form-section panel" data-settings-section="monitoring">
-                <h2><Clock3 :size="18" aria-hidden="true" />{{ t('monitoring') }}</h2>
-                <div class="form-grid three">
-                  <label><span>{{ t('settlement_interval') }}</span><div class="input-unit"><select v-model="draft.monitoring.settlement_interval_minutes" name="settlement_interval_minutes"><option value="1">1</option><option value="5">5</option><option value="10">10</option></select><span>{{ t('minutes') }}</span></div></label>
-                  <label><span>{{ t('live_window_duration') }}</span><div class="input-unit"><input name="live_window_seconds" type="number" min="10" max="3600" required :value="draft.monitoring.live_window_seconds" @input="draft.monitoring.live_window_seconds = inputValue($event)"><span>s</span></div></label>
-                  <label><span>{{ t('update_interval') }}</span><div class="input-unit"><input name="update_interval_seconds" type="number" min="1" max="60" required :value="draft.monitoring.update_interval_seconds" @input="draft.monitoring.update_interval_seconds = inputValue($event)"><span>s</span></div></label>
-                </div>
-                <div class="advanced-settings"><h3>{{ t('advanced') }}</h3><p class="muted">{{ t('hold_help') }}</p><div class="form-grid three"><label v-for="field in timeoutFields" :key="field.key"><span>{{ t(field.label) }}</span><div class="input-unit"><input :name="field.key" type="number" min="1" max="86400" required :value="draft.monitoring[field.key]" @input="draft.monitoring[field.key] = inputValue($event)"><span>s</span></div></label></div></div>
-              </section>
               <section class="form-section panel" data-settings-section="forecast">
                 <h2><Compass :size="18" aria-hidden="true" />{{ t('forecast') }}</h2><p class="muted">{{ t('forecast_help') }}</p>
                 <p id="forecast-location" class="readonly-row">{{ locationText }}</p>
@@ -306,10 +316,35 @@ async function save() {
                   <label><span>{{ t('forecast_pr_history_days') }}</span><input name="forecast_pr_history_days" type="number" min="3" max="90" step="1" required :value="draft.forecast.pr_history_days" @input="draft.forecast.pr_history_days = inputValue($event)"><small>{{ t('pr_history_days_help') }}</small></label>
                 </div>
               </section>
+              <div class="settings-form-end">
+                <section class="form-section panel" data-settings-section="monitoring">
+                  <div class="monitoring-heading">
+                    <h2><button id="monitoring-toggle" type="button" :aria-expanded="monitoringOpen" aria-controls="monitoring-fields" @click="monitoringOpen = !monitoringOpen">
+                      <Clock3 :size="18" aria-hidden="true" /><span>{{ t('monitoring') }}</span><ChevronDown :size="16" aria-hidden="true" />
+                    </button></h2>
+                    <button id="monitoring-help-toggle" class="secondary" type="button" :aria-label="t('monitoring_help')"
+                      :aria-expanded="monitoringHelpOpen" aria-controls="monitoring-help" @click="monitoringHelpOpen = !monitoringHelpOpen">?</button>
+                  </div>
+                  <dl v-show="monitoringHelpOpen" id="monitoring-help">
+                    <dt>{{ t('settlement_interval') }}</dt><dd>{{ t('monitoring_settlement_help') }}</dd>
+                    <dt>{{ t('live_window_duration') }}</dt><dd>{{ t('monitoring_average_help') }}</dd>
+                    <dt>{{ t('update_interval') }}</dt><dd>{{ t('monitoring_update_help') }}</dd>
+                    <dt>{{ t('advanced') }}</dt><dd>{{ t('monitoring_timeout_help') }}</dd>
+                  </dl>
+                  <div v-show="monitoringOpen" id="monitoring-fields">
+                    <div class="form-grid three">
+                      <label><span>{{ t('settlement_interval') }}</span><div class="input-unit"><select v-model="draft.monitoring.settlement_interval_minutes" name="settlement_interval_minutes"><option value="1">1</option><option value="5">5</option><option value="10">10</option></select><span>{{ t('minutes') }}</span></div></label>
+                      <label><span>{{ t('live_window_duration') }}</span><div class="input-unit"><input name="live_window_seconds" type="number" min="10" max="3600" required :value="draft.monitoring.live_window_seconds" @input="draft.monitoring.live_window_seconds = inputValue($event)"><span>s</span></div></label>
+                      <label><span>{{ t('update_interval') }}</span><div class="input-unit"><input name="update_interval_seconds" type="number" min="1" max="60" required :value="draft.monitoring.update_interval_seconds" @input="draft.monitoring.update_interval_seconds = inputValue($event)"><span>s</span></div></label>
+                    </div>
+                    <div class="advanced-settings"><h3>{{ t('advanced') }}</h3><p class="muted">{{ t('hold_help') }}</p><div class="form-grid three"><label v-for="field in timeoutFields" :key="field.key"><span>{{ t(field.label) }}</span><div class="input-unit"><input :name="field.key" type="number" min="1" max="86400" required :value="draft.monitoring[field.key]" @input="draft.monitoring[field.key] = inputValue($event)"><span>s</span></div></label></div></div>
+                  </div>
+                </section>
+              </div>
             </fieldset>
           </form>
         </div>
-        <div id="settings-actions"><div class="settings-feedback"><span v-if="busy" role="status">{{ t('settings_loading') }}</span><span id="save-result" role="status">{{ saveResult ? t(saveResult) : '' }}</span></div><div class="settings-buttons"><button id="discard-settings-changes" class="secondary" type="button" :disabled="busy" @click="loadConfiguration()"><RotateCcw :size="15" aria-hidden="true" />{{ t('discard_changes') }}</button><button id="save-button" class="primary" form="settings-form" type="submit" :disabled="!editable || !dirty"><Check :size="16" aria-hidden="true" />{{ t(busy ? 'saving' : 'save') }}</button></div></div>
+        <div id="settings-actions" ref="actions"><div class="settings-feedback"><span v-if="busy" role="status">{{ t('settings_loading') }}</span><span id="save-result" role="status">{{ saveResult ? t(saveResult) : '' }}</span></div><div class="settings-buttons"><button id="discard-settings-changes" class="secondary" type="button" :disabled="busy" @click="loadConfiguration()"><RotateCcw :size="15" aria-hidden="true" />{{ t('discard_changes') }}</button><button id="save-button" class="primary" form="settings-form" type="submit" :disabled="!editable || !dirty"><Check :size="16" aria-hidden="true" />{{ t(busy ? 'saving' : 'save') }}</button></div></div>
       </div>
     </div>
   </section>

@@ -179,12 +179,24 @@ main.settings-active > .banner { flex-shrink: 0; }
 #settings-categories button small { margin-left: auto; font-size: 10px; opacity: .65; }
 #settings-categories button[aria-pressed='true'] { color: var(--pv-accent); background: var(--pv-soft); font-weight: 600; }
 .settings-form-column { position: relative; min-width: 0; min-height: 0; }
-#settings-scroll { height: 100%; container-type: size; overflow-y: auto; overscroll-behavior: contain; padding: 0 6px 160px 0; }
+#settings-scroll { --settings-bottom-space: 160px; height: 100%; container-type: size; overflow-y: auto; overscroll-behavior: contain; padding: 0 6px var(--settings-bottom-space) 0; scroll-padding-bottom: var(--settings-bottom-space); }
 /* The 23px heading inset needs 3px of range to reach the 20px scroll target. */
-#settings-form [data-settings-section='forecast'] { min-height: calc(100cqh + 3px); }
+.settings-form-end { min-height: calc(100cqh + 3px); }
 #settings-form fieldset { display: grid; gap: 18px; min-width: 0; padding: 0; margin: 0; border: 0; }
 .form-section h2 { display: flex; align-items: center; gap: 10px; margin-bottom: 22px; }
 .form-section h2 svg { color: var(--pv-accent); }
+.monitoring-heading { display: flex; align-items: center; gap: 10px; }
+.monitoring-heading h2 { min-width: 0; margin: 0; }
+#monitoring-toggle { display: flex; align-items: center; gap: 10px; min-height: 44px; text-align: left; overflow-wrap: anywhere; }
+#monitoring-toggle svg { flex-shrink: 0; }
+#monitoring-toggle[aria-expanded='false'] svg:last-child { rotate: -90deg; }
+#monitoring-help-toggle { flex: 0 0 44px; min-height: 44px; color: var(--pv-accent); font-size: 14px; font-weight: 600; }
+#monitoring-help-toggle[aria-expanded='true'] { background: var(--pv-soft); }
+#monitoring-fields, #monitoring-help { margin-top: 16px; }
+#monitoring-help { padding: 12px 16px; border: 1px solid var(--pv-line); border-radius: 8px; background: var(--pv-bg); font-size: 12px; overflow-wrap: anywhere; }
+#monitoring-help dt { font-weight: 600; }
+#monitoring-help dt:not(:first-child) { margin-top: 8px; }
+#monitoring-help dd { color: var(--pv-muted); }
 .form-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px; }
 .form-grid.three { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 .form-section label { display: block; min-width: 0; }
@@ -276,9 +288,9 @@ button:disabled { cursor: default; opacity: .5; }
   #settings-categories button > svg { width: 13px; }
   .form-grid, .form-grid.three { grid-template-columns: 1fr; gap: 16px; }
   .form-section input, .form-section select { font-size: 16px; }
-  #settings-scroll { padding-right: 3px; padding-bottom: 200px; }
+  #settings-scroll { --settings-bottom-space: 200px; padding-right: 3px; }
   /* Mobile panels have a 17px heading inset. */
-  #settings-form [data-settings-section='forecast'] { min-height: calc(100cqh - 3px); }
+  .settings-form-end { min-height: calc(100cqh - 3px); }
   #settings-actions { right: 3px; flex-wrap: wrap; gap: 8px; padding: 10px; }
   .settings-feedback:has(span:empty):not(:has(span:not(:empty))) { display: none; }
   .settings-buttons { width: 100%; gap: 7px; }
@@ -291,7 +303,7 @@ button:disabled { cursor: default; opacity: .5; }
 @media (max-width: 600px) and (max-height: 600px) {
   main.settings-active { min-height: 600px; }
   .settings-form-column { height: calc(100dvh - 210px); }
-  #settings-scroll { padding-bottom: 112px; }
+  #settings-scroll { --settings-bottom-space: 112px; }
   #settings-actions { position: fixed; left: 13px; right: 13px; bottom: 12px; }
 }
 

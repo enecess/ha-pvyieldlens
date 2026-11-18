@@ -53,7 +53,9 @@ La pagina è accessibile dal computer con Docker. Per aprirla da un altro dispos
 
 ## Impostazioni
 
-La **Panoramica** mostra potenza attuale e produzione di oggi, **Efficienza** confronta energia consolidata e PR, e **Previsioni** affianca valori originali e corretti. Le **Impostazioni** restano in alto a destra, con le tre viste dati disponibili. Le categorie coprono connessione HA, moduli PV, sensori, monitoraggio e previsioni.
+La **Panoramica** mostra potenza attuale e produzione di oggi, **Efficienza** confronta energia consolidata e PR, e **Previsioni** affianca valori originali e corretti. Le **Impostazioni** restano in alto a destra, con le tre viste dati disponibili. Le categorie coprono connessione HA, moduli PV, sensori, previsioni e monitoraggio.
+
+La sezione **Monitoraggio** è chiusa all’apertura delle Impostazioni. Seleziona il titolo o la voce nell’elenco delle categorie per mostrare i controlli. Il pulsante **?** accanto al titolo mostra la guida su contabilizzazione, media, aggiornamento e timeout dei sensori anche quando i controlli sono chiusi.
 
 **Salva configurazione** mantiene aperte le Impostazioni. **Scarta modifiche** ricarica dal server la configurazione salvata e sostituisce le modifiche; se il caricamento fallisce, la bozza resta disponibile per riprovare. Uscendo con modifiche non salvate puoi continuare a modificarle o scartarle. Rientrare nelle Impostazioni ricarica la configurazione salvata.
 
@@ -66,11 +68,12 @@ Il menu **Modalità tema**, in alto a destra, offre Auto, Chiaro e Scuro. Auto s
 | Potenza effettiva | Sensore della potenza prodotta dai pannelli (W o kW). |
 | Temperatura dei moduli | Sensore della temperatura dei pannelli (°C, °F o K). |
 | Irradianza | Sensore sullo stesso piano dei pannelli (W/m² o kW/m²). |
-| Intervallo di contabilizzazione | 1, 5 o 10 minuti. Predefinito: 5 minuti. |
-| Media su | Tempo usato per la media in tempo reale. Predefinito: 60 secondi. |
-| Aggiorna ogni | Tempo tra gli aggiornamenti. Predefinito: 5 secondi. |
+| Intervallo di contabilizzazione | Salva energia e PR ogni 1, 5 o 10 minuti per la vista **Efficienza**. L’intervallo predefinito è di 5 minuti. |
+| Media su | Calcola i valori in tempo reale dagli ultimi 60 secondi per impostazione predefinita. Un intervallo più lungo attenua le variazioni a breve termine. |
+| Aggiorna ogni | Ricalcola e aggiorna i valori in tempo reale ogni 5 secondi per impostazione predefinita. |
+| Tempo senza nuovi dati | Imposta quanto attendere la prossima lettura di ogni sensore. I periodi oltre il limite contano come mancanti e riducono la completezza dei dati. |
 
-Salva e apri **Panoramica**. Il primo risultato consolidato appare in **Efficienza** alla fine del periodo in corso. In **Tempo senza nuovi dati**, imposta quanto attendere un aggiornamento da ogni sensore.
+Salva e apri **Panoramica**. Il primo risultato consolidato appare in **Efficienza** alla fine del periodo in corso.
 
 La Panoramica precarica gli ultimi dieci minuti all’apertura o alla riconnessione. I dati di produzione mostrano oggi potenza stimata/effettiva consolidata, irradianza e temperatura dei moduli. Il grafico energetico propone 7 giorni predefiniti, 30 giorni o un intervallo personalizzato inclusivo di massimo 90 date domestiche, non oltre oggi. I dati mancanti restano vuoti e lo zero misurato rimane zero; contabilizzazioni e energia cumulativa non cambiano.
 

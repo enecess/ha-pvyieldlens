@@ -53,7 +53,9 @@ Die Seite ist zunächst nur auf dem Docker-Rechner erreichbar. Für andere Gerä
 
 ## Einstellungen
 
-Die **Übersicht** zeigt aktuelle Leistung und heutige Erzeugung, **Effizienz** vergleicht abgeschlossene Energie und PR, **Prognose** zeigt ursprüngliche und korrigierte Wetterprognosen. **Einstellungen** bleibt oben rechts; alle drei Datenansichten sind erreichbar. Die Kategorien umfassen HA-Verbindung, PV-Module, Sensoren, Überwachung und Prognose.
+Die **Übersicht** zeigt aktuelle Leistung und heutige Erzeugung, **Effizienz** vergleicht abgeschlossene Energie und PR, **Prognose** zeigt ursprüngliche und korrigierte Wetterprognosen. **Einstellungen** bleibt oben rechts; alle drei Datenansichten sind erreichbar. Die Kategorien umfassen HA-Verbindung, PV-Module, Sensoren, Prognose und Überwachung.
+
+**Überwachung** ist beim Öffnen der Einstellungen eingeklappt. Die Überschrift oder der Eintrag in der Kategorienliste öffnet die Einstellungen. Das **?** neben der Überschrift zeigt die Hilfe zur Abrechnung, Mittelung, Aktualisierung und Sensorfrist auch bei eingeklappten Einstellungen.
 
 **Konfiguration speichern** lässt die Einstellungen geöffnet. **Änderungen verwerfen** lädt die gespeicherte Konfiguration vom Server neu und ersetzt Ihre Änderungen; bei einem Ladefehler bleibt der Entwurf zum erneuten Versuch erhalten. Beim Verlassen mit Änderungen können Sie weiterbearbeiten oder die Änderungen verwerfen. Erneutes Öffnen lädt die gespeicherte Konfiguration.
 
@@ -66,11 +68,12 @@ Der **Darstellungsmodus** oben rechts bietet Auto, Hell und Dunkel. Auto folgt d
 | Tatsächliche Leistung | Sensor für die erzeugte Solarleistung (W oder kW). |
 | Modultemperatur | Temperatursensor am Modul (°C, °F oder K). |
 | Bestrahlungsstärke | Sensor in der gleichen Ebene wie die Module (W/m² oder kW/m²). |
-| Abrechnungsintervall | 1, 5 oder 10 Minuten. Standard: 5 Minuten. |
-| Mittelwert über | Zeitraum für den aktuellen Mittelwert. Standard: 60 Sekunden. |
-| Update alle | Abstand zwischen Updates. Standard: 5 Sekunden. |
+| Abrechnungsintervall | Speichert Energie und PR alle 1, 5 oder 10 Minuten für die Ansicht **Effizienz**. Standard sind 5 Minuten. |
+| Mittelwert über | Berechnet Livewerte standardmäßig aus den letzten 60 Sekunden. Längere Zeitfenster glätten kurzfristige Schwankungen. |
+| Update alle | Berechnet und aktualisiert Livewerte standardmäßig alle 5 Sekunden. |
+| Zeit ohne neue Daten | Legt die Frist für den nächsten Messwert je Sensor fest. Nach Ablauf gelten die betroffenen Zeiträume als fehlend und verringern die Datenvollständigkeit. |
 
-Speichern Sie die Werte und öffnen Sie **Übersicht**. Der erste abgeschlossene Eintrag erscheint unter **Effizienz** am Ende des laufenden Zeitraums. Unter **Zeit ohne neue Daten** legen Sie die Wartezeit für jeden Sensor fest.
+Speichern Sie die Werte und öffnen Sie **Übersicht**. Der erste abgeschlossene Eintrag erscheint unter **Effizienz** am Ende des laufenden Zeitraums.
 
 Die Übersicht lädt beim Öffnen oder Wiederverbinden die letzten zehn Minuten. Die Erzeugungsdaten zeigen heute abgeschlossene geschätzte/tatsächliche Leistung, Bestrahlungsstärke und Modultemperatur. Das Energiediagramm bietet standardmäßig 7 Tage, außerdem 30 Tage oder einen eigenen Zeitraum mit einschließlich beider Grenzen höchstens 90 Hauskalendertagen bis maximal heute. Fehlende Werte bleiben leer, gemessene Null bleibt Null; gespeicherte Abrechnungen und kumulierte Energie bleiben erhalten.
 

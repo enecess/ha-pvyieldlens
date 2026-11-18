@@ -302,9 +302,10 @@ async def test_shell_language_width_theme_matrix(layout_page, layout_artifacts, 
         await expect(page.locator(f'[data-settings-category={section}]')).to_have_attribute('aria-current', 'location')
         await page.locator('#language-select').select_option(language)
         await page.locator('#theme-select').select_option(theme)
-        await page.locator('#settings-scroll').evaluate('node => node.scrollTo(0, node.scrollHeight)')
-        await page.evaluate('() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))')
-        field = await page.locator('[name=forecast_pr_history_days]').bounding_box()
+        history_days = page.locator('[name=forecast_pr_history_days]')
+        await history_days.focus()
+        await expect(history_days).to_be_in_viewport(ratio=1)
+        field = await history_days.bounding_box()
         dock = await page.locator('#settings-actions').bounding_box()
         assert field['y'] + field['height'] <= dock['y'], {'field': field, 'dock': dock}
         await page.locator('#history-tab').click()
@@ -335,7 +336,7 @@ async def test_short_mobile_settings_keeps_directory_and_actions_usable(layout_p
     directory = await page.locator('#settings-categories').bounding_box()
     assert directory['y'] == pytest.approx(header['height'], abs=1)
     evidence = []
-    for category in ['connection', 'modules', 'sources', 'monitoring', 'forecast']:
+    for category in ['connection', 'modules', 'sources', 'forecast', 'monitoring']:
         await page.locator(f'[data-settings-category={category}]').click()
         await page.locator('#settings-categories').evaluate('node => node.scrollIntoView({block: "start"})')
         geometry = await page.evaluate('''() => {
@@ -356,13 +357,13 @@ async def test_short_mobile_settings_keeps_directory_and_actions_usable(layout_p
         evidence.append({'category': category, **geometry})
     await page.locator('#settings-scroll').evaluate('node => node.scrollTo(0, node.scrollHeight)')
     await page.evaluate('() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))')
-    field = await page.locator('[name=forecast_pr_history_days]').bounding_box()
+    field = await page.locator('[name=irradiance_max_age_seconds]').bounding_box()
     dock = await page.locator('#settings-actions').bounding_box()
     scroll = await page.locator('#settings-scroll').bounding_box()
     detail = await page.locator('#settings-scroll').evaluate("""node => ({
         top: node.scrollTop, height: node.clientHeight, extent: node.scrollHeight,
         bottomPadding: getComputedStyle(node).paddingBottom,
-        lastHelp: node.querySelector('[name=forecast_pr_history_days]').nextElementSibling.getBoundingClientRect().toJSON()
+        lastField: node.querySelector('[name=irradiance_max_age_seconds]').getBoundingClientRect().toJSON()
     })""")
     (layout_artifacts / 'short-mobile-last-field.json').write_text(json.dumps({'field': field, 'dock': dock, 'scroll': scroll, 'detail': detail}, indent=2), encoding='utf-8')
     await page.screenshot(path=str(layout_artifacts / 'short-mobile-last-field.png'))
@@ -421,7 +422,7 @@ async def test_settings_mobile_categories_and_long_locale_fit(layout_page, layou
     assert selected_language['text'] <= selected_language['available'], selected_language
     await expect(page.locator('#connection-result')).not_to_be_empty()
     assert await page.locator('#settings-form').count() == 1
-    for category in ['connection', 'modules', 'sources', 'monitoring', 'forecast']:
+    for category in ['connection', 'modules', 'sources', 'forecast', 'monitoring']:
         await page.locator(f'button[data-settings-category={category}]').click()
         await expect(page.locator(f'[data-settings-section={category}]')).to_be_visible()
         await expect(page.locator('[data-settings-section]:visible')).to_have_count(5)
@@ -434,6 +435,17 @@ async def test_settings_mobile_categories_and_long_locale_fit(layout_page, layou
         else:
             assert section['x'] > nav['x'] + nav['width']
         await page.screenshot(path=str(layout_artifacts / f'settings-{width}-{language}-{category}.png'))
+    await page.locator('#monitoring-toggle').click()
+    await page.locator('#monitoring-help-toggle').click()
+    await expect(page.locator('#monitoring-fields')).to_be_hidden()
+    help_panel = page.locator('#monitoring-help')
+    await expect(help_panel).to_be_visible()
+    assert await help_panel.evaluate('node => node.scrollWidth <= node.clientWidth')
+    assert await page.evaluate('document.documentElement.scrollWidth <= innerWidth')
+    await page.screenshot(path=str(layout_artifacts / f'monitoring-help-{width}-{language}.png'))
+    await page.locator('#theme-select').select_option('dark')
+    await page.screenshot(path=str(layout_artifacts / f'monitoring-help-{width}-{language}-dark.png'))
+    await page.locator('#theme-select').select_option('auto')
     await page.locator('#live-tab').click()
     await page.screenshot(path=str(layout_artifacts / f'live-{width}-{language}.png'))
     await page.locator('#history-tab').click()
@@ -650,7 +662,11 @@ async def test_settings_scrollspy_and_bottom_actions(layout_page, layout_artifac
     await page.locator('#settings-button').click()
     await expect(page.locator('[name=total_max_power_at_stc_w]')).to_be_enabled()
     await expect(page.locator('[data-settings-section]')).to_have_count(5)
-    for category in ['connection', 'modules', 'sources', 'monitoring', 'forecast']:
+    assert await page.locator('#settings-categories button').evaluate_all(
+        'buttons => buttons.map(button => button.dataset.settingsCategory)'
+    ) == ['connection', 'modules', 'sources', 'forecast', 'monitoring']
+    await expect(page.locator('#monitoring-fields')).to_be_hidden()
+    for category in ['connection', 'modules', 'sources', 'forecast', 'monitoring']:
         await page.locator(f'[data-settings-category={category}]').click()
         await expect(page.locator(f'[data-settings-category={category}]')).to_have_attribute('aria-pressed', 'true')
         position = await page.locator('#settings-scroll').evaluate('node => node.scrollTop')
@@ -659,6 +675,7 @@ async def test_settings_scrollspy_and_bottom_actions(layout_page, layout_artifac
             node.querySelector(`[data-settings-section=${category}] h2`).getBoundingClientRect().top
                 - node.getBoundingClientRect().top''', category)
         assert 0 <= heading_top <= 24 if category == 'connection' else heading_top == pytest.approx(20, abs=1), {'category': category, 'heading_top': heading_top}
+    await page.locator('[data-settings-category=forecast]').click()
     checkbox = await page.locator('.checkbox-row').evaluate('''node => {
         const text = node.querySelector('span').getBoundingClientRect();
         const input = node.querySelector('input').getBoundingClientRect();
@@ -682,13 +699,13 @@ async def test_settings_scrollspy_and_bottom_actions(layout_page, layout_artifac
     }''')
     await expect(page.locator('[data-settings-category=sources]')).to_have_attribute('aria-pressed', 'true')
     await page.locator('#settings-scroll').evaluate('node => node.scrollTop = node.scrollHeight')
-    await expect(page.locator('[data-settings-category=forecast]')).to_have_attribute('aria-pressed', 'true')
+    await expect(page.locator('[data-settings-category=monitoring]')).to_have_attribute('aria-pressed', 'true')
     boxes = await page.evaluate('''() => {
         const box = selector => {
             const {left, right, top, bottom} = document.querySelector(selector).getBoundingClientRect();
             return {left, right, top, bottom};
         };
-        return {actions: box('#settings-actions'), last: box('[name=forecast_pr_history_days]'),
+        return {actions: box('#settings-actions'), last: box('[name=irradiance_max_age_seconds]'),
             scroll: box('#settings-scroll'), width: innerWidth, height: innerHeight,
             documentWidth: document.documentElement.scrollWidth};
     }''')
@@ -727,7 +744,7 @@ async def test_settings_sections_remeasure_when_visible_resized_and_expanded(lay
         await expect(page.locator('[name=total_max_power_at_stc_w]')).to_be_enabled()
         await page.set_viewport_size({'width': 1440, 'height': 700})
         await page.locator('[data-settings-category=monitoring]').click()
-        await page.locator('#settings-scroll').evaluate('node => node.scrollTop += 50')
+        await page.locator('#settings-scroll').evaluate('node => node.scrollTop -= 3')
         await page.locator('[name=update_interval_seconds]').focus()
         await expect(page.locator('[data-settings-category=monitoring]')).to_have_attribute('aria-current', 'location')
         reading_top = await page.locator('#settings-scroll').evaluate('''node =>
@@ -752,11 +769,14 @@ async def test_settings_sections_remeasure_when_visible_resized_and_expanded(lay
                 }''', arg=category)
         for direction in ['custom', '180']:
             await page.locator('#forecast-direction').select_option(direction)
+            await page.locator('[data-settings-category=monitoring]').click()
+            await page.locator('#monitoring-toggle').click()
+            await expect(page.locator('#monitoring-fields')).to_be_hidden()
             await page.locator('#settings-scroll').evaluate('node => node.scrollTo(0, node.scrollHeight)')
-            await expect(page.locator('[data-settings-category=forecast]')).to_have_attribute('aria-current', 'location')
+            await expect(page.locator('[data-settings-category=monitoring]')).to_have_attribute('aria-current', 'location')
             await page.wait_for_function('''() => {
                 const container = document.querySelector('#settings-scroll');
-                const heading = container.querySelector('[data-settings-section=forecast] h2');
+                const heading = container.querySelector('[data-settings-section=monitoring] h2');
                 return Math.abs(heading.getBoundingClientRect().top - container.getBoundingClientRect().top - 20) <= 1;
             }''')
         await page.locator('#discard-settings-changes').click()

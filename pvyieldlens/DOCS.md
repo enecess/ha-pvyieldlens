@@ -11,7 +11,9 @@
 
 ## Views and settings
 
-Use **Dashboard** for current power and today’s generation, **Efficiency** for settled energy and PR comparisons, and **Forecast** for original and corrected weather forecasts. **Settings** stays at the top right, with all three data tabs available. Its directory covers the HA connection, PV modules, Sensors, Monitoring and Forecast.
+Use **Dashboard** for current power and today’s generation, **Efficiency** for settled energy and PR comparisons, and **Forecast** for original and corrected weather forecasts. **Settings** stays at the top right, with all three data tabs available. Its directory lists the HA connection, PV modules, Sensors, Forecast and Monitoring settings in that order.
+
+**Monitoring settings** starts collapsed. Select its heading or directory entry to open the controls. Select **?** beside the heading to read the help even while the controls are collapsed. By default, PVYieldLens saves energy and PR for **Efficiency** every 5 minutes, averages the most recent 60 seconds for live values, and recalculates and refreshes those values every 5 seconds. When a sensor exceeds its timeout, the affected period counts as missing and reduces data completeness.
 
 **Save configuration** keeps Settings open. **Discard changes** reloads the saved configuration from the server and replaces edits; a failed reload retains your draft for retry. Leaving with unsaved changes asks you to keep editing or discard them. Reentering Settings loads the saved configuration again.
 

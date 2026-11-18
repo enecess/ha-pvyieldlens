@@ -53,7 +53,9 @@ Domyślnie strona działa na komputerze z Dockerem. Aby otworzyć ją na innym u
 
 ## Ustawienia
 
-**Pulpit** pokazuje bieżącą moc i dzisiejszą produkcję, **Sprawność** porównuje rozliczoną energię i PR, a **Prognoza** zestawia prognozę oryginalną i skorygowaną. **Ustawienia** pozostają w prawym górnym rogu, a trzy widoki danych są dostępne. Kategorie obejmują połączenie HA, moduły PV, czujniki, monitorowanie i prognozę.
+**Pulpit** pokazuje bieżącą moc i dzisiejszą produkcję, **Sprawność** porównuje rozliczoną energię i PR, a **Prognoza** zestawia prognozę oryginalną i skorygowaną. **Ustawienia** pozostają w prawym górnym rogu, a trzy widoki danych są dostępne. Kategorie obejmują połączenie HA, moduły PV, czujniki, prognozę i monitorowanie.
+
+Sekcja **Monitorowanie** jest początkowo zwinięta. Wybierz jej nagłówek lub pozycję na liście kategorii, aby wyświetlić ustawienia. Przycisk **?** obok nagłówka wyświetla pomoc dotyczącą rozliczeń, uśredniania, odświeżania i limitów czasu dla czujników również przy zwiniętych ustawieniach.
 
 **Zapisz konfigurację** pozostawia otwarte Ustawienia. **Odrzuć zmiany** ponownie pobiera zapisaną konfigurację z serwera i zastępuje zmiany; jeśli odczyt się nie powiedzie, szkic pozostaje do ponowienia próby. Przy opuszczaniu strony ze zmianami możesz kontynuować edycję lub je odrzucić. Powrót do Ustawień ponownie pobiera zapisaną konfigurację.
 
@@ -66,11 +68,12 @@ Menu **Tryb motywu** u góry po prawej oferuje Auto, Jasny i Ciemny. Auto śledz
 | Moc rzeczywista | Czujnik mocy wytwarzanej przez panele (W lub kW). |
 | Temperatura modułów | Czujnik temperatury paneli (°C, °F lub K). |
 | Natężenie promieniowania | Czujnik w tej samej płaszczyźnie co panele (W/m² lub kW/m²). |
-| Interwał rozliczenia | 1, 5 lub 10 minut. Domyślnie 5 minut. |
-| Średnia z | Czas do obliczenia średniej na żywo. Domyślnie 60 sekund. |
-| Odświeżaj co | Czas między aktualizacjami. Domyślnie 5 sekund. |
+| Interwał rozliczenia | Zapisuje energię i PR co 1, 5 lub 10 minut dla widoku **Sprawność**. Domyślnie co 5 minut. |
+| Średnia z | Domyślnie oblicza wartości bieżące z ostatnich 60 sekund. Dłuższe okno wygładza krótkotrwałe wahania. |
+| Odświeżaj co | Domyślnie przelicza i odświeża wartości bieżące co 5 sekund. |
+| Limit czasu bez danych | Ustala czas oczekiwania na kolejny odczyt każdego czujnika. Okresy po przekroczeniu limitu są liczone jako brak danych i obniżają kompletność danych. |
 
-Zapisz ustawienia i otwórz **Pulpit**. Pierwszy rozliczony wynik pojawi się w widoku **Sprawność** po zakończeniu bieżącego okresu. W sekcji **Limit czasu bez danych** ustaw czas oczekiwania na każdy czujnik.
+Zapisz ustawienia i otwórz **Pulpit**. Pierwszy rozliczony wynik pojawi się w widoku **Sprawność** po zakończeniu bieżącego okresu.
 
 Pulpit wczytuje ostatnie dziesięć minut przy otwarciu lub ponownym połączeniu. Dane produkcji pokazują dzisiejszą rozliczoną moc szacowaną/rzeczywistą, natężenie promieniowania i temperaturę modułów. Wykres energii domyślnie obejmuje 7 dni, także 30 dni lub własny zakres do 90 domowych dat kalendarzowych włącznie z obiema granicami, najwyżej do dzisiaj. Braki pozostają puste, zmierzone zero pozostaje zerem; zapisane rozliczenia i energia skumulowana nie zmieniają się.
 

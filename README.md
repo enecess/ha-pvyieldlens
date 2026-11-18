@@ -53,7 +53,9 @@ The default address works on the Docker host. To open the page from another devi
 
 ## Settings
 
-Use **Dashboard** for current power and today’s generation, **Efficiency** for settled energy and PR comparisons, and **Forecast** for original and corrected weather forecasts. **Settings** stays at the top right, with all three data tabs available. Its directory covers the HA connection, PV modules, Sensors, Monitoring and Forecast.
+Use **Dashboard** for current power and today’s generation, **Efficiency** for settled energy and PR comparisons, and **Forecast** for original and corrected weather forecasts. **Settings** stays at the top right, with all three data tabs available. Its directory lists the HA connection, PV modules, Sensors, Forecast and Monitoring settings in that order.
+
+**Monitoring settings** starts collapsed. Select its heading or directory entry to open the controls. Select **?** beside the heading to read about settlement, averaging, refresh and sensor timeouts while the controls are collapsed or expanded.
 
 **Save configuration** keeps you in Settings. **Discard changes** reloads the saved configuration from the server and replaces your edits; if loading fails, your draft remains available to retry. Leaving with unsaved changes asks you to keep editing or discard them. Returning to Settings loads the saved configuration again.
 
@@ -66,11 +68,12 @@ The top-right **Theme mode** menu offers Auto, Light and Dark. Auto follows Home
 | Actual power | Your solar generation power sensor (W or kW). |
 | Module temperature | Your module temperature sensor (°C, °F or K). |
 | Irradiance | An irradiance sensor in the same plane as the modules (W/m² or kW/m²). |
-| Settlement interval | 1, 5 or 10 minutes. Default: 5 minutes. |
-| Average over | Time used to average live readings. Default: 60 seconds. |
-| Update every | How often live results refresh. Default: 5 seconds. |
+| Settlement interval | Saves energy and PR every 1, 5 or 10 minutes for review in **Efficiency**. The default is 5 minutes. |
+| Average over | Calculates live values from the most recent 60 seconds by default. Longer windows smooth short-term changes. |
+| Update every | Recalculates and refreshes live values every 5 seconds by default. |
+| Data timeout | Sets how long to wait for each sensor’s next reading. A timed-out period counts as missing and reduces data completeness. |
 
-Save your settings, then open **Dashboard**. The first settled result appears in **Efficiency** when the current period ends. Under **Data timeout**, you can set how long to wait for each sensor before marking its data missing.
+Save your settings, then open **Dashboard**. The first settled result appears in **Efficiency** when the current period ends.
 
 Dashboard preloads the last ten minutes of live readings. **Generation data** shows today’s settled estimated/actual power, irradiance and module temperature. Its energy chart defaults to 7 days and also offers 30 days or an inclusive custom range of at most 90 home calendar dates ending no later than today. Missing values stay empty; measured zero stays zero. Historical settlements and cumulative energy are preserved.
 
