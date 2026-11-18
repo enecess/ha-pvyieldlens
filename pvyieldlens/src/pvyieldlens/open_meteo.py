@@ -4,27 +4,38 @@ from typing import Annotated, Literal
 import httpx
 from pydantic import BaseModel, ConfigDict, Field, JsonValue
 
+from .engine import Observation
 from .forecast import ForecastData, ForecastInput, WeatherSample, calculate_forecast
+from .settings import AMBIENT_SAMPLE_SECONDS, AmbientSite
+
+OPEN_METEO_TIMEOUT_SECONDS = 20
+_FORECAST_URL = 'https://api.open-meteo.com/v1/forecast'
 
 
-class _WeatherUnits(BaseModel):
+class _TemperatureUnits(BaseModel):
     model_config = ConfigDict(strict=True)
 
     time: Literal['unixtime']
-    global_tilted_irradiance: Literal['W/m²']
     temperature_2m: Literal['°C']
+
+
+class _WeatherUnits(_TemperatureUnits):
+    global_tilted_irradiance: Literal['W/m²']
 
 
 class _HourlyUnits(_WeatherUnits):
     weather_code: JsonValue = None
 
 
-class _WeatherData(BaseModel):
+class _TemperatureData(BaseModel):
     model_config = ConfigDict(strict=True)
 
     time: list[Annotated[float, Field(allow_inf_nan=False)]] = Field(min_length=2)
-    global_tilted_irradiance: list[JsonValue]
     temperature_2m: list[JsonValue]
+
+
+class _WeatherData(_TemperatureData):
+    global_tilted_irradiance: list[JsonValue]
 
 
 class _HourlyData(_WeatherData):
@@ -40,6 +51,13 @@ class _ForecastResponse(BaseModel):
     hourly: _HourlyData
 
 
+class _AmbientResponse(BaseModel):
+    model_config = ConfigDict(strict=True)
+
+    minutely_15_units: _TemperatureUnits
+    minutely_15: _TemperatureData
+
+
 def _weather_number(value: JsonValue, *, minimum: float = -float_info.max) -> float | None:
     return float(value) if type(value) in (int, float) and minimum <= value <= float_info.max else None
 
@@ -47,18 +65,18 @@ def _weather_number(value: JsonValue, *, minimum: float = -float_info.max) -> fl
 class OpenMeteoClient:
     def __init__(self, http: httpx.AsyncClient | None = None):
         """Accept a dedicated uncredentialed HTTP client whose ownership stays with the caller."""
-        self.http = http or httpx.AsyncClient(timeout=20, trust_env=False)
+        self.http = http or httpx.AsyncClient(timeout=OPEN_METEO_TIMEOUT_SECONDS, trust_env=False)
         self._owns_http = http is None
 
     async def fetch(self, inputs: ForecastInput) -> ForecastData:
-        response = await self.http.get('https://api.open-meteo.com/v1/forecast', params={
+        response = await self.http.get(_FORECAST_URL, params={
             'latitude': inputs.location.latitude, 'longitude': inputs.location.longitude,
             'tilt': inputs.tilt_deg, 'azimuth': inputs.azimuth_deg - 180,
             'minutely_15': 'global_tilted_irradiance,temperature_2m',
             'hourly': 'global_tilted_irradiance,temperature_2m,weather_code',
             'temperature_unit': 'celsius', 'timezone': 'UTC', 'timeformat': 'unixtime',
             'past_days': 1, 'forecast_days': 8,
-        }, timeout=20)
+        }, timeout=OPEN_METEO_TIMEOUT_SECONDS)
         response.raise_for_status()
         parsed = _ForecastResponse.model_validate(response.json())
         hourly = parsed.hourly
@@ -83,6 +101,22 @@ class OpenMeteoClient:
             at=at, irradiance_w_m2=_weather_number(poa, minimum=0), air_temperature_c=_weather_number(air),
         ) for at, poa, air in zip(minutely.time, minutely.global_tilted_irradiance, minutely.temperature_2m))
         return ForecastData(intervals=calculate_forecast(inputs, model_samples), weather_samples=weather_samples)
+
+    async def fetch_ambient_temperature(self, site: AmbientSite) -> tuple[Observation, ...]:
+        response = await self.http.get(_FORECAST_URL, params={
+            'latitude': site.latitude, 'longitude': site.longitude, 'minutely_15': 'temperature_2m',
+            'temperature_unit': 'celsius', 'timezone': 'UTC', 'timeformat': 'unixtime',
+            'past_minutely_15': 672, 'forecast_minutely_15': 8,
+        }, timeout=OPEN_METEO_TIMEOUT_SECONDS)
+        response.raise_for_status()
+        series = _AmbientResponse.model_validate(response.json()).minutely_15
+        if len(series.time) != len(series.temperature_2m):
+            raise ValueError('open_meteo_mismatched_minutely_15_lengths')
+        if any(right - left != AMBIENT_SAMPLE_SECONDS for left, right in zip(series.time, series.time[1:])):
+            raise ValueError('open_meteo_non_minutely_15_timestamps')
+        entity = site.observation_entity_id
+        return tuple(Observation(entity, at, _weather_number(value))
+                     for at, value in zip(series.time, series.temperature_2m))
 
     async def close(self) -> None:
         if self._owns_http:

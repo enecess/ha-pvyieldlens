@@ -9,7 +9,7 @@ from zoneinfo import ZoneInfo
 from pydantic import BaseModel, ConfigDict
 
 from .engine import Observation, WindowResult
-from .settings import ForecastSettings, MonitoringSettings
+from .settings import AMBIENT_SAMPLE_SECONDS, ForecastSettings, MonitoringSettings
 
 
 class DayAllocation(TypedDict):
@@ -165,6 +165,17 @@ class Store:
         with self.db:
             self.db.executemany("INSERT OR REPLACE INTO observations VALUES (?,?,?,?,?)",
                                 [(origin, item.entity_id, item.at, item.value, item.reported_at) for item in items])
+
+    def cache_ambient_temperature(self, items: tuple[Observation, ...], origin: str) -> None:
+        cursor = self.cursor
+        with self.db:
+            # Keep observations already used by settlement, including a sample shared across the cursor.
+            self.db.executemany("""
+                INSERT INTO observations VALUES (?,?,?,?,?)
+                ON CONFLICT(origin, entity_id, at) DO UPDATE SET value=excluded.value, reported_at=excluded.reported_at
+                WHERE observations.at>=COALESCE(?, observations.at)
+            """, ((origin, item.entity_id, item.at, item.value, item.reported_at, cursor)
+                  for item in items if cursor is None or item.at + AMBIENT_SAMPLE_SECONDS > cursor))
 
     def observations(self, start: float, end: float, entities: tuple[str, ...], origin='') -> list[Observation]:
         if not entities:

@@ -8,10 +8,11 @@ from zoneinfo import ZoneInfo
 import httpx
 from websockets.exceptions import WebSocketException
 
-from .engine import calculate, calculate_live, calculate_live_series
+from .engine import calculate, calculate_live, calculate_live_series, input_spans
 from .forecast_service import ForecastController
 from .home_assistant import HomeAssistantClient, entity_payloads, parse_state
-from .settings import MonitoringSettings
+from .open_meteo import OPEN_METEO_TIMEOUT_SECONDS, OpenMeteoClient
+from .settings import AmbientSite, HALocation, MonitoringSettings
 from .storage import Store
 
 LOGGER = logging.getLogger(__name__)
@@ -19,9 +20,15 @@ NETWORK_ERRORS = (httpx.HTTPError, WebSocketException, OSError, ValueError)
 
 
 class Service:
-    def __init__(self, store: Store, client: HomeAssistantClient | None = None):
+    def __init__(self, store: Store, client: HomeAssistantClient | None = None, *,
+                 ambient_client: OpenMeteoClient | None = None):
         self.store = store
         self.client = client
+        self.ambient_client = ambient_client
+        self._owns_ambient_client = ambient_client is None
+        self._ambient_wake = asyncio.Event()
+        self._ambient_request_scope: asyncio.Timeout | None = None
+        self._ambient_attempted: tuple[str, AmbientSite] | None = None
         self.monitoring_settings = store.monitoring_settings()
         self.lock = asyncio.Lock()
         self.live_window = None
@@ -38,14 +45,17 @@ class Service:
 
     async def configure(self, monitoring_settings: MonitoringSettings, now: float | None = None, origin: str | None = None):
         now = time.time() if now is None else now
-        origin = self.origin if origin is None else origin
         async with self.lock:
-            if self.monitoring_settings == monitoring_settings and self.origin == origin:
-                return
+            self._configure(monitoring_settings, now, self.origin if origin is None else origin, self.forecast.location)
+
+    def _configure(self, monitoring_settings: MonitoringSettings, now: float, origin: str, location: HALocation | None):
+        if self.monitoring_settings != monitoring_settings or self.origin != origin:
+            previous_target = self._ambient_target()
             if self.monitoring_settings and self.monitoring_settings.home_timezone != monitoring_settings.home_timezone:
                 self.store.rebuild_day(now, monitoring_settings.home_timezone)
             live_fields = {'live_window_seconds', 'update_interval_seconds'}
-            live_only = self.monitoring_settings and origin == self.origin and self.monitoring_settings.model_dump(exclude=live_fields) == monitoring_settings.model_dump(exclude=live_fields)
+            live_only = (self.monitoring_settings and origin == self.origin
+                         and self.monitoring_settings.model_dump(exclude=live_fields) == monitoring_settings.model_dump(exclude=live_fields))
             if live_only:
                 # Keep the settlement boundary; only the rolling view changes.
                 self.store.update_live_settings(monitoring_settings)
@@ -56,15 +66,64 @@ class Service:
             self.sources = []
             self.live_window = None
             self._recovery_needed = True
-            self.forecast.configure(monitoring_settings, self.forecast.settings, origin, self.forecast.location)
+            if previous_target != self._ambient_target():
+                self._ambient_attempted = None
+                self._ambient_wake.set()
+                if self._ambient_request_scope is not None:
+                    self._ambient_request_scope.reschedule(asyncio.get_running_loop().time())
+        self.forecast.configure(monitoring_settings, self.forecast.settings, origin, location)
+
+    def _ambient_target(self) -> tuple[str, AmbientSite] | None:
+        config = self.monitoring_settings
+        if config and config.module_temperature_entity is None and config.ambient_site is not None:
+            return self.origin, config.ambient_site
+        return None
+
+    async def _run_ambient(self) -> None:
+        while True:
+            self._ambient_wake.clear()
+            target = self._ambient_target()
+            delay = None
+            if target is not None:
+                origin, site = target
+                if self.ambient_client is None:
+                    self.ambient_client = OpenMeteoClient()
+                self._ambient_request_scope = asyncio.timeout(OPEN_METEO_TIMEOUT_SECONDS)
+                try:
+                    async with self._ambient_request_scope:
+                        observations = await self.ambient_client.fetch_ambient_temperature(site)
+                except (httpx.HTTPError, OSError, ValueError) as error:
+                    if target == self._ambient_target():
+                        LOGGER.warning('Open-Meteo air temperature unavailable (%s)', type(error).__name__)
+                    observations = None
+                finally:
+                    self._ambient_request_scope = None
+                async with self.lock:
+                    if target != self._ambient_target():
+                        continue
+                    if observations is not None:
+                        self.store.cache_ambient_temperature(observations, origin)
+                    self._ambient_attempted = target
+                delay = 900 if observations is None else 3600
+            try:
+                async with asyncio.timeout(delay):
+                    await self._ambient_wake.wait()
+            except TimeoutError:
+                pass
 
     async def _settle(self, now: float):
         cursor = self.store.cursor
         first = cursor
+        ambient_pending = self._ambient_target() if self.tasks else None
+        if ambient_pending == self._ambient_attempted:
+            ambient_pending = None
         periods = self.store.configuration_history(cursor, now)
         for index, period in enumerate(periods):
             limit = periods[index+1].effective_at if index+1 < len(periods) else now
             config = period.monitoring_settings
+            pending_temperature = config.temperature_input if (
+                config.module_temperature_entity is None and ambient_pending == (period.origin, config.ambient_site)
+            ) else None
             step = config.settlement_interval_minutes * 60
             while cursor < limit:
                 boundary = (int(cursor // step) + 1) * step
@@ -72,10 +131,17 @@ class Service:
                     break
                 end = min(boundary, limit)
                 observations = self.store.observations(cursor, end, config.observation_entities, period.origin)
+                # Give the active site's first fetch a chance to fill gaps before committing this window.
+                if pending_temperature and any(value is None for _, _, (value,) in input_spans(
+                    observations, (pending_temperature,), cursor, end,
+                )):
+                    break
                 result = calculate(config, observations, cursor, end)
                 self.store.settle(result, period.revision, self.monitoring_settings.home_timezone)
                 cursor = end
                 await asyncio.sleep(0)
+            if cursor < limit:
+                break
         zone = ZoneInfo(self.monitoring_settings.home_timezone)
         midnight = datetime.combine(datetime.fromtimestamp(now, zone).date(), day_time(), zone).timestamp()
         if cursor > first and first < midnight:
@@ -213,12 +279,19 @@ class Service:
                     client = self.client
                     origin = self.origin
                     ha_config = await client.configuration()
-                    if client is not self.client or origin != self.origin:
-                        continue
-                    if self.monitoring_settings.home_timezone != ha_config.time_zone:
-                        await self.configure(MonitoringSettings.model_validate({**self.monitoring_settings.model_dump(), 'home_timezone': ha_config.time_zone}))
                     async with self.lock:
-                        self.forecast.configure(self.monitoring_settings, self.forecast.settings, origin, ha_config.location)
+                        if client is not self.client or origin != self.origin:
+                            continue
+                        config = self.monitoring_settings
+                        location = ha_config.location
+                        site = AmbientSite(latitude=location.latitude, longitude=location.longitude) if (
+                            config.module_temperature_entity is None and location is not None and location.origin == origin
+                        ) else None
+                        if config.home_timezone != ha_config.time_zone or config.ambient_site != site:
+                            config = MonitoringSettings.model_validate({
+                                **config.model_dump(), 'home_timezone': ha_config.time_zone, 'ambient_site': site,
+                            })
+                        self._configure(config, time.time(), origin, location)
                     await self.subscribed.wait()
                     if self._recovery_needed:
                         await self.recover()
@@ -250,7 +323,8 @@ class Service:
         await self.forecast.start()
         self.subscribed.clear()
         self.store.set_meta('started_at', str(time.time()))
-        self.tasks = [asyncio.create_task(self._events()), asyncio.create_task(self._run())]
+        self._ambient_attempted = None
+        self.tasks = [asyncio.create_task(run()) for run in (self._events, self._run, self._run_ambient)]
 
     async def stop(self):
         for task in self.tasks:
@@ -260,6 +334,9 @@ class Service:
                 await task
         self.tasks = []
         await self.forecast.stop()
+        if self._owns_ambient_client and self.ambient_client is not None:
+            await self.ambient_client.close()
+            self.ambient_client = None
         if self.client:
             with suppress(httpx.HTTPError, OSError):
                 async with self.lock:

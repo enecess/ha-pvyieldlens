@@ -1,6 +1,14 @@
+import asyncio
+from datetime import datetime, timezone
+
+import httpx
 import pytest
 
+from pvyieldlens.engine import Observation
+from pvyieldlens.home_assistant import HAConfig, HAState
+from pvyieldlens.open_meteo import OpenMeteoClient
 from pvyieldlens.service import Service
+from pvyieldlens.settings import AmbientSite, HALocation
 from pvyieldlens.storage import Store
 from test_engine import samples, settings
 
@@ -759,3 +767,230 @@ async def test_correction_invalidates_once_for_recovered_closed_day_settlement_b
     assert calls == [TODAY + 60]
     assert service.forecast.view(TODAY + 120).correction is after
     store.close()
+
+
+class AmbientMonitoringHA:
+    def __init__(self, location, now):
+        self.location = location
+        self.now = now
+        self.polls = []
+        self.history_queries = []
+        self.published = asyncio.Queue()
+
+    async def events(self):
+        yield None
+        await asyncio.Event().wait()
+
+    async def configuration(self):
+        return HAConfig(time_zone=self.location.home_timezone if self.location else 'UTC', location=self.location)
+
+    async def history(self, entities, start, end):
+        self.history_queries.append(tuple(entities))
+        return self._states(entities, 0)
+
+    async def states(self, entities):
+        self.polls.append(entities)
+        return self._states(entities, self.now())
+
+    def _states(self, entities, at):
+        inputs = {'sensor.power': (3348, 'W'), 'sensor.sun': (800, 'W/m²'), 'sensor.temp': (45, '°C')}
+        at = datetime.fromtimestamp(at, timezone.utc)
+        return [HAState(entity_id=entity, state=str(inputs[entity][0]),
+                        attributes={'unit_of_measurement': inputs[entity][1]}, last_changed=at, last_updated=at)
+                for entity in entities]
+
+    async def publish(self, payloads):
+        self.published.put_nowait(payloads)
+
+    async def close(self):
+        pass
+
+
+def ambient_response():
+    return httpx.Response(200, json={
+        'minutely_15_units': {'time': 'unixtime', 'temperature_2m': '°C'},
+        'minutely_15': {'time': [0, 900], 'temperature_2m': [20, 21]},
+    })
+
+
+async def test_temperature_refresh_and_ha_collection_are_independent(tmp_path, monkeypatch):
+    site = AmbientSite(latitude=31.2, longitude=121.5)
+    origin = 'http://ha.test'
+    location = HALocation(origin=origin, latitude=31.2, longitude=121.5, home_timezone='UTC')
+    monkeypatch.setattr('pvyieldlens.service.time.time', lambda: 120)
+    client = AmbientMonitoringHA(location, lambda: 120)
+    requested, release = asyncio.Event(), asyncio.Event()
+
+    async def respond(request):
+        requested.set()
+        await release.wait()
+        return ambient_response()
+
+    path = tmp_path / 'data.sqlite'
+    store = Store(path)
+    store.save_monitoring_settings(settings(settlement_interval_minutes=1, update_interval_seconds=1), 0, origin)
+    store.save_monitoring_settings(settings(module_temperature_entity=None, ambient_site=site,
+                                           settlement_interval_minutes=1, update_interval_seconds=1), 60, origin)
+    async with httpx.AsyncClient(transport=httpx.MockTransport(respond)) as http:
+        service = Service(store, client, ambient_client=OpenMeteoClient(http))
+        assert service.forecast.settings.enabled is False
+        assert service.forecast.settings.tilt_deg is None and service.forecast.settings.azimuth_deg is None
+        await service.start()
+        try:
+            await asyncio.wait_for(requested.wait(), 2)
+            async with asyncio.timeout(3):
+                await client.published.get()
+                await client.published.get()
+            assert client.history_queries == [('sensor.power', 'sensor.temp', 'sensor.sun'), ('sensor.power', 'sensor.sun')]
+            assert client.polls == [('sensor.power', 'sensor.sun')] * 2
+            assert service.connected
+            assert service.calculated_at == 120
+            assert service.live_window['reason'] == 'current_source_unavailable'
+            assert store.cursor == 60
+            measured, = store.history(0, 120)
+            assert measured['estimated_power_w'] == pytest.approx(3720)
+
+            release.set()
+            await asyncio.wait_for(client.published.get(), 3)
+            assert store.cursor == 120
+            assert store.history(60, 120)[0]['estimated_power_w'] == pytest.approx(3720)
+            assert service.live_window['estimated_power_w'] == pytest.approx(3720)
+        finally:
+            await service.stop()
+            store.close()
+
+    reopened = Store(path)
+    try:
+        assert reopened.observations(60, 120, (site.observation_entity_id,), origin) == [
+            Observation(site.observation_entity_id, 0, 20),
+        ]
+    finally:
+        reopened.close()
+
+
+@pytest.mark.parametrize('measured, has_location', [(True, True), (False, False)])
+async def test_monitoring_without_ambient_target_makes_no_weather_request(tmp_path, monkeypatch, measured, has_location):
+    origin = 'http://ha.test'
+    location = HALocation(origin=origin, latitude=31.2, longitude=121.5, home_timezone='UTC') if has_location else None
+    monkeypatch.setattr('pvyieldlens.service.time.time', lambda: 120)
+    client = AmbientMonitoringHA(location, lambda: 120)
+    requests = []
+
+    def respond(request):
+        requests.append(request)
+        return ambient_response()
+
+    store = Store(tmp_path / 'data.sqlite')
+    store.save_monitoring_settings(settings(module_temperature_entity='sensor.temp' if measured else None,
+                                           settlement_interval_minutes=1), 60, origin)
+    async with httpx.AsyncClient(transport=httpx.MockTransport(respond)) as http:
+        service = Service(store, client, ambient_client=OpenMeteoClient(http))
+        await service.start()
+        try:
+            await asyncio.wait_for(client.published.get(), 2)
+            assert service.connected
+            assert store.cursor == 120
+            assert store.monitoring_settings().ambient_site is None
+            assert (store.history(60, 120)[0]['estimated_power_w'] is not None) is measured
+        finally:
+            await service.stop()
+            store.close()
+    assert requests == []
+
+
+async def test_ambient_refresh_failure_keeps_cache_and_connection(tmp_path, monkeypatch):
+    site = AmbientSite(latitude=31.2, longitude=121.5)
+    origin = 'http://ha.test'
+    location = HALocation(origin=origin, latitude=31.2, longitude=121.5, home_timezone='UTC')
+    monkeypatch.setattr('pvyieldlens.service.time.time', lambda: 120)
+    client = AmbientMonitoringHA(location, lambda: 120)
+    requested, release = asyncio.Event(), asyncio.Event()
+
+    async def respond(request):
+        requested.set()
+        await release.wait()
+        raise httpx.ReadTimeout('weather unavailable', request=request)
+
+    store = Store(tmp_path / 'data.sqlite')
+    store.save_monitoring_settings(settings(module_temperature_entity=None, ambient_site=site,
+                                           settlement_interval_minutes=1, update_interval_seconds=1), 60, origin)
+    weather = Observation(site.observation_entity_id, 0, 20)
+    store.add_observations([weather], origin)
+    async with httpx.AsyncClient(transport=httpx.MockTransport(respond)) as http:
+        service = Service(store, client, ambient_client=OpenMeteoClient(http))
+        await service.start()
+        try:
+            await asyncio.wait_for(requested.wait(), 2)
+            await asyncio.wait_for(client.published.get(), 2)
+            assert store.cursor == 120
+            release.set()
+            await asyncio.wait_for(client.published.get(), 3)
+            assert store.observations(60, 120, (site.observation_entity_id,), origin) == [weather]
+            assert service.live_window['estimated_power_w'] == pytest.approx(3720)
+            assert service.connected and service.error is None
+        finally:
+            await service.stop()
+            store.close()
+
+
+@pytest.mark.parametrize('change', ['coordinates', 'origin'])
+async def test_changed_ambient_target_starts_an_isolated_revision(tmp_path, monkeypatch, change):
+    site = AmbientSite(latitude=31.2, longitude=121.5)
+    old_origin = 'http://ha.test'
+    location = HALocation(origin=old_origin, latitude=31.2, longitude=121.5, home_timezone='UTC')
+    now = 120
+    monkeypatch.setattr('pvyieldlens.service.time.time', lambda: now)
+    client = AmbientMonitoringHA(location, lambda: now)
+    requests = asyncio.Queue()
+    release = asyncio.Event()
+
+    first = True
+
+    async def respond(request):
+        nonlocal first
+        requests.put_nowait(request)
+        if first:
+            first = False
+            return ambient_response()
+        await release.wait()
+        return httpx.Response(503)
+
+    store = Store(tmp_path / 'data.sqlite')
+    initial = settings(module_temperature_entity=None, ambient_site=site, settlement_interval_minutes=1,
+                       update_interval_seconds=1)
+    store.save_monitoring_settings(initial, 60, old_origin)
+    store.add_observations([Observation(site.observation_entity_id, 0, 20)], old_origin)
+    async with httpx.AsyncClient(transport=httpx.MockTransport(respond)) as http:
+        service = Service(store, client, ambient_client=OpenMeteoClient(http))
+        await service.start()
+        try:
+            old_request = await asyncio.wait_for(requests.get(), 2)
+            await asyncio.wait_for(client.published.get(), 2)
+            assert store.cursor == 120
+            assert old_request.url.params['latitude'] == '31.2'
+
+            if change == 'coordinates':
+                client.location = location.model_copy(update={'latitude': 32.2, 'home_timezone': 'Asia/Shanghai'})
+            else:
+                client.location = location.model_copy(update={'origin': 'http://new-ha.test'})
+                await service.configure(initial, now=120, origin=client.location.origin)
+
+            new_request = await asyncio.wait_for(requests.get(), 3)
+            assert new_request.url.params['latitude'] == ('32.2' if change == 'coordinates' else '31.2')
+            previous, active = store.configuration_history(60, 120)
+            assert previous.monitoring_settings.ambient_site == site
+            assert active.effective_at == 120
+            assert active.origin == client.location.origin
+            assert active.monitoring_settings.home_timezone == client.location.home_timezone
+            assert active.monitoring_settings.ambient_site.latitude == client.location.latitude
+
+            now = 180
+            release.set()
+            async with asyncio.timeout(3):
+                while store.cursor < 180:
+                    await client.published.get()
+            assert [row['estimated_power_w'] for row in store.history(60, 180)] == [pytest.approx(3720), None]
+            assert service.connected and service.error is None
+        finally:
+            await service.stop()
+            store.close()

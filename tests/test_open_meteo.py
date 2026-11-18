@@ -4,7 +4,9 @@ import httpx
 import pytest
 from pydantic import JsonValue
 
+from pvyieldlens.engine import Observation
 from pvyieldlens.open_meteo import OpenMeteoClient
+from pvyieldlens.settings import AmbientSite
 from forecast_fixtures import forecast_input, forecast_payload
 
 
@@ -287,3 +289,54 @@ async def test_quarter_hour_power_uses_minutely_inputs_and_weather_sampling_stay
     assert [sample.air_temperature_c for sample in batch.weather_samples] == [10, 30]
     assert [sample.irradiance_w_m2 for sample in batch.weather_samples] == [0, 0]
     assert [sample.weather_code for sample in batch.weather_samples] == [61, 61]
+
+
+async def test_fetch_ambient_temperature_request():
+    requests = []
+
+    def respond(request):
+        requests.append(request)
+        return httpx.Response(200, json={
+            'minutely_15_units': {'time': 'unixtime', 'temperature_2m': '°C'},
+            'minutely_15': {'time': [0, 900, 1800], 'temperature_2m': [21, None, 22.5]},
+        })
+
+    site = AmbientSite(latitude=31.2, longitude=121.5)
+    async with httpx.AsyncClient(transport=httpx.MockTransport(respond)) as http:
+        observations = await OpenMeteoClient(http).fetch_ambient_temperature(site)
+
+    request, = requests
+    assert request.method == 'GET'
+    assert (request.url.scheme, request.url.host, request.url.path) == ('https', 'api.open-meteo.com', '/v1/forecast')
+    assert dict(request.url.params) == {
+        'latitude': '31.2', 'longitude': '121.5', 'minutely_15': 'temperature_2m',
+        'temperature_unit': 'celsius', 'timezone': 'UTC', 'timeformat': 'unixtime',
+        'past_minutely_15': '672', 'forecast_minutely_15': '8',
+    }
+    assert 'authorization' not in request.headers and 'cookie' not in request.headers
+    assert observations == (
+        Observation(site.observation_entity_id, 0, 21),
+        Observation(site.observation_entity_id, 900, None),
+        Observation(site.observation_entity_id, 1800, 22.5),
+    )
+
+
+@pytest.mark.parametrize('changes', [
+    {'minutely_15_units': {'time': 'unixtime', 'temperature_2m': '°F'}},
+    {'minutely_15_units': {'time': 'iso8601', 'temperature_2m': '°C'}},
+    {'minutely_15': {'time': [0, 1800], 'temperature_2m': [20, 21]}},
+    {'minutely_15': {'time': [900, 900], 'temperature_2m': [20, 21]}},
+    {'minutely_15': {'time': [0, 900], 'temperature_2m': [20]}},
+    {'minutely_15': {'time': [0, float('inf')], 'temperature_2m': [20, 21]}},
+])
+async def test_ambient_temperature_rejects_invalid_units_or_timeline(changes):
+    payload = {
+        'minutely_15_units': {'time': 'unixtime', 'temperature_2m': '°C'},
+        'minutely_15': {'time': [0, 900], 'temperature_2m': [20, 21]},
+        **changes,
+    }
+    async with httpx.AsyncClient(transport=httpx.MockTransport(lambda request: httpx.Response(
+        200, content=json.dumps(payload),
+    ))) as http:
+        with pytest.raises(ValueError):
+            await OpenMeteoClient(http).fetch_ambient_temperature(AmbientSite(latitude=31.2, longitude=121.5))

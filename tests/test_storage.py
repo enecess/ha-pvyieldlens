@@ -219,3 +219,38 @@ def test_history_summary_rejects_non_strict_or_non_finite_values(changes):
     with pytest.raises(ValidationError):
         HistorySummary(**{'start': 0.0, 'end': 60.0, 'estimated_energy_kwh': 0.062, 'actual_energy_kwh': 0.0558,
                           'pr': 90.0, 'data_completeness_percent': 100.0, 'valid_seconds': 60.0, **changes})
+
+
+def test_ambient_cache_preserves_settled_inputs_and_accepts_pending_predecessor(tmp_path):
+    from pvyieldlens.engine import Observation
+    from pvyieldlens.settings import AmbientSite
+
+    path = tmp_path / 'data.sqlite'
+    store = Store(path)
+    site = AmbientSite(latitude=31.2, longitude=121.5)
+    entity = site.observation_entity_id
+    origin = 'http://ha.test'
+    config = settings(module_temperature_entity=None, ambient_site=site)
+    revision = store.save_monitoring_settings(config, 60, origin)
+
+    store.cache_ambient_temperature((Observation(entity, 0, 20),), origin)
+    original = store.observations(60, 120, (entity,), origin)
+    assert original == [Observation(entity, 0, 20)]
+    result = calculate(config, samples() + original, 60, 120)
+    assert result.estimated_power_w == pytest.approx(3720)
+    store.settle(result, revision, 'UTC')
+
+    store.cache_ambient_temperature((Observation(entity, 0, None), Observation(entity, 900, 21)), origin)
+    store.cache_ambient_temperature((Observation(entity, 900, 22), Observation(entity, 1800, None)), origin)
+    store.close()
+
+    store = Store(path)
+    try:
+        assert store.observations(60, 120, (entity,), origin) == original
+        assert store.observations(900, 1800, (entity,), origin) == [
+            Observation(entity, 0, 20), Observation(entity, 900, 22), Observation(entity, 1800, None),
+        ]
+        assert store.observations(60, 120, (entity,), 'http://other-ha.test') == []
+        assert store.history(60, 120)[0]['estimated_power_w'] == pytest.approx(3720)
+    finally:
+        store.close()
