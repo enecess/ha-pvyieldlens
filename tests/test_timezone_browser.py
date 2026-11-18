@@ -50,7 +50,7 @@ selectedTheme: {theme: 'default'}, themes: {darkMode: false}};</script>
 
         @parent.get('/unreadable')
         async def unreadable():
-            return HTMLResponse(f'<!doctype html><html><body><iframe id="app" src="{standalone}/"></iframe></body></html>')
+            return HTMLResponse(f'<!doctype html><html><body><iframe id="app" height="600" src="{standalone}/"></iframe></body></html>')
 
         async with fake_server(parent) as url, async_playwright() as playwright:
             browser = await playwright.chromium.launch(args=['--no-sandbox'])
