@@ -20,6 +20,7 @@ const baseline = shallowRef(draftFromConfiguration({ monitoring_settings: null, 
 const draft = ref(structuredClone(baseline.value));
 const form = ref<HTMLFormElement>();
 const scroll = ref<HTMLElement>();
+const categories = ref<HTMLElement>();
 const actions = ref<HTMLElement>();
 const modulesHeading = ref<HTMLHeadingElement>();
 const activeSection = ref<SettingsSection>('connection');
@@ -136,9 +137,7 @@ async function loadConfiguration(entering = false) {
   if (entering && props.active) {
     await nextTick();
     await scrollToSection(props.initialSection, false);
-    if (matchMedia('(max-width: 600px) and (max-height: 600px)').matches) {
-      document.querySelector('#settings-categories')!.scrollIntoView({ block: 'start' });
-    }
+    revealShortSettingsForm();
     const saved = configuration.value;
     if (saved && (saved.mode === 'app' || saved.connection.url && saved.connection.token_set)) void discoverEntities();
   }
@@ -183,9 +182,15 @@ async function scrollToSection(section: SettingsSection, smooth = true) {
     behavior: smooth && !matchMedia('(prefers-reduced-motion: reduce)').matches ? 'smooth' : 'instant' });
   trackScroll();
 }
+function revealShortSettingsForm() {
+  if (matchMedia('(max-width: 600px) and (max-height: 600px)').matches) {
+    categories.value!.scrollIntoView({ block: 'start', behavior: 'instant' });
+  }
+}
 async function revealInvalid(input: HTMLInputElement | HTMLSelectElement) {
   if (input.closest('#monitoring-fields')) monitoringOpen.value = true;
   await nextTick();
+  revealShortSettingsForm();
   input.focus({ preventScroll: true });
   const container = scroll.value!;
   const bounds = container.getBoundingClientRect();
@@ -253,7 +258,7 @@ async function save() {
   <section id="settings-page" aria-labelledby="settings-heading">
     <div class="section-heading"><div><p class="eyebrow">PVYieldLens</p><h1 id="settings-heading">{{ t('settings') }}</h1><p class="muted">{{ t('source_semantics') }}</p></div></div>
     <div class="settings-body">
-      <nav id="settings-categories" :aria-label="t('settings_categories')">
+      <nav id="settings-categories" ref="categories" :aria-label="t('settings_categories')">
         <button v-for="(section, index) in sections" :key="section.key" type="button" :data-settings-category="section.key" :aria-pressed="activeSection === section.key" :aria-current="activeSection === section.key ? 'location' : undefined" :disabled="busy" @click="scrollToSection(section.key)">
           <component :is="section.icon" :size="16" aria-hidden="true" /><span>{{ t(section.label) }}</span><small>0{{ index + 1 }}</small>
         </button>

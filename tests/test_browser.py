@@ -207,7 +207,8 @@ async def test_settings_reveals_first_invalid_category(browser_workspace):
     await expect(page.locator('[data-settings-section=modules] [name=forecast_tilt_deg]')).to_be_focused()
 
 
-async def test_forecast_settings_round_trip_and_server_error_category(browser_workspace):
+@pytest.mark.parametrize(('width', 'language'), [(390, 'en'), (320, 'fr')])
+async def test_forecast_settings_round_trip_and_server_error_category(browser_workspace, width, language):
     from playwright.async_api import expect
 
     page, service, _ = browser_workspace
@@ -280,20 +281,24 @@ async def test_forecast_settings_round_trip_and_server_error_category(browser_wo
     await update.fill('6')
     await page.locator('#monitoring-toggle').click()
     await expect(page.locator('#monitoring-fields')).to_be_hidden()
-    await page.locator('#settings-categories').evaluate('node => node.scrollIntoView({block: "start"})')
+    await page.set_viewport_size({'width': width, 'height': 430})
+    await page.locator('#language-select').select_option(language)
     await page.locator('[data-settings-category=modules]').click()
     await page.route('**/api/config', lambda route: route.fulfill(status=422, json={
         'error': 'invalid_configuration', 'fields': ['monitoring_settings.actual_power_max_age_seconds']}))
     await page.locator('[name=forecast_noct_c]').fill('47')
+    outer_scroll = page.locator('#content-scroll')
+    await outer_scroll.evaluate('node => node.scrollTop = 0')
+    assert await outer_scroll.evaluate('node => node.scrollTop') == 0
     await page.locator('#save-button').click()
     await expect(page.locator('button[data-settings-category=monitoring]')).to_have_attribute('aria-pressed', 'true')
     await expect(page.locator('#monitoring-toggle')).to_have_attribute('aria-expanded', 'true')
     timeout = page.locator('[name=actual_power_max_age_seconds]')
     await expect(timeout).to_be_focused()
-    await expect(timeout).to_be_in_viewport(ratio=1)
     field = await timeout.bounding_box()
     dock = await page.locator('#settings-actions').bounding_box()
     assert field['y'] + field['height'] <= dock['y'], {'field': field, 'dock': dock}
+    await expect(timeout).to_be_in_viewport(ratio=1)
     await expect(page.locator('[name=forecast_noct_c]')).to_have_value('47')
     await expect(page.locator('#save-button')).to_be_enabled()
 
