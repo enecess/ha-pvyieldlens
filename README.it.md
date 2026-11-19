@@ -106,9 +106,9 @@ Il PR in tempo reale è il rapporto percentuale tra potenza effettiva e stimata.
 
 ### Efficienza
 
-Seleziona **Oggi**, **24 ore**, **7 giorni** o **30 giorni**. **Oggi** confronta la produzione con ieri fino alla stessa ora locale. **7 giorni** include oggi.
+Seleziona **Oggi**, **24 ore**, **7 giorni** o **30 giorni**. **Oggi** confronta il PR di oggi con quello di ieri fino alla stessa ora locale. **7 giorni** include oggi.
 
-Consulta il PR del periodo, la variazione in punti percentuali e la differenza tra energia stimata ed effettiva. **Andamento PR** e **Confronto produzione** mostrano come cambiano i valori. Per intervalli di calendario, puoi passare da **Riepilogo giornaliero** alla visualizzazione per intervallo di contabilizzazione. Il PR del periodo divide l’energia effettiva per quella stimata negli stessi intervalli validi e contabilizzati.
+Consulta il PR del periodo, la variazione in punti percentuali e la differenza tra energia stimata ed effettiva. Nella vista **Oggi**, **Andamento PR** mostra come varia il PR durante la giornata e **Confronto produzione** riporta la potenza effettiva e quella stimata. Per **7 giorni** e **30 giorni**, puoi passare da **Riepilogo giornaliero** alla visualizzazione per intervallo di contabilizzazione. Il PR del periodo divide l’energia effettiva per quella stimata negli stessi intervalli validi e contabilizzati.
 
 *In Berlin Demo, la variazione del PR confronta il valore di oggi con quello di ieri fino alla stessa ora locale.*
 

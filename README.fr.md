@@ -106,9 +106,9 @@ Le PR en direct est le rapport en pourcentage entre la puissance réelle et la p
 
 ### Efficacité
 
-Choisissez **Aujourd’hui**, **24 heures**, **7 jours** ou **30 jours**. **Aujourd’hui** compare la production à celle d’hier jusqu’à la même heure locale. **7 jours** inclut aujourd’hui.
+Choisissez **Aujourd’hui**, **24 heures**, **7 jours** ou **30 jours**. **Aujourd’hui** compare le PR du jour à celui d’hier jusqu’à la même heure locale. **7 jours** inclut aujourd’hui.
 
-Consultez le PR de la période, sa variation en points de pourcentage et l’écart entre l’énergie estimée et réelle. Suivez les variations dans **Évolution du PR** et **Comparaison de production**. Pour les plages calendaires, alternez entre **Résumé quotidien** et l’affichage par intervalle de règlement. Le PR sur la période est le rapport entre l’énergie réelle et l’énergie estimée sur les mêmes intervalles valides et clôturés.
+Consultez le PR de la période, sa variation en points de pourcentage et l’écart entre l’énergie estimée et réelle. Dans la vue **Aujourd’hui**, **Évolution du PR** suit le PR au fil de la journée et **Comparaison de production** affiche les puissances réelle et estimée. Pour **7 jours** et **30 jours**, alternez entre **Résumé quotidien** et l’affichage par intervalle de règlement. Le PR sur la période est le rapport entre l’énergie réelle et l’énergie estimée sur les mêmes intervalles valides et clôturés.
 
 *Dans Berlin Demo, la variation du PR est calculée en comparant aujourd’hui et hier jusqu’à la même heure locale.*
 

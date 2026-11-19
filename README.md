@@ -106,9 +106,9 @@ Live PR is actual power divided by estimated power, expressed as a percentage. P
 
 ### Efficiency
 
-Select **Today**, **24 hours**, **7 days** or **30 days**. **Today** compares with yesterday through the same local time. **7 days** includes today.
+Select **Today**, **24 hours**, **7 days** or **30 days**. **Today** compares today’s PR with yesterday’s through the same local time. **7 days** includes today.
 
-Review the range PR, its change in percentage points and estimated minus actual energy. **PR trend** and **Generation comparison** show how performance changes. For calendar ranges, switch between **Daily summary** and the settlement interval. Range PR divides actual energy by estimated energy over the same valid settled periods.
+Review the range PR, its change in percentage points and estimated minus actual energy. In the **Today** view, **PR trend** tracks PR throughout the day and **Generation comparison** plots actual and estimated power. For **7 days** and **30 days**, switch between **Daily summary** and a view by settlement interval. Range PR divides actual energy by estimated energy over the same valid settled periods.
 
 *Berlin Demo’s PR change compares today’s PR with yesterday’s through the same local time.*
 

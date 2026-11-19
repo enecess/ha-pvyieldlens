@@ -106,9 +106,9 @@ Der Live-PR ist der Quotient aus tatsächlicher und geschätzter Leistung in Pro
 
 ### Effizienz
 
-Wählen Sie **Heute**, **24 Stunden**, **7 Tage** oder **30 Tage**. **Heute** vergleicht den Ertrag mit gestern bis zur gleichen Ortszeit. **7 Tage** schließt heute ein.
+Wählen Sie **Heute**, **24 Stunden**, **7 Tage** oder **30 Tage**. **Heute** vergleicht den heutigen PR mit dem gestrigen bis zur gleichen Ortszeit. **7 Tage** schließt heute ein.
 
-Sehen Sie den PR im Zeitraum, seine Änderung in Prozentpunkten und die Differenz zwischen geschätzter und tatsächlicher Energie. **PR-Verlauf** und **Ertragsvergleich** zeigen die Entwicklung. Bei Kalenderzeiträumen können Sie zwischen der Ansicht **Tägliche Zusammenfassung** und der Anzeige nach Abrechnungsintervall wechseln. Der PR im Zeitraum ergibt sich aus tatsächlicher geteilt durch geschätzte Energie derselben gültigen abgeschlossenen Intervalle.
+Sehen Sie den PR im Zeitraum, seine Änderung in Prozentpunkten und die Differenz zwischen geschätzter und tatsächlicher Energie. In der Ansicht **Heute** sehen Sie unter **PR-Verlauf** den PR im Tagesverlauf und unter **Ertragsvergleich** die tatsächliche und geschätzte Leistung. Für die Zeiträume **7 Tage** und **30 Tage** können Sie zwischen der Ansicht **Tägliche Zusammenfassung** und der Anzeige nach Abrechnungsintervall wechseln. Der PR im Zeitraum ergibt sich aus tatsächlicher geteilt durch geschätzte Energie derselben gültigen abgeschlossenen Intervalle.
 
 *Die PR-Änderung in Berlin Demo vergleicht den heutigen PR mit dem gestrigen bis zur gleichen Ortszeit.*
 

@@ -106,9 +106,9 @@ Bieżący PR to stosunek mocy rzeczywistej do szacowanej wyrażony w procentach.
 
 ### Sprawność
 
-Wybierz **Dzisiaj**, **24 godziny**, **7 dni** lub **30 dni**. Opcja **Dzisiaj** porównuje wyniki z wczorajszymi do tej samej godziny lokalnej. Zakres **7 dni** obejmuje dzisiaj.
+Wybierz **Dzisiaj**, **24 godziny**, **7 dni** lub **30 dni**. Opcja **Dzisiaj** porównuje dzisiejszy PR z wczorajszym, w obu przypadkach do tej samej godziny czasu lokalnego. Zakres **7 dni** obejmuje dzisiaj.
 
-Sprawdź PR w okresie, jego zmianę w punktach procentowych i różnicę między energią szacowaną a rzeczywistą. Zmiany pokazują **Trend PR** i **Porównanie produkcji**. W zakresach kalendarzowych przełączaj między widokiem **Podsumowanie dzienne** a widokiem według interwału rozliczenia. PR w okresie to energia rzeczywista podzielona przez szacowaną z tych samych ważnych okresów rozliczeniowych.
+Sprawdź PR w okresie, jego zmianę w punktach procentowych i różnicę między energią szacowaną a rzeczywistą. W widoku **Dzisiaj** wykres **Trend PR** pokazuje zmiany PR w ciągu dnia, a **Porównanie produkcji** przedstawia moc rzeczywistą i szacowaną. W zakresach **7 dni** i **30 dni** możesz przełączać się między widokiem **Podsumowanie dzienne** a widokiem według interwału rozliczenia. PR w okresie to energia rzeczywista podzielona przez szacowaną z tych samych ważnych okresów rozliczeniowych.
 
 *Zmiana PR w Berlin Demo pokazuje różnicę między dzisiejszym a wczorajszym PR, liczonymi do tej samej godziny czasu lokalnego.*
 
