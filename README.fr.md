@@ -96,7 +96,7 @@ L’**Historique de production** compare chaque jour l’énergie réelle et est
 
 *Plage personnalisée de sept jours dans Berlin Demo avant validation.*
 
-![Plage personnalisée de Berlin Demo avec les dates de début et de fin et le bouton Appliquer la plage](docs/images/dashboard-history-range.png)
+![Plage personnalisée de Berlin Demo avec les dates de début et de fin et le bouton « Appliquer »](docs/images/dashboard-history-range.png)
 
 *Production quotidienne de Berlin Demo sur sept jours complets.*
 
@@ -110,9 +110,9 @@ Choisissez **Aujourd’hui**, **24 heures**, **7 jours** ou **30 jours**. **Aujo
 
 Consultez le PR de la période, sa variation en points de pourcentage et l’écart entre l’énergie estimée et réelle. Suivez les variations dans **Évolution du PR** et **Comparaison de production**. Pour les plages calendaires, alternez entre **Résumé quotidien** et l’affichage par intervalle de règlement. Le PR sur la période est le rapport entre l’énergie réelle et l’énergie estimée sur les mêmes intervalles valides et clôturés.
 
-*Efficacité de Berlin Demo aujourd’hui, comparée à celle d’hier jusqu’à la même heure.*
+*Dans Berlin Demo, la variation du PR est calculée en comparant aujourd’hui et hier jusqu’à la même heure locale.*
 
-![Vue Efficacité de Berlin Demo aujourd’hui, avec la tendance du PR et la comparaison de production avec hier](docs/images/efficiency.png)
+![Vue Efficacité de Berlin Demo aujourd’hui avec l’évolution du PR et la comparaison des puissances réelle et estimée](docs/images/efficiency.png)
 
 ### Prévisions
 

@@ -96,7 +96,7 @@ Unter **Ertragsdaten** finden Sie Leistung, Bestrahlungsstärke und Modultempera
 
 *Benutzerdefinierter Sieben-Tage-Zeitraum in Berlin Demo vor dem Anwenden.*
 
-![Benutzerdefinierte Datumsauswahl in Berlin Demo mit Startdatum, Enddatum und der Schaltfläche Bereich anwenden](docs/images/dashboard-history-range.png)
+![Benutzerdefinierte Datumsauswahl in Berlin Demo mit Startdatum, Enddatum und der Schaltfläche „Anwenden“](docs/images/dashboard-history-range.png)
 
 *Täglicher Energieertrag in Berlin Demo für sieben vollständige Tage.*
 
@@ -110,9 +110,9 @@ Wählen Sie **Heute**, **24 Stunden**, **7 Tage** oder **30 Tage**. **Heute** ve
 
 Sehen Sie den PR im Zeitraum, seine Änderung in Prozentpunkten und die Differenz zwischen geschätzter und tatsächlicher Energie. **PR-Verlauf** und **Ertragsvergleich** zeigen die Entwicklung. Bei Kalenderzeiträumen können Sie zwischen der Ansicht **Tägliche Zusammenfassung** und der Anzeige nach Abrechnungsintervall wechseln. Der PR im Zeitraum ergibt sich aus tatsächlicher geteilt durch geschätzte Energie derselben gültigen abgeschlossenen Intervalle.
 
-*Heutige Effizienz in Berlin Demo im Vergleich zu gestern bis zur gleichen Uhrzeit.*
+*Die PR-Änderung in Berlin Demo vergleicht den heutigen PR mit dem gestrigen bis zur gleichen Ortszeit.*
 
-![Heutige Effizienz in Berlin Demo mit PR-Verlauf und Ertragsvergleich mit gestern](docs/images/efficiency.png)
+![Heutige Effizienz in Berlin Demo mit PR-Verlauf sowie tatsächlicher und geschätzter Leistung](docs/images/efficiency.png)
 
 ### Prognose
 

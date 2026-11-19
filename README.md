@@ -110,9 +110,9 @@ Select **Today**, **24 hours**, **7 days** or **30 days**. **Today** compares wi
 
 Review the range PR, its change in percentage points and estimated minus actual energy. **PR trend** and **Generation comparison** show how performance changes. For calendar ranges, switch between **Daily summary** and the settlement interval. Range PR divides actual energy by estimated energy over the same valid settled periods.
 
-*Berlin Demo efficiency today, compared with yesterday through the same time.*
+*Berlin Demo’s PR change compares today’s PR with yesterday’s through the same local time.*
 
-![Berlin Demo Efficiency Today view with PR trend and generation compared with yesterday](docs/images/efficiency.png)
+![Berlin Demo Efficiency Today view with the PR trend and today’s actual and estimated power](docs/images/efficiency.png)
 
 ### Forecast
 

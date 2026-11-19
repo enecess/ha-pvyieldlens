@@ -96,7 +96,7 @@ Sekcja **Historia produkcji** porównuje dzienną energię rzeczywistą i szacow
 
 *Własny zakres siedmiu dni w Berlin Demo przed zastosowaniem.*
 
-![Własny zakres dat w Berlin Demo z datą początkową, datą końcową i przyciskiem Zastosuj zakres](docs/images/dashboard-history-range.png)
+![Własny zakres dat w Berlin Demo z datą początkową, datą końcową i przyciskiem „Zastosuj”](docs/images/dashboard-history-range.png)
 
 *Dzienna produkcja energii w Berlin Demo przez siedem pełnych dni.*
 
@@ -110,9 +110,9 @@ Wybierz **Dzisiaj**, **24 godziny**, **7 dni** lub **30 dni**. Opcja **Dzisiaj**
 
 Sprawdź PR w okresie, jego zmianę w punktach procentowych i różnicę między energią szacowaną a rzeczywistą. Zmiany pokazują **Trend PR** i **Porównanie produkcji**. W zakresach kalendarzowych przełączaj między widokiem **Podsumowanie dzienne** a widokiem według interwału rozliczenia. PR w okresie to energia rzeczywista podzielona przez szacowaną z tych samych ważnych okresów rozliczeniowych.
 
-*Sprawność dzisiaj w Berlin Demo w porównaniu z wczorajszą do tej samej godziny.*
+*Zmiana PR w Berlin Demo pokazuje różnicę między dzisiejszym a wczorajszym PR, liczonymi do tej samej godziny czasu lokalnego.*
 
-![Dzisiejsza sprawność w Berlin Demo z trendem PR i porównaniem produkcji z wczorajszą](docs/images/efficiency.png)
+![Dzisiejsza sprawność w Berlin Demo z trendem PR i porównaniem mocy rzeczywistej z szacowaną](docs/images/efficiency.png)
 
 ### Prognoza
 

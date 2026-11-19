@@ -96,7 +96,7 @@ In **Dati di produzione** trovi potenza, irradianza e temperatura dei moduli per
 
 *Intervallo personalizzato di sette giorni in Berlin Demo prima di applicarlo.*
 
-![Intervallo personalizzato in Berlin Demo con data iniziale, data finale e pulsante Applica intervallo](docs/images/dashboard-history-range.png)
+![Intervallo personalizzato in Berlin Demo con data iniziale, data finale e pulsante «Applica»](docs/images/dashboard-history-range.png)
 
 *Produzione giornaliera in Berlin Demo per sette giorni completi.*
 
@@ -110,9 +110,9 @@ Seleziona **Oggi**, **24 ore**, **7 giorni** o **30 giorni**. **Oggi** confronta
 
 Consulta il PR del periodo, la variazione in punti percentuali e la differenza tra energia stimata ed effettiva. **Andamento PR** e **Confronto produzione** mostrano come cambiano i valori. Per intervalli di calendario, puoi passare da **Riepilogo giornaliero** alla visualizzazione per intervallo di contabilizzazione. Il PR del periodo divide l’energia effettiva per quella stimata negli stessi intervalli validi e contabilizzati.
 
-*Efficienza di oggi in Berlin Demo, confrontata con ieri fino alla stessa ora.*
+*In Berlin Demo, la variazione del PR confronta il valore di oggi con quello di ieri fino alla stessa ora locale.*
 
-![Efficienza di oggi in Berlin Demo con andamento del PR e confronto con la produzione di ieri](docs/images/efficiency.png)
+![Efficienza di oggi in Berlin Demo con andamento del PR e confronto tra potenza effettiva e stimata](docs/images/efficiency.png)
 
 ### Previsioni
 

@@ -110,9 +110,9 @@ Home Assistant 应用会自动连接。使用 Docker 时，填写 **Home Assista
 
 查看区间 PR、较上一时段变化的百分点，以及预估与实际电量之差。用 **PR 趋势**和**发电对比**查看变化。按自然日查看时，可在**每天汇总**和按结算间隔显示之间切换。区间 PR 为同一批有效结算时段的实际电量除以预估电量所得的百分比。
 
-*Berlin Demo 今日能效，与昨天同一时刻的结果对比。*
+*Berlin Demo 的 PR 变化对比今天与昨天截至同一本地时刻的 PR。*
 
-![Berlin Demo 今日能效页面的 PR 趋势以及与昨天的发电对比](docs/images/efficiency.png)
+![Berlin Demo 今日能效中的 PR 趋势，以及今日实际功率与预估功率的对比](docs/images/efficiency.png)
 
 ### 预测
 
