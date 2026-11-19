@@ -92,7 +92,7 @@ In **Dati di produzione** trovi potenza, irradianza e temperatura dei moduli per
 
 <!-- screenshot: dashboard-generation.png -->
 
-**Produzione storica** confronta l’energia giornaliera effettiva e stimata. Seleziona **7 giorni**, **30 giorni** o **Personalizzato** per un massimo di 90 giorni di calendario. Per vedere gli ultimi sette giorni completi come in Berlin Demo, seleziona **Personalizzato**, imposta ieri come data finale e inizia sei giorni prima.
+**Produzione storica** confronta l’energia giornaliera effettiva e stimata. Seleziona **7 giorni**, **30 giorni** o **Personalizzato** per un massimo di 90 giorni di calendario. Per vedere gli ultimi sette giorni completi come in Berlin Demo, seleziona **Personalizzato**, imposta ieri come data finale e inizia sei giorni prima. Seleziona **Applica**.
 
 *Produzione giornaliera in Berlin Demo per sette giorni completi.*
 
@@ -114,7 +114,7 @@ Consulta il PR del periodo, la variazione in punti percentuali e la differenza t
 
 Confronta la **Previsione originale** e la **Previsione corretta** per oggi e i prossimi sei giorni. La previsione originale usa il meteo di Open-Meteo e le impostazioni dell’impianto. La correzione si basa sul PR recente ponderato per l’energia e richiede almeno tre giorni completi idonei con energia stimata positiva. Fino ad allora i valori corretti mostrano **—**.
 
-Le schede mostrano la giornata di oggi per intero, **Rimanente oggi** e **Previsione di domani**. La sezione **Energia prevista per giorno** confronta i sette giorni e mostra il **Totale di 7 giorni**. Seleziona **Aggiorna previsione** per richiedere nuovi dati meteo.
+Le schede in alto mostrano **Rimanente oggi** e **Previsione di domani**. In **Energia prevista per giorno**, **Oggi** copre l’intera giornata e il **Totale di 7 giorni** comprende tutti e sette i giorni. Seleziona **Aggiorna previsione** per richiedere nuovi dati meteo.
 
 *Previsioni di energia originali e corrette in Berlin Demo, selezione della data e pulsante **Esporta CSV**.*
 

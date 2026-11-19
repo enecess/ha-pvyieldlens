@@ -92,7 +92,7 @@ Sekcja **Dane produkcji** pokazuje moc, natężenie promieniowania i temperatur�
 
 <!-- screenshot: dashboard-generation.png -->
 
-Sekcja **Historia produkcji** porównuje dzienną energię rzeczywistą i szacowaną. Wybierz **7 dni**, **30 dni** lub **Własny** zakres do 90 dni kalendarzowych. Aby zobaczyć ostatnie siedem pełnych dni jak w Berlin Demo, wybierz zakres **Własny**, ustaw wczoraj jako datę końcową i rozpocznij zakres sześć dni wcześniej.
+Sekcja **Historia produkcji** porównuje dzienną energię rzeczywistą i szacowaną. Wybierz **7 dni**, **30 dni** lub **Własny** zakres do 90 dni kalendarzowych. Aby zobaczyć ostatnie siedem pełnych dni jak w Berlin Demo, wybierz zakres **Własny**, ustaw wczoraj jako datę końcową i rozpocznij zakres sześć dni wcześniej. Wybierz **Zastosuj**.
 
 *Dzienna produkcja energii w Berlin Demo przez siedem pełnych dni.*
 
@@ -114,7 +114,7 @@ Sprawdź PR w okresie, jego zmianę w punktach procentowych i różnicę między
 
 Porównaj wartości z pól **Oryginalna prognoza** i **Skorygowana prognoza** dla dzisiejszego dnia i kolejnych sześciu dni. Oryginalny model korzysta z danych pogodowych Open-Meteo i ustawień instalacji. Korekta uwzględnia PR z ostatnich dni, ważony energią, i wymaga co najmniej trzech pełnych dni, które spełniają warunki korekty i mają dodatnią energię szacowaną. Do tego czasu wartości skorygowane pokazują **—**.
 
-Karty pokazują prognozę na cały dzisiejszy dzień, **Pozostało dzisiaj** oraz **Prognoza na jutro**. Sekcja **Dzienna prognoza energii** porównuje wszystkie siedem dni i pokazuje łączną energię w pozycji **Suma z 7 dni**. Wybierz **Odśwież prognozę**, aby pobrać aktualne dane pogodowe.
+Górne karty pokazują **Pozostało dzisiaj** oraz **Prognoza na jutro**. W sekcji **Dzienna prognoza energii** karta **Dzisiaj** obejmuje cały dzień, a **Suma z 7 dni** uwzględnia wszystkie siedem dni. Wybierz **Odśwież prognozę**, aby pobrać aktualne dane pogodowe.
 
 *Oryginalna i skorygowana prognoza energii w Berlin Demo, wybór daty i przycisk **Eksportuj CSV**.*
 

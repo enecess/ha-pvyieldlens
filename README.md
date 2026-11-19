@@ -92,7 +92,7 @@ Use **Generation data** to inspect today’s settled power, irradiance and modul
 
 <!-- screenshot: dashboard-generation.png -->
 
-**Historical generation** compares daily actual and estimated energy. Choose **7 days**, **30 days** or **Custom** for up to 90 calendar dates. To see the last seven complete days as in Berlin Demo, select **Custom**, end the range yesterday and start it six days before that.
+**Historical generation** compares daily actual and estimated energy. Choose **7 days**, **30 days** or **Custom** for up to 90 calendar dates. To see the last seven complete days as in Berlin Demo, select **Custom**, end the range yesterday and start it six days before that. Select **Apply range**.
 
 *Berlin Demo daily energy for seven complete dates.*
 
@@ -114,7 +114,7 @@ Review the range PR, its change in percentage points and estimated minus actual 
 
 Compare **Original forecast** and **Corrected forecast** for today and the next six days. The original uses Open-Meteo weather and your array settings. Correction uses recent energy-weighted PR and needs at least three eligible completed days with positive estimated energy. Until then, corrected values show **—**.
 
-See the full day today, **Remaining today** and **Tomorrow’s forecast** in the top cards. **Daily forecast energy** compares all seven dates and gives the **7-day total**. Select **Refresh forecast** to request fresh weather data.
+The top cards show **Remaining today** and **Tomorrow’s forecast**. Under **Daily forecast energy**, **Today** covers the full day and the **7-day total** includes all seven dates. Select **Refresh forecast** to request fresh weather data.
 
 *Berlin Demo original and corrected energy forecasts, date selection and **Export CSV**.*
 

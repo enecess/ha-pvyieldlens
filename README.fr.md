@@ -15,7 +15,7 @@ L’application nécessite Home Assistant 2025.9.0 ou une version ultérieure.
 [![Ajouter le dépôt d’apps PVYieldLens](https://my.home-assistant.io/badges/supervisor_add_addon_repository.svg)](https://my.home-assistant.io/redirect/supervisor_add_addon_repository/?repository_url=https%3A%2F%2Fgithub.com%2Fenecess%2Fha-pvyieldlens%23dev_v0)
 
 1. Utilisez le bouton ci-dessus, puis confirmez avec **Ajouter** dans Home Assistant. Pour ajouter le dépôt manuellement, ouvrez **Paramètres > Applications > Installer une application > ⋮ > Dépôts** et saisissez `https://github.com/enecess/ha-pvyieldlens#dev_v0`.
-2. Recherchez **PVYieldLens** dans la **Magasin d'applications** et sélectionnez **Installer**.
+2. Recherchez **PVYieldLens** dans le **Magasin d'applications** et sélectionnez **Installer**.
 3. Sélectionnez **Démarrer**, puis **Ouvrir l'interface utilisateur web**.
 
 Avant Home Assistant 2026.2, ouvrez **Paramètres > Modules complémentaires > Boutique des modules complémentaires**, puis ajoutez le dépôt depuis le menu ⋮.
@@ -92,7 +92,7 @@ Consultez **Données de production** pour voir la puissance, l’irradiance et l
 
 <!-- screenshot: dashboard-generation.png -->
 
-L’**Historique de production** compare chaque jour l’énergie réelle et estimée. Choisissez **7 jours**, **30 jours** ou **Personnalisé** pour une période de 90 dates au maximum. Pour voir les sept derniers jours complets comme dans Berlin Demo, choisissez **Personnalisé**, terminez la période hier et commencez-la six jours plus tôt.
+L’**Historique de production** compare chaque jour l’énergie réelle et estimée. Choisissez **7 jours**, **30 jours** ou **Personnalisé** pour une période de 90 dates au maximum. Pour voir les sept derniers jours complets comme dans Berlin Demo, choisissez **Personnalisé**, terminez la période hier et commencez-la six jours plus tôt. Sélectionnez **Appliquer**.
 
 *Production quotidienne de Berlin Demo sur sept jours complets.*
 
@@ -114,7 +114,7 @@ Consultez le PR de la période, sa variation en points de pourcentage et l’éc
 
 Comparez la **Prévision originale** et la **Prévision corrigée** pour aujourd’hui et les six prochains jours. La prévision originale utilise la météo d’Open-Meteo et les paramètres de l’installation. La correction utilise le PR récent pondéré par l’énergie et nécessite au moins trois jours complets admissibles dont l’énergie estimée est positive. En attendant, les valeurs corrigées affichent **—**.
 
-Les cartes affichent la journée entière, **Reste aujourd’hui** et **Prévision de demain**. La section **Énergie prévue par jour** compare les sept jours et présente le **Total sur 7 jours**. Sélectionnez **Actualiser les prévisions** pour demander une mise à jour météo.
+Les cartes du haut affichent **Reste aujourd’hui** et **Prévision de demain**. Dans **Énergie prévue par jour**, **Aujourd’hui** couvre la journée entière et le **Total sur 7 jours** inclut les sept jours. Sélectionnez **Actualiser les prévisions** pour demander une mise à jour météo.
 
 *Prévisions d’énergie originales et corrigées de Berlin Demo, choix de la date et bouton **Exporter le CSV**.*
 

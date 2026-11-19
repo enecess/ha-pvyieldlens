@@ -92,7 +92,7 @@ Unter **Ertragsdaten** finden Sie Leistung, Bestrahlungsstärke und Modultempera
 
 <!-- screenshot: dashboard-generation.png -->
 
-**Bisheriger Energieertrag** vergleicht die tägliche tatsächliche und geschätzte Energie. Wählen Sie **7 Tage**, **30 Tage** oder **Benutzerdefiniert** für bis zu 90 Kalendertage. Für die letzten sieben vollständigen Tage wie in Berlin Demo wählen Sie **Benutzerdefiniert**. Setzen Sie das Ende auf gestern und den Beginn sechs Tage davor.
+**Bisheriger Energieertrag** vergleicht die tägliche tatsächliche und geschätzte Energie. Wählen Sie **7 Tage**, **30 Tage** oder **Benutzerdefiniert** für bis zu 90 Kalendertage. Für die letzten sieben vollständigen Tage wie in Berlin Demo wählen Sie **Benutzerdefiniert**. Setzen Sie das Ende auf gestern und den Beginn sechs Tage davor. Wählen Sie **Anwenden**.
 
 *Täglicher Energieertrag in Berlin Demo für sieben vollständige Tage.*
 
@@ -114,7 +114,7 @@ Sehen Sie den PR im Zeitraum, seine Änderung in Prozentpunkten und die Differen
 
 Vergleichen Sie die Werte unter **Ursprüngliche Prognose** und **Korrigierte Prognose** für heute und die nächsten sechs Tage. Die ursprüngliche Prognose verwendet Open-Meteo-Wetterdaten und Ihre Anlageneinstellungen. Die Korrektur verwendet den jüngsten energiegewichteten PR und benötigt mindestens drei geeignete vollständige Tage mit positiver geschätzter Energie. Bis dahin zeigen die korrigierten Werte **—**.
 
-Die Karten zeigen den ganzen heutigen Tag, **Heute verbleibend** und **Prognose für morgen**. **Tägliche Energieprognose** vergleicht die sieben Tage und zeigt die **Summe für 7 Tage**. Wählen Sie **Prognose aktualisieren**, um neue Wetterdaten anzufordern.
+Die oberen Karten zeigen **Heute verbleibend** und **Prognose für morgen**. Unter **Tägliche Energieprognose** deckt **Heute** den ganzen Tag ab. Die **Summe für 7 Tage** umfasst alle sieben Kalendertage. Wählen Sie **Prognose aktualisieren**, um neue Wetterdaten anzufordern.
 
 *Ursprüngliche und korrigierte Energieprognosen in Berlin Demo mit Datumsauswahl und **CSV exportieren**.*
 
