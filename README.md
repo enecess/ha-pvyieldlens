@@ -4,7 +4,11 @@
 
 ## Overview
 
-PVYieldLens compares measured solar production with what your PV array is estimated to generate under the observed conditions. Track the performance ratio (PR) in Home Assistant and see a seven-day generation forecast.
+PVYieldLens monitors solar generation in Home Assistant. It compares the power measured by your sensors with the power your panels are expected to produce at their current temperature and in the sunlight they receive. The performance ratio (PR) shows what percentage of that estimate your system achieves, so you can compare performance as conditions change.
+
+The app shows current power, compares actual and estimated energy day by day, and provides readings such as live PR and today’s estimated energy as Home Assistant sensors.
+
+The generation forecast covers today and the next six days, with a separate estimate for the energy still expected today. For solar systems with a single inverter, PVYieldLens offers a CSV power forecast that EMHASS can use to plan when to run household appliances. [About EMHASS](https://emhass.readthedocs.io/en/stable/main_core_concepts.html)
 
 ## Install
 
@@ -22,6 +26,8 @@ Before Home Assistant 2026.2, open **Settings > Add-ons > Add-on store**, then u
 
 ### Docker
 
+Run PVYieldLens on a Docker host with Compose that can reach your Home Assistant server.
+
 1. Download this repository and open its folder. Copy `.env.example` to `.env` and set `PVYL_WEB_PASSWORD` to your chosen password.
 2. Run `docker compose up -d --build`.
 3. On the Docker host, open [localhost:8099](http://localhost:8099) and sign in as `admin` with that password.
@@ -30,113 +36,139 @@ To allow access from another device, change the port mapping in `compose.yaml` f
 
 ## Configure
 
-Open **Settings** in PVYieldLens. Use **Language** at the top right to switch the interface language.
+After installation, open **Settings** in PVYieldLens. Use the section list to find the settings below. You’ll need your solar panel specifications and the Home Assistant sensors that report generation power and sunlight. Use **Language** at the top right if you want to change the interface language.
 
 ### Home Assistant connection
 
-The Home Assistant App connects automatically. In Docker, enter the **Home Assistant URL** and a **Long-lived access token** from a Home Assistant administrator, then select **Refresh entities**. Administrator access is required to publish the output sensors.
+The Home Assistant App connects automatically. For Docker, fill in **Home Assistant URL** with an address your Docker host can reach, such as `http://homeassistant.local:8123`. Use your own Home Assistant address and port.
 
-Enter a token on first setup or when changing the URL. With the same URL, leave the field blank to reuse the saved token.
+In Home Assistant, open the administrator’s profile, go to **Security**, and create a long-lived access token. Paste it into **Long-lived access token** in PVYieldLens. The administrator account lets PVYieldLens publish its output sensors. [Home Assistant account settings](https://www.home-assistant.io/docs/authentication/#managing-account-access)
+
+Select **Refresh entities** to check the connection and load the available sensors. Enter a token on first setup or when changing the URL. While keeping the same URL, you can leave the field blank to reuse the saved token.
 
 ### PV modules
 
 | Setting | What to enter |
 | --- | --- |
-| **Total max power at STC** | Add up the module ratings in W. Ten 500 W modules total 5,000 W. |
-| **Temperature coefficient of Pmax** | Use the datasheet value in %/°C, for example −0.35. |
-| **Module tilt** | From 0° to 90°. |
-| **Module direction** | Azimuth measured clockwise from north (0°), below 360°. Select a compass preset or **Custom**. |
-| **Nominal operating cell temperature (NOCT)** | Use the datasheet value in °C, above 20 °C and up to 80 °C. The default is 45 °C. |
+| **Total max power at STC** | Add up the rated wattage of your panels under standard test conditions (STC). Ten 500 W panels total 5,000 W. |
+| **Temperature coefficient of Pmax** | Indicates how rated power changes for each degree of panel temperature. Enter the datasheet value in %/°C, for example −0.35. |
+| **Module tilt** | Enter the angle above horizontal. Flat is 0° and vertical is 90°. |
+| **Module direction** | Choose the compass direction your panels face. For **Custom**, count clockwise from north (0°) and enter an angle below 360°. For example, southeast is 135°. |
+| **Nominal operating cell temperature (NOCT)** | Used to estimate how warm the solar cells get. Enter the datasheet value above 20 °C and up to 80 °C. The default is 45 °C. |
 
-For tilt and direction, choose **Fixed value** or **HA entity** separately. Pick a `sensor.*`, `number.*` or `input_number.*` that reports degrees (°). For a tracker, each forecast refresh uses the angles read at that moment for the full forecast.
+For panels mounted at a fixed angle, choose **Fixed value**. If Home Assistant reports an angle, select **HA entity** and pick a `sensor.*`, `number.*` or `input_number.*` that reports degrees (°). You can make this choice separately for tilt and direction. If you use a solar tracker, each forecast update reads its current angles once and uses them for all seven days.
 
-*Berlin Demo uses a 5,000 W array tilted at 35° and facing **South · 180°**.*
-
-![Berlin Demo PV modules settings with 5,000 W capacity, a 35° tilt and a south-facing direction](docs/images/settings-pv-modules.png)
+![PV modules settings for array capacity, tilt and direction](docs/images/settings-pv-modules.png)
 
 ### Sensors
 
+Choose the sensors that measure your solar installation in Home Assistant. Search for them by name. If you just added a sensor, select **Refresh entities** under **Home Assistant connection** to update the list.
+
 | Setting | Sensor and supported units |
 | --- | --- |
-| **Actual power** | PV generation power in W or kW. |
-| **Irradiance** | Irradiance in the plane of the modules, in W/m² or kW/m². |
-| **Module temperature (optional)** | Module temperature in °C, °F or K. Leave blank to estimate it from Open-Meteo air temperature, measured irradiance and NOCT. |
+| **Actual power** | Select your inverter’s current solar production in W or kW. This reading tells the app how much power the panels are producing at that moment. |
+| **Irradiance** | Select the sensor that measures how much sunlight reaches the panels, in W/m² or kW/m². It should measure at the same tilt and facing direction as the panels. |
+| **Module temperature (optional)** | Select a sensor that measures the panels’ temperature in °C, °F or K. If you don’t have one, leave the field blank. PVYieldLens then estimates it using Open-Meteo air temperature, your irradiance sensor and the NOCT setting. |
 
-*Berlin Demo uses simulated power, irradiance and module temperature sensors.*
-
-![Berlin Demo sensors for actual power, irradiance and module temperature](docs/images/settings-sensors.png)
+![Sensor settings for Actual power, Irradiance and Module temperature](docs/images/settings-sensors.png)
 
 ### Forecast
 
-Under **Forecast** in **Settings**, check the location and time zone. Change them in Home Assistant. Set **Historical PR days** if you want a different history window for forecast correction. The default is 14 days.
+Under **Forecast** in **Settings**, check **Home Assistant location**, **Coordinates** and **Home time zone**. The coordinates tell PVYieldLens where to get weather data. The time zone determines when one day’s totals end and the next day’s begin. If they need updating, make the changes in Home Assistant.
+
+**Historical PR days** sets how many previous calendar days to look back when correcting the forecast. The default is 14 days, and you can choose between 3 and 90.
 
 ### Monitoring settings
 
-By default, PVYieldLens settles energy and PR every 5 minutes. Live values average the latest 60 seconds and refresh every 5 seconds. If a sensor exceeds its **Data timeout**, the affected period counts as missing.
+Select **Monitoring settings** to expand the controls. You can keep the defaults when setting up the app.
 
-Select **Save configuration**.
+- **Settlement interval** sets how often PVYieldLens calculates and saves energy and PR for the period that just ended. The default is 5 minutes. You can also select 1 or 10 minutes.
+- **Average over** sets how much recent data to use for the live averages. The default is 60 seconds. A longer average makes brief changes in the live chart less pronounced.
+- **Update every** sets how often new values appear in the live view. The default is 5 seconds.
+- **Data timeout** sets how long the app can use a sensor’s last reading. When that time runs out, the app leaves the time without a fresh reading out of the power, energy and PR calculations.
+
+Select **Save configuration**. After you see **Configuration saved**, open **Dashboard** to check the live values. The day’s charts fill in as monitoring periods finish and their results are saved.
 
 ## What you get
 
 ### Dashboard
 
-Compare current actual and estimated power and check **PR** and **Optimizable power**. **Live data** shows the latest ten minutes of power readings.
+The cards at the top show your current **Actual power** and **Estimated power** alongside **PR**. **Optimizable power** is estimated power minus actual power in watts. A negative value means actual power is higher than estimated. In **Live data**, follow the two power curves over the last ten minutes.
 
-*Berlin Demo live power and PR.*
+![Dashboard showing Live data, current power and PR](docs/images/dashboard.png)
 
-![Berlin Demo Dashboard with the Live data chart and current power and PR cards](docs/images/dashboard.png)
+Use **Generation data** to see how today’s production changed alongside sunlight and panel temperature. Each point shows a period that has finished and been saved. A period with no usable readings leaves a gap in the chart. When the required readings are available and the sensor reports zero generation, the chart shows zero.
 
-Use **Generation data** to inspect today’s settled power, irradiance and module temperature.
+![Generation data charts for settled power, irradiance and module temperature](docs/images/dashboard-generation.png)
 
-*Today’s settled generation and sensor readings in Berlin Demo.*
+In **Historical generation**, compare actual and estimated energy in kWh, day by day. Choose **7 days**, **30 days**, or **Custom** to choose up to 90 calendar days ending no later than today.
 
-![Berlin Demo Generation data charts for settled power, irradiance and module temperature](docs/images/dashboard-generation.png)
+To see the last seven complete days, select **Custom** and set **End date** to yesterday. Set **Start date** to six days before that, then select **Apply range**. Both dates count toward the seven days.
 
-**Historical generation** compares daily actual and estimated energy. Choose **7 days**, **30 days** or **Custom** for up to 90 calendar dates. To see the last seven complete days as in Berlin Demo, select **Custom**, end the range yesterday and start it six days before that. Select **Apply range**.
+![Custom date range with Start date, End date and Apply range](docs/images/dashboard-history-range.png)
 
-*Berlin Demo’s seven-day Custom range before applying.*
-
-![Berlin Demo Custom date picker with start, end and Apply range controls](docs/images/dashboard-history-range.png)
-
-*Berlin Demo daily energy for seven complete dates.*
-
-![Berlin Demo Historical generation chart comparing actual and estimated energy for seven full days](docs/images/dashboard-history.png)
-
-Live PR is actual power divided by estimated power, expressed as a percentage. PR can exceed 100%, and **Optimizable power** (estimated minus actual power) can be negative. Missing readings leave gaps. A measured zero stays zero. When estimated power is zero, PR shows **—**.
+![Historical generation chart comparing actual and estimated energy for seven complete days](docs/images/dashboard-history.png)
 
 ### Efficiency
 
-Select **Today**, **24 hours**, **7 days** or **30 days**. **Today** compares today’s PR with yesterday’s through the same local time. **7 days** includes today.
+Choose the time range at the top of **Efficiency**. **Today** compares today’s PR so far with yesterday’s PR at the same time. For example, at noon the comparison uses the first half of each day. **24 hours** looks back 24 hours from now. **7 days** and **30 days** use calendar days in the Home Assistant time zone and include today.
 
-Review the range PR, its change in percentage points and estimated minus actual energy. In the **Today** view, **PR trend** tracks PR throughout the day and **Generation comparison** plots actual and estimated power. For **7 days** and **30 days**, switch between **Daily summary** and a view by settlement interval. Range PR divides actual energy by estimated energy over the same valid settled periods.
+The **PR in range** card shows the share of estimated energy that your panels produced in the selected time. **PR change from previous period** shows the difference in percentage points. For example, a change from 90% to 87% is a drop of 3 percentage points. **Estimated − actual energy** shows the difference in kWh.
 
-*Berlin Demo’s PR change compares today’s PR with yesterday’s through the same local time.*
+In the **Today** view, use **PR trend** to see when performance changed and **Generation comparison** to check the two power curves at those times. For **7 days** and **30 days**, use **Daily summary** to compare daily totals. To see when a change happened within a day, switch to **Every 5 minutes** or the interval you set in **Monitoring settings**.
 
-![Berlin Demo Efficiency Today view with the PR trend and today’s actual and estimated power](docs/images/efficiency.png)
+![Efficiency Today view showing PR trend and actual and estimated power](docs/images/efficiency.png)
+
+#### How PR is calculated
+
+PVYieldLens first adjusts the rated power of the panels for their temperature and how much sunlight is reaching them. It then compares that estimate with your measured power or energy.
+
+```text
+Estimated power = P_STC × [1 + (K / 100) × (T − 25)] × (G / 1000)
+Live PR = Actual power ÷ Estimated power × 100%
+PR in range = Actual energy ÷ Estimated energy × 100%
+```
+
+| Symbol | Value |
+| --- | --- |
+| `P_STC` | **Total max power at STC** (W) |
+| `K` | **Temperature coefficient of Pmax** (%/°C). Enter the datasheet value, e.g. −0.35. |
+| `T` | **Module temperature** (°C), measured or estimated |
+| `G` | **Irradiance** in the plane of the modules (W/m²) |
+
+For live PR, **Dashboard** averages actual and estimated power over the same time. For **PR in range**, **Efficiency** adds up actual and estimated energy over the same time. For example, if the required readings are available for only four minutes of a five-minute period, both values use those four minutes.
+
+A 5,000 W array with `K = −0.35`, `T = 45 °C` and `G = 800 W/m²` has an estimated power of **3,720 W**. If actual power is **3,348 W**, PR is **90%**.
+
+PR can go above 100% when actual output is higher than estimated. PR shows **—** if the estimated power or energy is zero, or if there are no usable readings to compare.
 
 ### Forecast
 
-Compare **Original forecast** and **Corrected forecast** for today and the next six days. The original uses Open-Meteo weather and your array settings. Correction uses recent energy-weighted PR and needs at least three eligible completed days with positive estimated energy. Until then, corrected values show **—**.
+**Original forecast** estimates generation for today and the next six days. It uses the sunlight and air temperature forecast by Open-Meteo, along with your panel settings.
 
-The top cards show **Remaining today** and **Tomorrow’s forecast**. Under **Daily forecast energy**, **Today** covers the full day and the **7-day total** includes all seven dates. Select **Refresh forecast** to request fresh weather data.
+**Corrected forecast** adjusts the original forecast based on how much energy your panels actually produced compared with the estimate on recent days. More recent days count more. PVYieldLens needs at least three previous days with both energy values available and estimated energy above zero. While it gathers history, you can use the original forecast and the corrected values show **—**.
 
-*Berlin Demo original and corrected energy forecasts, date selection and **Export CSV**.*
+Use **Remaining today** for the energy expected from now until midnight, or **Tomorrow’s forecast** to plan for tomorrow. Under **Daily forecast energy**, the **Today** card covers the full day and the **7-day total** includes all seven dates. Select **Refresh forecast** to request fresh weather data.
 
-![Berlin Demo Forecast overview with seven selectable dates, original and corrected energy, and Export CSV](docs/images/forecast.png)
+![Forecast overview with seven selectable dates, original and corrected energy and Export CSV](docs/images/forecast.png)
 
-Select a date to compare power curves and open **15-minute details** for interval power, energy, irradiance and temperatures.
+Select a date to see when production is expected to be highest and compare the original and corrected power curves. Open **15-minute details** below the chart for the power, energy, irradiance and temperatures for each part of the day.
 
-*Berlin Demo power curves and 15-minute details for the selected date.*
+![Selected-day power curves and the expanded 15-minute details table](docs/images/forecast-details.png)
 
-![Berlin Demo selected-day power curves and the expanded 15-minute details table](docs/images/forecast-details.png)
+#### Export to EMHASS
 
-For EMHASS with a single PV inverter, select **Export CSV** and choose the original or corrected series. Match the start, interval and step count to your optimization run. Save `data_weather_forecast.csv` in EMHASS’s `data_path`, with `set_use_pv=true` and `weather_forecast_method=csv`. [EMHASS setup details](pvyieldlens/DOCS.md#export-a-pv-power-forecast-to-emhass)
+If you use EMHASS with a single PV inverter, you can export the forecast power for an optimization run.
 
-*Export settings for a sample EMHASS run in Berlin Demo.*
+1. Select **Export CSV** and choose the original or corrected forecast in **Forecast power series**.
+2. Set **Start date**, **Start time**, **Optimization interval** and **Optimization steps** to match the run. Check that the preview covers the time you want to optimize.
+3. Select **Download** and put `data_weather_forecast.csv` in EMHASS’s `data_path` folder. In EMHASS, use `set_use_pv=true` and `weather_forecast_method=csv`. [EMHASS setup details](pvyieldlens/DOCS.md#export-a-pv-power-forecast-to-emhass)
 
-![Berlin Demo EMHASS export dialog showing the forecast series, start time, interval and step count](docs/images/forecast-export.png)
+![Export EMHASS CSV dialog with Forecast power series, Start time, Optimization interval and Optimization steps](docs/images/forecast-export.png)
 
 ### Home Assistant output sensors
+
+Once configured, PVYieldLens publishes the sensors below in Home Assistant. For example, add live PR to a dashboard card, or use tomorrow’s forecast in an automation that schedules when to run an appliance.
 
 | Metric | HA entity name | Unit |
 | --- | --- | --- |
@@ -154,4 +186,6 @@ For EMHASS with a single PV inverter, select **Export CSV** and choose the origi
 | Forecast energy tomorrow | `forecast_energy_tomorrow` | kWh |
 | Forecast energy for 7 days | `forecast_energy_7d` | kWh |
 
-The table shows the display names in Home Assistant. Use the full ID in automations, for example `sensor.pvyieldlens_settled_estimated_power`. The four forecast sensors report **Original forecast** energy. Estimated energy for today resets at midnight in your Home Assistant time zone. The lifetime total counts from initial setup.
+The table shows the display names in Home Assistant. Use the full ID in automations, for example `sensor.pvyieldlens_settled_estimated_power`. The settled sensors show the latest saved period, while the live sensors follow the averages on **Dashboard**.
+
+Estimated energy for today resets at midnight in your Home Assistant time zone. Lifetime estimated energy adds up from initial setup. The four forecast sensors show **Original forecast** energy in kWh and can change when the forecast is updated.

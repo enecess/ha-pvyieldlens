@@ -4,7 +4,11 @@
 
 ## Przegląd
 
-PVYieldLens porównuje zmierzoną produkcję energii słonecznej z produkcją, jaką instalacja fotowoltaiczna mogłaby osiągnąć w zaobserwowanych warunkach. Śledź współczynnik wydajności (PR) w Home Assistant i sprawdzaj prognozę produkcji na siedem dni.
+PVYieldLens monitoruje produkcję fotowoltaiczną w Home Assistant. Aplikacja porównuje zmierzoną moc z mocą oczekiwaną przy aktualnym nasłonecznieniu i temperaturze paneli. Współczynnik wydajności (PR) pokazuje, jaki procent szacowanej mocy osiąga instalacja. Dzięki temu można porównywać jej pracę także wtedy, gdy zmienia się pogoda.
+
+Aplikacja pokazuje bieżącą moc i porównuje energię rzeczywistą z szacowaną dzień po dniu. Wartości takie jak bieżący PR i energia szacowana na dziś są dostępne jako czujniki w Home Assistant.
+
+Prognoza produkcji obejmuje dzisiaj i kolejnych sześć dni. Osobno pokazuje, ile energii powinno jeszcze powstać do końca dnia. Dla instalacji z jednym falownikiem fotowoltaicznym PVYieldLens udostępnia prognozę mocy w formacie CSV, z której EMHASS może skorzystać do planowania pracy urządzeń domowych. [O EMHASS](https://emhass.readthedocs.io/en/stable/main_core_concepts.html)
 
 ## Instalacja
 
@@ -22,6 +26,8 @@ Przed wersją Home Assistant 2026.2 otwórz **Ustawienia > Dodatki > Sklep z dod
 
 ### Docker
 
+Użyj komputera z Dockerem i Compose, który ma dostęp do serwera Home Assistant.
+
 1. Pobierz repozytorium i otwórz jego folder. Skopiuj `.env.example` do `.env` i ustaw hasło w `PVYL_WEB_PASSWORD`.
 2. Uruchom `docker compose up -d --build`.
 3. Na hoście Dockera otwórz [localhost:8099](http://localhost:8099). Zaloguj się jako `admin` przy użyciu ustawionego hasła.
@@ -30,113 +36,139 @@ Aby uzyskać dostęp z innego urządzenia, zmień mapowanie portów w `compose.y
 
 ## Konfiguracja
 
-Otwórz **Ustawienia** w PVYieldLens. Menu **Język** w prawym górnym rogu pozwala zmienić język interfejsu.
+Po instalacji otwórz **Ustawienia** w PVYieldLens. Lista sekcji prowadzi do ustawień opisanych poniżej. Przygotuj kartę katalogową paneli i sprawdź, czy Home Assistant odbiera pomiary mocy produkcji i natężenia światła słonecznego. Menu **Język** w prawym górnym rogu pozwala zmienić język interfejsu.
 
 ### Połączenie z Home Assistant
 
-Aplikacja Home Assistant łączy się automatycznie. W Dockerze podaj **Adres Home Assistant** oraz **Długoterminowy token dostępu** administratora Home Assistant, a następnie wybierz **Odśwież encje**. Publikowanie czujników wynikowych wymaga uprawnień administratora.
+Aplikacja Home Assistant łączy się automatycznie. W Dockerze w polu **Adres Home Assistant** wpisz adres dostępny z hosta Dockera, np. `http://homeassistant.local:8123`.
 
-Podaj token przy pierwszej konfiguracji lub przy zmianie adresu. Przy tym samym adresie pozostaw pole puste, aby użyć zapisanego tokena.
+W Home Assistant otwórz profil administratora i w sekcji **Bezpieczeństwo** utwórz długoterminowy token dostępu. Wklej go w polu **Długoterminowy token dostępu** w PVYieldLens. Uprawnienia administratora pozwalają aplikacji publikować czujniki wynikowe. [Ustawienia konta Home Assistant](https://www.home-assistant.io/docs/authentication/#managing-account-access)
+
+Wybierz **Odśwież encje**, aby sprawdzić połączenie i wczytać listę czujników. Podaj token przy pierwszej konfiguracji lub przy zmianie adresu. Przy tym samym adresie możesz pozostawić pole puste, aby użyć zapisanego tokena.
 
 ### Moduły fotowoltaiczne
 
 | Ustawienie | Wartość do wpisania |
 | --- | --- |
-| **Łączna moc maksymalna w STC** | Zsumuj moce znamionowe modułów w W. Dziesięć modułów po 500 W daje 5 000 W. |
-| **Współczynnik temperaturowy Pmax** | Wartość z karty katalogowej w %/°C, np. −0,35. |
-| **Nachylenie modułów** | Od 0° do 90°. |
-| **Kierunek modułów** | Azymut liczony zgodnie z ruchem wskazówek zegara od północy (0°), poniżej 360°. Wybierz kierunek świata lub **Własny**. |
-| **Nominalna temperatura pracy ogniwa (NOCT)** | Wartość z karty katalogowej, powyżej 20 °C i do 80 °C. Domyślnie 45 °C. |
+| **Łączna moc maksymalna w STC** | Zsumuj znamionowe moce paneli w standardowych warunkach testowych (STC). Dziesięć paneli po 500 W daje 5 000 W. |
+| **Współczynnik temperaturowy Pmax** | Określa, jak zmienia się moc maksymalna wraz z temperaturą paneli. Wpisz wartość z karty katalogowej w %/°C, np. −0,35. |
+| **Nachylenie modułów** | Podaj kąt względem poziomu. Moduł położony płasko ma kąt 0°, a zamontowany pionowo 90°. |
+| **Kierunek modułów** | Wybierz kierunek, w którym zwrócone są panele. Przy opcji **Własny** podaj kąt mniejszy niż 360°, liczony od północy (0°) zgodnie z ruchem wskazówek zegara. Południowy wschód to 135°. |
+| **Nominalna temperatura pracy ogniwa (NOCT)** | Służy do oszacowania temperatury ogniw podczas pracy. Wpisz wartość z karty katalogowej, powyżej 20 °C i do 80 °C. Domyślna wartość to 45 °C. |
 
-Osobno dla nachylenia i kierunku wybierz **Wartość stała** lub **Encja HA**. Wybierz encję `sensor.*`, `number.*` lub `input_number.*`, która podaje kąt w stopniach (°). Przy każdym odświeżeniu cała prognoza dla instalacji nadążnej używa kątów odczytanych w tym momencie.
+Dla paneli zamontowanych na stałe wybierz **Wartość stała**. Jeśli Home Assistant podaje kąt, wybierz **Encja HA**, a potem encję `sensor.*`, `number.*` lub `input_number.*`, która podaje wartość w stopniach (°). Możesz wybrać źródło osobno dla nachylenia i kierunku. Jeśli panele obracają się za słońcem, przy każdym odświeżeniu prognozy aplikacja odczytuje ich aktualne kąty raz i stosuje je we wszystkich siedmiu dniach prognozy.
 
-*Instalacja Berlin Demo o mocy 5 000 W ma nachylenie 35° i kierunek **Południe · 180°**.*
-
-![Ustawienia modułów PV w Berlin Demo z mocą 5 000 W, nachyleniem 35° i kierunkiem południowym](docs/images/settings-pv-modules.png)
+![Ustawienia modułów fotowoltaicznych, w tym moc instalacji, nachylenie i kierunek](docs/images/settings-pv-modules.png)
 
 ### Czujniki
 
+W każdym polu wyszukaj odpowiedni czujnik instalacji po nazwie. Jeśli właśnie dodano czujnik, wybierz **Odśwież encje** w sekcji **Połączenie z Home Assistant**, aby zaktualizować listę.
+
 | Ustawienie | Czujnik i obsługiwane jednostki |
 | --- | --- |
-| **Moc rzeczywista** | Moc produkcji PV w W lub kW. |
-| **Natężenie promieniowania** | Natężenie promieniowania w płaszczyźnie modułów w W/m² lub kW/m². |
-| **Temperatura modułu (opcjonalnie)** | Temperatura modułu w °C, °F lub K. Gdy pole jest puste, temperatura jest szacowana z temperatury powietrza z Open-Meteo, zmierzonego natężenia promieniowania i NOCT. |
+| **Moc rzeczywista** | Wybierz odczyt bieżącej mocy fotowoltaicznej z falownika w W lub kW. Pokazuje on, jaką moc panele wytwarzają w danej chwili. |
+| **Natężenie promieniowania** | Wybierz czujnik mierzący światło słoneczne docierające do paneli, w W/m² lub kW/m². Czujnik powinien mieć to samo nachylenie i kierunek co panele. |
+| **Temperatura modułu (opcjonalnie)** | Wybierz czujnik mierzący temperaturę paneli w °C, °F lub K. Jeśli go nie masz, zostaw pole puste. PVYieldLens oszacuje wtedy temperaturę na podstawie temperatury powietrza z Open-Meteo, odczytu natężenia promieniowania i NOCT. |
 
-*Berlin Demo korzysta z symulowanych czujników mocy, natężenia promieniowania i temperatury modułu.*
-
-![Czujniki rzeczywistej mocy, natężenia promieniowania i temperatury modułu w Berlin Demo](docs/images/settings-sensors.png)
+![Ustawienia czujników mocy rzeczywistej, natężenia promieniowania i temperatury modułu](docs/images/settings-sensors.png)
 
 ### Prognoza
 
-W sekcji **Prognoza** w **Ustawieniach** sprawdź lokalizację i strefę czasową. Zmień je w Home Assistant. Pole **Liczba dni historii PR** wyznacza okres uwzględniany przy korekcie prognozy. Domyślnie wynosi 14 dni.
+W sekcji **Ustawienia > Prognoza** sprawdź pola **Lokalizacja Home Assistant**, **Współrzędne** i **Domowa strefa czasowa**. Na podstawie współrzędnych aplikacja pobiera pogodę dla Twojej okolicy. Strefa czasowa wyznacza moment, w którym o północy zaczyna się liczenie energii nowego dnia. Jeśli trzeba, zmień te dane w Home Assistant.
+
+**Liczba dni historii PR** określa, ile poprzednich dni może uwzględnić prognoza skorygowana. Domyślna wartość to 14 dni. Możesz wybrać od 3 do 90 dni.
 
 ### Monitorowanie
 
-Domyślnie PVYieldLens rozlicza energię i PR co 5 minut. Wartości bieżące są uśredniane z ostatnich 60 sekund i odświeżane co 5 sekund. Gdy czujnik przekroczy **Limit czasu bez danych**, odpowiedni okres jest traktowany jako brak danych.
+Wybierz **Monitorowanie**, aby otworzyć opcje. Przy pierwszej konfiguracji możesz użyć ustawień domyślnych.
 
-Wybierz **Zapisz konfigurację**.
+- **Interwał rozliczenia** określa, jak często PVYieldLens liczy i zapisuje energię oraz PR za właśnie zakończony okres. Domyślnie robi to co 5 minut. Możesz też wybrać 1 lub 10 minut.
+- **Średnia z** określa, z jakiego czasu aplikacja bierze odczyty do obliczenia wartości bieżących. Domyślnie używa ostatnich 60 sekund. Dłuższy okres łagodzi krótkie skoki na wykresie.
+- **Odświeżaj co** określa, jak często nowe wartości pojawiają się w widoku bieżącym. Domyślnie odświeżają się co 5 sekund.
+- **Limit czasu bez danych** określa, jak długo można używać ostatniego odczytu czujnika. Po upływie tego czasu aplikacja pomija czas bez nowego odczytu przy obliczaniu mocy, energii i PR.
+
+Wybierz **Zapisz konfigurację**. Po komunikacie **Konfiguracja zapisana** otwórz **Pulpit** i sprawdź bieżące wartości. Na wykresach dziennych pojawiają się wyniki w miarę zapisywania kolejnych zakończonych okresów.
 
 ## Wyniki
 
 ### Pulpit
 
-Porównaj bieżącą moc rzeczywistą i szacowaną, **PR** oraz wskaźnik **Moc możliwa do optymalizacji**. Wykres **Dane bieżące** pokazuje moc z ostatnich dziesięciu minut.
+Karty u góry pokazują **Moc rzeczywista**, **Moc szacowana** i **PR**. **Moc możliwa do optymalizacji** to moc szacowana minus rzeczywista, w watach. Wynik ujemny oznacza, że moc rzeczywista jest większa od szacowanej. W sekcji **Dane bieżące** możesz śledzić obie krzywe mocy z ostatnich dziesięciu minut.
 
-*Bieżąca moc i PR w Berlin Demo.*
+![Pulpit z danymi bieżącymi oraz kartami mocy i PR](docs/images/dashboard.png)
 
-![Pulpit Berlin Demo z wykresem danych na żywo oraz bieżącą mocą i PR](docs/images/dashboard.png)
+W sekcji **Dane produkcji** zobaczysz, jak dzisiejsza moc zmieniała się wraz z nasłonecznieniem i temperaturą paneli. Każdy punkt odpowiada zakończonemu okresowi, którego wyniki zostały zapisane. Jeśli przez cały okres brakuje odczytów potrzebnych do obliczeń, na wykresie zostaje luka. Gdy pozostałe odczyty są dostępne i czujnik mocy pokazuje zero, na wykresie pojawia się zero.
 
-Sekcja **Dane produkcji** pokazuje moc, natężenie promieniowania i temperaturę modułu w zakończonych okresach rozliczeniowych dzisiejszego dnia.
+![Dane produkcji z wykresami mocy, natężenia promieniowania i temperatury modułu dla rozliczonych okresów](docs/images/dashboard-generation.png)
 
-*Rozliczona produkcja dzisiaj i odczyty czujników w Berlin Demo.*
+W sekcji **Historia produkcji** porównasz energię rzeczywistą i szacowaną w kWh dla każdego dnia. Wybierz **7 dni**, **30 dni** lub **Własny**. Własny zakres może obejmować do 90 dni kalendarzowych i kończyć się najpóźniej dzisiaj.
 
-![Wykresy rozliczonej mocy, natężenia promieniowania i temperatury modułu w Berlin Demo](docs/images/dashboard-generation.png)
+Aby zobaczyć ostatnie siedem pełnych dni, wybierz zakres **Własny**. W polu **Data końcowa** ustaw wczorajszą datę. W polu **Data początkowa** wybierz dzień o sześć dni wcześniejszy i kliknij **Zastosuj**. Obie daty wliczają się do zakresu.
 
-Sekcja **Historia produkcji** porównuje dzienną energię rzeczywistą i szacowaną. Wybierz **7 dni**, **30 dni** lub **Własny** zakres do 90 dni kalendarzowych. Aby zobaczyć ostatnie siedem pełnych dni jak w Berlin Demo, wybierz zakres **Własny**, ustaw wczoraj jako datę końcową i rozpocznij zakres sześć dni wcześniej. Wybierz **Zastosuj**.
+![Własny zakres dat z datą początkową, datą końcową i przyciskiem „Zastosuj”](docs/images/dashboard-history-range.png)
 
-*Własny zakres siedmiu dni w Berlin Demo przed zastosowaniem.*
-
-![Własny zakres dat w Berlin Demo z datą początkową, datą końcową i przyciskiem „Zastosuj”](docs/images/dashboard-history-range.png)
-
-*Dzienna produkcja energii w Berlin Demo przez siedem pełnych dni.*
-
-![Historia produkcji w Berlin Demo porównująca energię rzeczywistą i szacowaną przez siedem pełnych dni](docs/images/dashboard-history.png)
-
-Bieżący PR to stosunek mocy rzeczywistej do szacowanej wyrażony w procentach. Może przekroczyć 100%. **Moc możliwa do optymalizacji** (moc szacowana minus rzeczywista) może być ujemna. Brak odczytu pozostawia lukę. Zmierzona wartość zero pozostaje zerem. Przy szacowanej mocy równej zero PR ma wartość **—**.
+![Historia produkcji z porównaniem energii rzeczywistej i szacowanej przez siedem pełnych dni](docs/images/dashboard-history.png)
 
 ### Sprawność
 
-Wybierz **Dzisiaj**, **24 godziny**, **7 dni** lub **30 dni**. Opcja **Dzisiaj** porównuje dzisiejszy PR z wczorajszym, w obu przypadkach do tej samej godziny czasu lokalnego. Zakres **7 dni** obejmuje dzisiaj.
+Wybierz zakres czasu u góry strony **Sprawność**. **Dzisiaj** porównuje dzisiejszy PR do bieżącej godziny z wczorajszym PR do tej samej godziny. Na przykład w południe porównuje pierwsze połowy obu dni. **24 godziny** obejmuje ostatnie 24 godziny. **7 dni** i **30 dni** to dni kalendarzowe w strefie czasowej Home Assistant, w tym dzisiejszy dzień.
 
-Sprawdź PR w okresie, jego zmianę w punktach procentowych i różnicę między energią szacowaną a rzeczywistą. W widoku **Dzisiaj** wykres **Trend PR** pokazuje zmiany PR w ciągu dnia, a **Porównanie produkcji** przedstawia moc rzeczywistą i szacowaną. W zakresach **7 dni** i **30 dni** możesz przełączać się między widokiem **Podsumowanie dzienne** a widokiem według interwału rozliczenia. PR w okresie to energia rzeczywista podzielona przez szacowaną z tych samych ważnych okresów rozliczeniowych.
+**PR w okresie** pokazuje, jaki procent szacowanej energii panele wytworzyły w wybranym czasie. **Zmiana PR względem poprzedniego okresu** podaje różnicę w punktach procentowych. Na przykład zmiana z 90% na 87% to spadek o 3 punkty procentowe. **Energia szacowana − rzeczywista** podaje różnicę w kWh.
 
-*Zmiana PR w Berlin Demo pokazuje różnicę między dzisiejszym a wczorajszym PR, liczonymi do tej samej godziny czasu lokalnego.*
+W widoku **Dzisiaj** odczytaj z wykresu **Trend PR**, kiedy wynik się zmienił, a w sekcji **Porównanie produkcji** sprawdź obie krzywe mocy dla tych godzin. Przy zakresach **7 dni** i **30 dni** wybierz **Podsumowanie dzienne**, aby porównać sumy dzienne. Aby dokładniej sprawdzić konkretną godzinę, wybierz **Co 5 minut** lub interwał ustawiony w sekcji **Monitorowanie**.
 
-![Dzisiejsza sprawność w Berlin Demo z trendem PR i porównaniem mocy rzeczywistej z szacowaną](docs/images/efficiency.png)
+![Widok „Dzisiaj” w sekcji Sprawność z trendem PR oraz mocą rzeczywistą i szacowaną](docs/images/efficiency.png)
+
+#### Obliczanie PR
+
+PVYieldLens najpierw dostosowuje moc znamionową paneli do ich temperatury i ilości docierającego do nich światła słonecznego. Następnie porównuje wynik ze zmierzoną mocą lub energią.
+
+```text
+Moc szacowana = P_STC × [1 + (K / 100) × (T − 25)] × (G / 1000)
+Bieżący PR = Moc rzeczywista ÷ Moc szacowana × 100%
+PR w okresie = Energia rzeczywista ÷ Energia szacowana × 100%
+```
+
+| Symbol | Wartość |
+| --- | --- |
+| `P_STC` | **Łączna moc maksymalna w STC** (W) |
+| `K` | **Współczynnik temperaturowy Pmax** (%/°C). Wpisz wartość z karty katalogowej, np. −0,35. |
+| `T` | **Temperatura modułu** (°C), zmierzona lub oszacowana |
+| `G` | **Natężenie promieniowania** w płaszczyźnie modułów (W/m²) |
+
+Bieżący PR na stronie **Pulpit** korzysta z mocy rzeczywistej i szacowanej uśrednionych w tym samym czasie. Do obliczenia **PR w okresie** strona **Sprawność** sumuje obie wartości energii z tych samych odcinków czasu. Na przykład gdy w pięciominutowym okresie potrzebne odczyty są dostępne przez cztery minuty, obie wartości energii obejmują te cztery minuty.
+
+Dla instalacji o mocy 5 000 W, przy `K = −0,35`, `T = 45 °C` i `G = 800 W/m²`, moc szacowana wynosi **3 720 W**. Przy mocy rzeczywistej **3 348 W** wskaźnik PR wynosi **90%**.
+
+PR może przekroczyć 100%, gdy produkcja rzeczywista przewyższa szacunek. Jeśli szacowana moc lub energia wynosi zero albo brakuje odczytów do porównania, PR wyświetla się jako **—**.
 
 ### Prognoza
 
-Porównaj wartości z pól **Oryginalna prognoza** i **Skorygowana prognoza** dla dzisiejszego dnia i kolejnych sześciu dni. Oryginalny model korzysta z danych pogodowych Open-Meteo i ustawień instalacji. Korekta uwzględnia PR z ostatnich dni, ważony energią, i wymaga co najmniej trzech pełnych dni, które spełniają warunki korekty i mają dodatnią energię szacowaną. Do tego czasu wartości skorygowane pokazują **—**.
+**Oryginalna prognoza** szacuje produkcję na dziś i sześć kolejnych dni. Korzysta z prognoz nasłonecznienia i temperatury powietrza z Open-Meteo oraz ustawień paneli.
 
-Górne karty pokazują **Pozostało dzisiaj** oraz **Prognoza na jutro**. W sekcji **Dzienna prognoza energii** karta **Dzisiaj** obejmuje cały dzień, a **Suma z 7 dni** uwzględnia wszystkie siedem dni. Wybierz **Odśwież prognozę**, aby pobrać aktualne dane pogodowe.
+**Skorygowana prognoza** dostosowuje prognozę oryginalną na podstawie tego, ile energii panele faktycznie wyprodukowały w porównaniu z szacunkami z ostatnich dni. Nowsze dni mają większy wpływ na wynik. Potrzebne są co najmniej trzy minione dni, dla których dostępne są obie wartości energii, a energia szacowana jest większa od zera. Do tego czasu możesz korzystać z oryginalnej prognozy, a w polach prognozy skorygowanej pojawia się **—**.
 
-*Oryginalna i skorygowana prognoza energii w Berlin Demo, wybór daty i przycisk **Eksportuj CSV**.*
+Karta **Pozostało dzisiaj** pokazuje energię spodziewaną od tej chwili do północy. **Prognoza na jutro** pozwala zaplanować następny dzień. W sekcji **Dzienna prognoza energii** karta **Dzisiaj** obejmuje cały dzień, a **Suma z 7 dni** uwzględnia wszystkie siedem dni. Wybierz **Odśwież prognozę**, aby pobrać aktualne dane pogodowe.
 
-![Przegląd prognoz w Berlin Demo z siedmioma datami, energią oryginalną i skorygowaną oraz eksportem CSV](docs/images/forecast.png)
+![Przegląd prognoz z siedmioma datami, prognozą oryginalną i skorygowaną oraz przyciskiem „Eksportuj CSV”](docs/images/forecast.png)
 
-Wybierz datę, aby porównać krzywe mocy. Otwórz **Szczegóły co 15 minut**, aby zobaczyć moc, energię, natężenie promieniowania i temperatury w każdym przedziale.
+Wybierz datę, aby znaleźć porę największej spodziewanej produkcji i porównać oryginalną i skorygowaną krzywą mocy. Pod wykresem otwórz **Szczegóły co 15 minut**, aby zobaczyć moc, energię, natężenie promieniowania i temperatury w każdym przedziale.
 
-*Krzywe mocy i szczegóły co 15 minut dla wybranej daty w Berlin Demo.*
+![Krzywe mocy dla wybranego dnia i rozwinięta tabela szczegółów co 15 minut](docs/images/forecast-details.png)
 
-![Krzywe mocy dla wybranej daty i rozwinięta tabela danych co 15 minut w Berlin Demo](docs/images/forecast-details.png)
+#### Eksport do EMHASS
 
-W konfiguracji EMHASS z jednym falownikiem PV wybierz **Eksportuj CSV**, a następnie serię oryginalną lub skorygowaną. Dopasuj początek, interwał i liczbę kroków do przebiegu optymalizacji. Zapisz `data_weather_forecast.csv` w katalogu EMHASS wskazanym przez `data_path` i ustaw `set_use_pv=true` oraz `weather_forecast_method=csv`. [Konfiguracja EMHASS](pvyieldlens/DOCS.md#export-a-pv-power-forecast-to-emhass)
+Jeśli używasz EMHASS z jednym falownikiem fotowoltaicznym, możesz wyeksportować prognozę mocy do optymalizacji.
 
-*Ustawienia eksportu dla przykładowego uruchomienia EMHASS w Berlin Demo.*
+1. Wybierz **Eksportuj CSV**. W polu **Seria prognozowanej mocy** wybierz prognozę oryginalną lub skorygowaną.
+2. Dopasuj pola **Data rozpoczęcia**, **Godzina rozpoczęcia**, **Interwał optymalizacji** i **Liczba kroków optymalizacji** do uruchamianej optymalizacji. Sprawdź w podglądzie, czy eksport obejmuje właściwy okres.
+3. Wybierz **Pobierz** i umieść `data_weather_forecast.csv` w katalogu EMHASS wskazanym przez `data_path`. Ustaw w EMHASS `set_use_pv=true` i `weather_forecast_method=csv`. [Konfiguracja EMHASS](pvyieldlens/DOCS.md#export-a-pv-power-forecast-to-emhass)
 
-![Okno eksportu EMHASS w Berlin Demo z serią prognozy, czasem rozpoczęcia, interwałem i liczbą kroków](docs/images/forecast-export.png)
+![Okno „Eksportuj CSV dla EMHASS” z serią prognozowanej mocy, godziną rozpoczęcia, interwałem i liczbą kroków](docs/images/forecast-export.png)
 
 ### Czujniki wynikowe Home Assistant
+
+Po konfiguracji PVYieldLens publikuje poniższe czujniki w Home Assistant. Możesz na przykład dodać bieżący PR do pulpitu albo użyć prognozy na jutro w automatyzacji planującej uruchomienie urządzenia.
 
 | Miara | Nazwa encji HA | Jednostka |
 | --- | --- | --- |
@@ -154,4 +186,6 @@ W konfiguracji EMHASS z jednym falownikiem PV wybierz **Eksportuj CSV**, a nast�
 | Prognozowana energia jutro | `forecast_energy_tomorrow` | kWh |
 | Prognozowana energia przez 7 dni | `forecast_energy_7d` | kWh |
 
-Tabela podaje nazwy widoczne w Home Assistant. W automatyzacjach używaj pełnego identyfikatora, np. `sensor.pvyieldlens_settled_estimated_power`. Cztery czujniki prognozy podają energię z widoku **Oryginalna prognoza**. Dzienna szacowana energia zeruje się o północy w domowej strefie czasowej, a suma narasta od pierwszej konfiguracji.
+Tabela podaje nazwy widoczne w Home Assistant. W automatyzacjach używaj pełnego identyfikatora, np. `sensor.pvyieldlens_settled_estimated_power`. Czujniki rozliczone pokazują wyniki z ostatniego zapisanego okresu. Czujniki bieżące aktualizują się wraz ze średnimi na stronie **Pulpit**.
+
+Dzienna szacowana energia zeruje się o północy w domowej strefie czasowej, a łączna szacowana energia narasta od pierwszej konfiguracji. Cztery czujniki prognozy podają energię w kWh z widoku **Oryginalna prognoza**. Ich wartości mogą się zmieniać po aktualizacji prognozy.
