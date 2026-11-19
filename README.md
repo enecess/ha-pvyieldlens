@@ -2,110 +2,133 @@
 
 # PVYieldLens
 
-Compare your PV modules’ estimated and actual output, follow PR, and see estimated energy for today and in total.
+## Overview
 
-## Features
+PVYieldLens compares measured solar production with what your PV array is estimated to generate under the observed conditions. Track the performance ratio (PR) in Home Assistant and see a seven-day generation forecast.
 
-- Dashboard power, PR and today’s settled generation.
-- Efficiency comparisons using original 1, 5 or 10 minute settlements.
-- Estimated energy for today and since setup.
-- Paired daily energy for 7/30 days or a custom range up to 90 dates.
-- Original and corrected 15-minute generation forecasts.
-- Six languages, with a language menu at the top right.
+## Install
 
-## Quick start
+### Home Assistant OS
 
-### Home Assistant App
-
-For Home Assistant OS.
+The App requires Home Assistant 2025.9.0 or newer.
 
 [![Add the PVYieldLens App repository](https://my.home-assistant.io/badges/supervisor_add_addon_repository.svg)](https://my.home-assistant.io/redirect/supervisor_add_addon_repository/?repository_url=https%3A%2F%2Fgithub.com%2Fenecess%2Fha-pvyieldlens%23dev_v0)
 
-1. Click the button above and confirm **Add** in Home Assistant.
-2. Find **PVYieldLens** in the App store, then install and start it.
-3. Open the Web UI and go to **Settings** to choose your sensors and enter your PV module details.
+1. Use the button above and confirm **Add** in Home Assistant. To add the repository manually, open **Settings > Apps > Install app > ⋮ > Repositories** and enter `https://github.com/enecess/ha-pvyieldlens#dev_v0`.
+2. Find **PVYieldLens** in the **App store** and select **Install**.
+3. Select **Start**, then **Open Web UI**.
 
-If the button does not open Home Assistant, go to **Settings > Apps > Install app > top-right menu > Repositories** and add:
-
-```text
-https://github.com/enecess/ha-pvyieldlens#dev_v0
-```
-
-On Home Assistant versions before 2026.2, use **Settings > Add-ons > Add-on Store > top-right menu > Repositories**. The App requires Home Assistant 2025.9.0 or newer.
+Before Home Assistant 2026.2, open **Settings > Add-ons > Add-on store**, then use the ⋮ menu to add the repository.
 
 ### Docker
 
-Download this repository and open its folder. Create your settings file:
+1. Download this repository and open its folder. Copy `.env.example` to `.env` and set `PVYL_WEB_PASSWORD` to your chosen password.
+2. Run `docker compose up -d --build`.
+3. On the Docker host, open [localhost:8099](http://localhost:8099) and sign in as `admin` with that password.
 
-```sh
-cp .env.example .env
-```
+To allow access from another device, change the port mapping in `compose.yaml` from `127.0.0.1:8099:8099` to `8099:8099`.
 
-Set `PVYL_WEB_PASSWORD` in `.env` to your chosen password, then start the app:
+## Configure
 
-```sh
-docker compose up -d --build
-```
+Open **Settings** in PVYieldLens. Use **Language** at the top right to switch the interface language.
 
-Open [localhost:8099](http://localhost:8099). Sign in as `admin` with the password you set. For the first connection, enter your Home Assistant address and a long-lived access token belonging to a Home Assistant **administrator** in **Settings**, then select **Refresh entities**. When a URL and token are already configured, sensors load automatically the first time you enter **Settings**. Use **Refresh entities** after changing the connection, to refresh the list or to retry a failed request. Administrator access is required to publish the output sensors. Enter a token on first setup and whenever you change the Home Assistant URL. Leave the token field blank to reuse a saved token for the same URL.
+### Home Assistant connection
 
-The default address works on the Docker host. To open the page from another device, change `127.0.0.1:8099:8099` to `8099:8099` in `compose.yaml`.
+The Home Assistant App connects automatically. In Docker, enter the **Home Assistant URL** and a **Long-lived access token** from a Home Assistant administrator, then select **Refresh entities**. Administrator access is required to publish the output sensors.
 
-## Settings
+Enter a token on first setup or when changing the URL. With the same URL, leave the field blank to reuse the saved token.
 
-Use **Dashboard** for current power and today’s generation, **Efficiency** for settled energy and PR comparisons, and **Forecast** for original and corrected weather forecasts. **Settings** stays at the top right, with all three data tabs available. Its directory lists the HA connection, PV modules, Sensors, Forecast and Monitoring settings in that order.
-
-**Monitoring settings** starts collapsed. Select its heading or directory entry to open the controls. Select **?** beside the heading to read about settlement, averaging, refresh and sensor timeouts while the controls are collapsed or expanded.
-
-**Save configuration** keeps you in Settings. **Discard changes** reloads the saved configuration from the server and replaces your edits; if loading fails, your draft remains available to retry. Leaving with unsaved changes asks you to keep editing or discard them. Returning to Settings loads the saved configuration again.
-
-The top-right **Theme mode** menu offers Auto, Light and Dark. Auto follows Home Assistant's Theme mode inside its Web UI and uses the system preference outside a usable Home Assistant context. Light or Dark overrides Auto locally; selecting Auto resumes following the host. Language and theme changes preserve your settings draft.
+### PV modules
 
 | Setting | What to enter |
 | --- | --- |
-| Total max power at STC | Sum of module maximum powers under standard test conditions (STC), in W, e.g. `5000`. |
-| Temperature coefficient of Pmax | The Pmax coefficient from the module datasheet, in %/°C, e.g. `-0.35`. |
-| Actual power | Your solar generation power sensor (W or kW). |
-| Irradiance | An irradiance sensor in the same plane as the modules (W/m² or kW/m²). |
-| Module temperature (optional) | Module temperature sensor (°C, °F or K). Leave blank to estimate module temperature. |
-| Settlement interval | Saves energy and PR every 1, 5 or 10 minutes for review in **Efficiency**. The default is 5 minutes. |
-| Average over | Calculates live values from the most recent 60 seconds by default. Longer windows smooth short-term changes. |
-| Update every | Recalculates and refreshes live values every 5 seconds by default. |
-| Data timeout | Sets how long to wait for each sensor’s next reading. A timed-out period counts as missing and reduces data completeness. |
+| **Total max power at STC** | Add up the module ratings in W. Ten 500 W modules total 5,000 W. |
+| **Temperature coefficient of Pmax** | Use the datasheet value in %/°C, for example −0.35. |
+| **Module tilt** | From 0° to 90°. |
+| **Module direction** | Azimuth measured clockwise from north (0°), below 360°. Select a compass preset or **Custom**. |
+| **Nominal operating cell temperature (NOCT)** | Use the datasheet value in °C, above 20 °C and up to 80 °C. The default is 45 °C. |
 
-Set the module tilt and direction under **PV modules**. Save your settings, then open **Dashboard**. The first settled result appears in **Efficiency** when the current period ends.
+For tilt and direction, choose **Fixed value** or **HA entity** separately. Pick a `sensor.*`, `number.*` or `input_number.*` that reports degrees (°). For a tracker, each forecast refresh uses the angles read at that moment for the full forecast.
 
-Dashboard preloads the last ten minutes of live readings. **Generation data** shows today’s settled estimated/actual power, irradiance and module temperature. Its energy chart defaults to 7 days and also offers 30 days or an inclusive custom range of at most 90 home calendar dates ending no later than today. Missing values stay empty; measured zero stays zero. Historical settlements and cumulative energy are preserved.
+*Berlin Demo uses a 5,000 W array tilted at 35° and facing **South · 180°**.*
 
-Efficiency shows range PR, the change from the comparable previous period in percentage points, and estimated minus actual energy. Today compares with yesterday through the same local clock time; 24 hours compares with the preceding 24 hours; 7/30 days shift the same home calendar range back 7/30 dates. The PR and generation charts share **Daily summary** or **Every {minutes} minutes**, using the configured settlement interval.
+<!-- screenshot: settings-pv-modules.png -->
 
-Charts smooth only the drawing. Mouse, touch and keyboard inspection shows original records, including each 15-minute forecast interval. Energy and PR use unsmoothed values. Home time defines calendar dates and forecasts; monitoring and fetch timestamps follow the HA viewer’s server/local preference, or browser time in standalone Docker. UTC offsets distinguish repeated daylight-saving times when needed.
+### Sensors
 
-## Generation forecast
+| Setting | Sensor and supported units |
+| --- | --- |
+| **Actual power** | PV generation power in W or kW. |
+| **Irradiance** | Irradiance in the plane of the modules, in W/m² or kW/m². |
+| **Module temperature (optional)** | Module temperature in °C, °F or K. Leave blank to estimate it from Open-Meteo air temperature, measured irradiance and NOCT. |
 
-Forecast starts automatically when the required settings and Home Assistant location are available. If setup is incomplete, select **Configure PV modules** on the Forecast page. **Settings > Forecast** shows the location name, coordinates and home time zone from the saved connection. Set these values in Home Assistant.
+*Berlin Demo uses simulated power, irradiance and module temperature sensors.*
 
-Under **Settings > PV modules**, choose **Fixed value** or **HA entity** independently for tilt and direction. Tilt ranges from 0° to 90° inclusive. Compass azimuth increases clockwise from north (0°) up to but excluding 360°. The fixed direction presets also include east (90°), south (180°), and west (270°). An angle entity must be a `sensor.*`, `number.*`, or `input_number.*` whose state is in degrees (`°`). Use **Refresh entities** in the connection settings to find candidates.
+<!-- screenshot: settings-sensors.png -->
 
-Enter the datasheet NOCT in **PV modules** (above 20°C and at most 80°C, default 45°C). Total max power at STC and the temperature coefficient of Pmax are shared with monitoring. For identical modules, multiply the rating of one module by the module count, for example 500 W × 10 = 5000 W.
+### Forecast
 
-For a tracker, every refresh reads the selected HA angles once. All 15-minute periods in that seven-day forecast, including earlier periods today, use that same pair of angles. The Forecast page shows the angles and their read time separately from the weather fetch time. If an entity is unavailable, the page identifies it and shows any still-usable periods from the last forecast. With no usable forecast, energy values show **—** and you can retry the refresh.
+Under **Forecast** in **Settings**, check the location and time zone. Change them in Home Assistant. Set **Historical PR days** if you want a different history window for forecast correction. The default is 14 days.
 
-Monitoring uses the measured **Module temperature** when you select a sensor. If you leave it blank, PVYieldLens estimates module temperature using Open-Meteo air temperature for your Home Assistant location, your irradiance sensor, and the NOCT set under **PV modules**. Without usable air temperature or irradiance data, estimated module temperature and temperature-dependent power and PR values are unavailable. Forecast uses its own weather inputs and NOCT to calculate **Estimated cell temperature**.
+### Monitoring settings
 
-Open-Meteo supplies 15-minute model inputs for today and the next six home calendar days. Some regions or fields interpolate hourly models; a 15-minute output step does not guarantee greater accuracy. Select a date for paired original/corrected energy, power curves and interval details. Today covers the full day; **Remaining today** runs from now to home midnight and decreases between weather fetches. Normal days have 96 intervals, while daylight-saving days can have 92 or 100.
+By default, PVYieldLens settles energy and PR every 5 minutes. Live values average the latest 60 seconds and refresh every 5 seconds. If a sensor exceeds its **Data timeout**, the affected period counts as missing.
 
-Each date card keeps weather and hourly-forecast high/low temperatures alongside paired energy bars and kWh values. The warm **Today** marker follows home midnight independently of the blue selection. Weather summaries continue to use hourly samples from the same weather request, cache and fetch time. Weather and energy can be unavailable independently; zero remains valid.
+Select **Save configuration**.
 
-Weather normally refreshes hourly; **Refresh forecast** requests an update. Matching caches survive restart. A failed request keeps the original fetch time, reports the error and retries after 15 minutes. Missing inputs leave affected totals unavailable as **—**.
+## What you get
 
-**Original forecast** is the unchanged weather/NOCT model. **Corrected forecast** multiplies it by recent energy-weighted PR with greater weight on recent completed home dates. In **Settings > Forecast**, **Historical PR days** defaults to n=14 and accepts integers 3–90; the half-life is n/2 days. At least 3 eligible dates with positive estimated energy are required. Actual and estimated energy use the same valid periods after the latest comparable monitoring configuration. A true zero actual yield is eligible, and PR above 100% is retained. Without enough history, corrected values show **—** while original values remain available. Changing n recalculates correction without fetching weather again.
+### Dashboard
 
-Correction applies to the page and application API only. All 13 HA output IDs and meanings remain unchanged; the four forecast entities continue to report original forecast energy integrated from the 15-minute intervals.
+Compare current actual and estimated power and check **PR** and **Optimizable power**. **Live data** shows the latest ten minutes of power readings.
 
-These are estimated DC reference values for one PV module array, using plane-of-array irradiance and a simplified NOCT temperature model. They do not model inverter efficiency/clipping, shading, snow, soiling or system losses and do not guarantee actual AC yield. The four forecast entities are kWh energy values without `state_class`; they can decrease after refresh and are separate from cumulative monitoring energy. They do not provide native HA forecast or Energy dashboard integration.
+*Berlin Demo live power and PR.*
 
-## Output sensors
+<!-- screenshot: dashboard.png -->
+
+Use **Generation data** to inspect today’s settled power, irradiance and module temperature.
+
+*Today’s settled generation and sensor readings in Berlin Demo.*
+
+<!-- screenshot: dashboard-generation.png -->
+
+**Historical generation** compares daily actual and estimated energy. Choose **7 days**, **30 days** or **Custom** for up to 90 calendar dates. To see the last seven complete days as in Berlin Demo, select **Custom**, end the range yesterday and start it six days before that.
+
+*Berlin Demo daily energy for seven complete dates.*
+
+<!-- screenshot: dashboard-history.png -->
+
+Live PR is actual power divided by estimated power, expressed as a percentage. PR can exceed 100%, and **Optimizable power** (estimated minus actual power) can be negative. Missing readings leave gaps. A measured zero stays zero. When estimated power is zero, PR shows **—**.
+
+### Efficiency
+
+Select **Today**, **24 hours**, **7 days** or **30 days**. **Today** compares with yesterday through the same local time. **7 days** includes today.
+
+Review the range PR, its change in percentage points and estimated minus actual energy. **PR trend** and **Generation comparison** show how performance changes. For calendar ranges, switch between **Daily summary** and the settlement interval. Range PR divides actual energy by estimated energy over the same valid settled periods.
+
+*Berlin Demo efficiency today, compared with yesterday through the same time.*
+
+<!-- screenshot: efficiency.png -->
+
+### Forecast
+
+Compare **Original forecast** and **Corrected forecast** for today and the next six days. The original uses Open-Meteo weather and your array settings. Correction uses recent energy-weighted PR and needs at least three eligible completed days with positive estimated energy. Until then, corrected values show **—**.
+
+See the full day today, **Remaining today** and **Tomorrow’s forecast** in the top cards. **Daily forecast energy** compares all seven dates and gives the **7-day total**. Select **Refresh forecast** to request fresh weather data.
+
+*Berlin Demo original and corrected energy forecasts, date selection and **Export CSV**.*
+
+<!-- screenshot: forecast.png -->
+
+Select a date to compare power curves and open **15-minute details** for interval power, energy, irradiance and temperatures.
+
+*Berlin Demo power curves and 15-minute details for the selected date.*
+
+<!-- screenshot: forecast-details.png -->
+
+For EMHASS with a single PV inverter, select **Export CSV** and choose the original or corrected series. Match the start, interval and step count to your optimization run. Save `data_weather_forecast.csv` in EMHASS’s `data_path`, with `set_use_pv=true` and `weather_forecast_method=csv`. [EMHASS setup details](pvyieldlens/DOCS.md#export-a-pv-power-forecast-to-emhass)
+
+### Home Assistant output sensors
 
 | Metric | HA entity name | Unit |
 | --- | --- | --- |
@@ -123,26 +146,4 @@ These are estimated DC reference values for one PV module array, using plane-of-
 | Forecast energy tomorrow | `forecast_energy_tomorrow` | kWh |
 | Forecast energy for 7 days | `forecast_energy_7d` | kWh |
 
-The HA entity name is its display name. The full entity ID is `sensor.pvyieldlens_<HA entity name>`; for example, `sensor.pvyieldlens_settled_estimated_power`.
-
-## PR formula
-
-Estimated power takes Total max power at STC, module temperature and irradiance into account:
-
-```text
-P_estimated = P_stc × [1 + (K / 100) × (T − 25)] × G / 1000
-PR = P_actual / P_estimated × 100%
-```
-
-Here `P_stc` is the total max power at STC in W. Enter `K` as the datasheet percentage in %/°C, for example `-0.35`. PVYieldLens divides it by 100. `T` is the measured or estimated module temperature in °C. `G` is irradiance in the module plane in W/m².
-
-Performance ratio (PR) compares actual power with estimated power. Optimizable power is estimated power minus actual power and can be negative.
-
-## Reading the results
-
-- PR can be above 100%. When estimated power is zero, PR is not shown.
-- A negative optimizable power means actual power is higher than estimated.
-- Energy is counted only when actual power, irradiance, and measured or estimated module temperature are valid at the same time. Missing periods are left out.
-- Today’s energy resets at midnight in your Home Assistant time zone. Total energy starts from your first setup.
-
-After an outage, some periods may remain missing. Keep the app's data when updating or reinstalling. Use Home Assistant backups for the App; for standalone Docker, stop the container before copying the `/data` directory.
+The table shows the display names in Home Assistant. Use the full ID in automations, for example `sensor.pvyieldlens_settled_estimated_power`. The four forecast sensors report **Original forecast** energy. Estimated energy for today resets at midnight in your Home Assistant time zone. The lifetime total counts from initial setup.

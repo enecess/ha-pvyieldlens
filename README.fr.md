@@ -2,116 +2,139 @@
 
 # PVYieldLens
 
-Comparez la puissance estimée et réelle de vos panneaux. Suivez le PR et l’énergie estimée pour la journée et au total.
+## Vue d’ensemble
 
-## Fonctions
+PVYieldLens compare la production solaire mesurée à celle que votre installation photovoltaïque pourrait fournir dans les conditions observées. Suivez le ratio de performance (PR) dans Home Assistant et consultez les prévisions de production sur sept jours.
 
-- Tableau de bord : puissance, PR et production clôturée du jour.
-- Comparaisons d’efficacité sur les règlements originaux de 1, 5 ou 10 minutes.
-- Énergie estimée du jour et depuis la configuration.
-- Énergie quotidienne comparée sur 7/30 jours ou une période personnalisée de 90 dates maximum.
-- Prévisions originales et corrigées par 15 minutes.
-- Six langues, avec un menu en haut à droite.
+## Installation
 
-## Démarrage rapide
+### Home Assistant OS
 
-### App Home Assistant
-
-Pour Home Assistant OS.
+L’application nécessite Home Assistant 2025.9.0 ou une version ultérieure.
 
 [![Ajouter le dépôt d’apps PVYieldLens](https://my.home-assistant.io/badges/supervisor_add_addon_repository.svg)](https://my.home-assistant.io/redirect/supervisor_add_addon_repository/?repository_url=https%3A%2F%2Fgithub.com%2Fenecess%2Fha-pvyieldlens%23dev_v0)
 
-1. Cliquez sur le bouton ci-dessus et confirmez **Ajouter** dans Home Assistant.
-2. Trouvez **PVYieldLens** dans la boutique d’apps, puis installez et démarrez l’app.
-3. Ouvrez la page Web, puis **Paramètres** pour choisir les capteurs et renseigner les panneaux.
+1. Utilisez le bouton ci-dessus, puis confirmez avec **Ajouter** dans Home Assistant. Pour ajouter le dépôt manuellement, ouvrez **Paramètres > Applications > Installer une application > ⋮ > Dépôts** et saisissez `https://github.com/enecess/ha-pvyieldlens#dev_v0`.
+2. Recherchez **PVYieldLens** dans la **Magasin d'applications** et sélectionnez **Installer**.
+3. Sélectionnez **Démarrer**, puis **Ouvrir l'interface utilisateur web**.
 
-Si le bouton n’ouvre pas Home Assistant, allez dans **Paramètres > Applications > Installer une application > menu en haut à droite > Dépôts** et ajoutez :
-
-```text
-https://github.com/enecess/ha-pvyieldlens#dev_v0
-```
-
-Pour les versions de Home Assistant antérieures à 2026.2, utilisez **Paramètres > Modules complémentaires > Boutique des modules complémentaires > menu en haut à droite > Dépôts**. L’app nécessite Home Assistant 2025.9.0 ou une version plus récente.
+Avant Home Assistant 2026.2, ouvrez **Paramètres > Modules complémentaires > Boutique des modules complémentaires**, puis ajoutez le dépôt depuis le menu ⋮.
 
 ### Docker
 
-Téléchargez ce dépôt et ouvrez son dossier. Créez le fichier de réglages :
+1. Téléchargez ce dépôt et ouvrez son dossier. Copiez `.env.example` vers `.env` et choisissez un mot de passe dans `PVYL_WEB_PASSWORD`.
+2. Exécutez `docker compose up -d --build`.
+3. Sur la machine qui héberge Docker, ouvrez [localhost:8099](http://localhost:8099). Connectez-vous avec le compte `admin` et le mot de passe choisi.
 
-```sh
-cp .env.example .env
-```
+Pour accéder à l’application depuis un autre appareil, remplacez `127.0.0.1:8099:8099` par `8099:8099` dans `compose.yaml`.
 
-Dans `.env`, choisissez un mot de passe pour `PVYL_WEB_PASSWORD`, puis démarrez l’app :
+## Configuration
 
-```sh
-docker compose up -d --build
-```
+Ouvrez les **Paramètres** de PVYieldLens. Le menu **Langue** en haut à droite permet de changer la langue de l’interface.
 
-Ouvrez [localhost:8099](http://localhost:8099). Connectez-vous avec `admin` et le mot de passe choisi. Pour la première connexion, saisissez l’adresse Home Assistant et un jeton d’accès de longue durée appartenant à un **administrateur** Home Assistant dans **Paramètres**, puis cliquez sur **Actualiser les capteurs**. Si l’adresse et le jeton sont déjà configurés, les capteurs se chargent automatiquement à la première ouverture des **Paramètres**. Utilisez **Actualiser les capteurs** après une modification de la connexion, pour mettre à jour la liste ou pour réessayer après un échec. Les droits d’administration sont nécessaires pour publier les capteurs de sortie.
+### Connexion Home Assistant
 
-Par défaut, la page est accessible sur la machine Docker. Pour y accéder depuis un autre appareil, remplacez `127.0.0.1:8099:8099` par `8099:8099` dans `compose.yaml`.
+L’application Home Assistant se connecte automatiquement. Avec Docker, saisissez l’**Adresse Home Assistant** et un **Jeton d’accès de longue durée** d’un administrateur de Home Assistant, puis sélectionnez **Actualiser les entités**. Les droits d’administrateur sont nécessaires pour publier les capteurs de sortie.
 
-## Réglages
+Saisissez un jeton à la première configuration ou lors d’un changement d’adresse. Pour réutiliser le jeton enregistré avec la même adresse, laissez le champ vide.
 
-Le **Tableau de bord** présente la puissance actuelle et la production du jour ; **Efficacité** compare l’énergie clôturée et le PR ; **Prévisions** compare les valeurs originales et corrigées. Les **Paramètres** restent en haut à droite et les trois vues restent accessibles. Le répertoire couvre la connexion HA, les modules, les capteurs, les prévisions et la surveillance.
+### Modules photovoltaïques
 
-La section **Surveillance** est repliée à l’ouverture des Paramètres. Sélectionnez son titre ou son entrée dans le répertoire pour afficher les réglages. Le bouton **?** à côté du titre affiche l’aide sur le règlement, la moyenne, l’actualisation et le délai des capteurs, même quand les réglages sont repliés.
-
-**Enregistrer la configuration** vous laisse dans les Paramètres. **Abandonner les modifications** recharge la configuration enregistrée sur le serveur et remplace vos modifications ; en cas d’échec, le brouillon est conservé pour réessayer. Quitter avec des modifications demande de poursuivre l’édition ou de les abandonner. Revenir aux Paramètres recharge la configuration enregistrée.
-
-Le menu **Mode du thème**, en haut à droite, propose Auto, Clair et Sombre. Auto suit le mode de Home Assistant dans son interface et la préférence système si son contexte est inaccessible. Clair ou Sombre impose un choix local ; Auto rétablit le suivi. Changer de langue ou de thème conserve le brouillon.
-
-| Réglage | Valeur à saisir |
+| Paramètre | Valeur à saisir |
 | --- | --- |
-| Puissance maximale totale aux STC | Somme des puissances maximales des modules aux conditions de test standard (STC) en W, par exemple `5000`. |
-| Coefficient de température de Pmax | Coefficient Pmax de la fiche du module en %/°C, par exemple `-0,35`. |
-| Puissance réelle | Capteur de production solaire (W ou kW). |
-| Température des modules | Capteur de température des panneaux (°C, °F ou K). |
-| Irradiance | Capteur dans le même plan que les panneaux (W/m² ou kW/m²). |
-| Intervalle de règlement | Enregistre l’énergie et le PR toutes les 1, 5 ou 10 minutes pour la vue **Efficacité**. L’intervalle par défaut est de 5 minutes. |
-| Moyenne sur | Calcule les valeurs en direct à partir des 60 dernières secondes par défaut. Une fenêtre plus longue lisse les variations à court terme. |
-| Mise à jour toutes les | Recalcule et actualise les valeurs en direct toutes les 5 secondes par défaut. |
-| Délai sans données | Définit le délai pour la prochaine mesure de chaque capteur. Les périodes après expiration comptent comme manquantes et réduisent la complétude des données. |
+| **Puissance maximale totale aux STC** | Additionnez les puissances nominales en W. Dix modules de 500 W totalisent 5 000 W. |
+| **Coefficient de température de Pmax** | Valeur de la fiche technique en %/°C, par exemple −0,35. |
+| **Inclinaison des modules** | De 0° à 90°. |
+| **Orientation des modules** | Azimut mesuré dans le sens horaire à partir du nord (0°), inférieur à 360°. Choisissez un point cardinal ou **Personnalisé**. |
+| **Température nominale de fonctionnement des cellules (NOCT)** | Valeur de la fiche technique, supérieure à 20 °C et jusqu’à 80 °C. Par défaut, 45 °C. |
 
-Dans **Paramètres > Modules photovoltaïques**, choisissez **Valeur fixe** ou **Entité HA** indépendamment pour l’inclinaison et l’orientation. Enregistrez, puis ouvrez **Tableau de bord**. Le premier résultat clôturé apparaît dans **Efficacité** à la fin de la période en cours.
+Choisissez **Valeur fixe** ou **Entité HA** séparément pour l’inclinaison et l’orientation. Sélectionnez une entité `sensor.*`, `number.*` ou `input_number.*` qui fournit un angle en degrés (°). Avec un suiveur solaire, chaque actualisation utilise les angles lus à cet instant pour l’ensemble des prévisions.
 
-Le Tableau de bord précharge les dix dernières minutes à l’ouverture ou à la reconnexion. Les données de production montrent aujourd’hui les puissances estimée/réelle clôturées, l’irradiance et la température des modules. Le graphique d’énergie propose 7 jours par défaut, 30 jours ou une période personnalisée inclusive de 90 dates du foyer au maximum, sans dépasser aujourd’hui. Une absence reste vide et zéro reste zéro ; les règlements et cumuls conservés ne changent pas.
+*L’installation Berlin Demo de 5 000 W est inclinée à 35° et orientée **Sud · 180°**.*
 
-Efficacité montre le PR de la période, sa variation en points par rapport à la période précédente comparable et l’énergie estimée moins l’énergie réelle. Aujourd’hui se compare à hier jusqu’à la même heure locale ; 24 heures aux 24 heures précédentes ; 7/30 jours au même intervalle décalé de 7/30 dates du foyer. Les deux graphiques partagent le choix du résumé quotidien ou de chaque intervalle de règlement configuré.
+<!-- screenshot: settings-pv-modules.png -->
 
-Le lissage concerne seulement le dessin. Souris, toucher et clavier inspectent les enregistrements originaux, y compris les intervalles de prévision de 15 minutes. Énergie et PR utilisent les valeurs non lissées. Les dates et prévisions suivent l’heure du foyer ; les horodatages de surveillance et de récupération suivent la préférence HA server/local du lecteur, ou le navigateur sous Docker autonome. Les décalages UTC distinguent au besoin les heures répétées.
+### Capteurs
 
-## Prévisions de production
+| Paramètre | Capteur et unités prises en charge |
+| --- | --- |
+| **Puissance réelle** | Puissance photovoltaïque en W ou kW. |
+| **Irradiance** | Irradiance dans le plan des modules, en W/m² ou kW/m². |
+| **Température des modules (facultative)** | Température en °C, °F ou K. Si le champ est vide, l’estimation utilise la température de l’air d’Open-Meteo, l’irradiance mesurée et la NOCT. |
 
-Le lieu et le fuseau horaire proviennent de la connexion Home Assistant enregistrée et se règlent dans HA.
+*Berlin Demo utilise des capteurs simulés de puissance, d’irradiance et de température des modules.*
 
-L’inclinaison va de 0° à 90° inclus. L’azimut se mesure dans le sens horaire depuis le nord (0°), jusqu’à 360° exclus. Les orientations fixes comprennent aussi l’est (90°), le sud (180°) et l’ouest (270°). Les entités d’angle sont de type `sensor.*`, `number.*` ou `input_number.*` et utilisent l’unité `°`. Cliquez sur **Actualiser les entités** dans les paramètres de connexion pour les trouver.
+<!-- screenshot: settings-sensors.png -->
 
-Dans **Modules photovoltaïques**, saisissez le NOCT de la fiche technique (plus de 20°C, au maximum 80°C, 45°C par défaut). La puissance maximale totale aux STC et le coefficient de température de Pmax servent aussi à la surveillance. Pour des modules identiques, multipliez la puissance nominale d’un module par leur nombre, par exemple 500 W × 10 = 5000 W.
+### Prévisions
 
-À chaque actualisation, les angles HA sélectionnés sont lus une fois. La même paire d’angles sert à estimer tous les intervalles de 15 minutes de la prévision à sept jours, y compris ceux déjà écoulés aujourd’hui. La page des prévisions affiche les angles utilisés et l’heure de lecture séparément de l’heure de récupération de la météo. Si une entité est indisponible, la page l’indique et affiche les intervalles encore utilisables de la dernière prévision. Sans prévision utilisable, les valeurs d’énergie affichent **—** et vous pouvez relancer l’actualisation.
+Dans **Paramètres**, ouvrez **Prévisions** pour vérifier le lieu et le fuseau horaire. Modifiez-les dans Home Assistant. Le champ **Jours d’historique PR** fixe la période utilisée pour la correction. La valeur par défaut est de 14 jours.
 
-La surveillance utilise la **Température des modules** mesurée. Les prévisions utilisent la **Température de l’air** et la **Température nominale de fonctionnement des cellules (NOCT)** pour calculer la **Température estimée des cellules**. Ces grandeurs sont distinctes ; la surveillance ne convertit pas la température des modules en température des cellules.
+### Surveillance
 
-Open-Meteo fournit des entrées de modèle toutes les 15 minutes pour aujourd’hui et les six jours calendaires suivants du foyer. Certaines régions ou variables interpolent des modèles horaires ; ce pas ne garantit pas une meilleure précision. Choisissez une date pour les énergies originale/corrigée, les courbes de puissance et les détails. Le jour couvre toute la journée ; **Reste aujourd’hui** va de maintenant à minuit du foyer et diminue entre téléchargements. Un jour normal comporte 96 intervalles, contre 92 ou 100 lors d’un changement d’heure.
+Par défaut, PVYieldLens calcule l’énergie et le PR pour chaque intervalle de 5 minutes. Les valeurs en direct sont moyennées sur les 60 dernières secondes et actualisées toutes les 5 secondes. Quand un capteur dépasse son **Délai sans données**, la période concernée compte comme manquante.
 
-Les cartes conservent la météo et les températures maximale/minimale des prévisions horaires, avec deux barres d’énergie et les kWh. Le repère chaud **Aujourd’hui** suit minuit du foyer indépendamment de la sélection bleue. Les résumés météo gardent les échantillons horaires de la même requête, du même cache et de la même heure de récupération. Météo et énergie peuvent être indisponibles séparément ; zéro reste valide.
+Sélectionnez **Enregistrer la configuration**.
 
-La météo s’actualise normalement chaque heure ou avec **Actualiser les prévisions**. Le cache correspondant survit au redémarrage. Un échec conserve l’heure de récupération, affiche l’erreur et réessaie après 15 minutes. Des entrées manquantes rendent les totaux concernés indisponibles (**—**). Les états de lieu absent, de chargement et d’absence de données restent affichés.
+## Résultats
 
-La **Prévision originale** garde le modèle météo/NOCT ; la **Prévision corrigée** le multiplie par le PR récent pondéré par l’énergie et la récence des dates terminées du foyer. Dans **Paramètres > Prévisions**, les jours historiques du PR valent n=14 par défaut, entier de 3 à 90 ; la demi-vie vaut n/2 jours. Il faut au moins 3 dates admissibles à énergie estimée positive. Les énergies réelle et estimée couvrent les mêmes périodes valides après la dernière configuration de surveillance comparable. Une production réelle nulle reste admissible ; un PR supérieur à 100 % n’est pas plafonné. Sans assez d’historique, les valeurs corrigées affichent **—**, les originales restent disponibles. Modifier n recalcule la correction sans nouvelle requête météo.
+### Tableau de bord
 
-La correction concerne seulement la page et l’API applicative. Les 13 identifiants et significations des sorties HA restent inchangés ; les quatre entités de prévision gardent l’énergie originale intégrée à partir des intervalles de 15 minutes.
+Comparez les puissances réelle et estimée, le **PR** et la **Puissance optimisable**. Le graphique **Données en direct** affiche les dix dernières minutes de puissance.
 
-Il s’agit d’une référence estimée en courant continu pour un seul champ de panneaux, avec irradiance dans leur plan et modèle thermique NOCT simplifié. Rendement/écrêtage de l’onduleur, ombrage, neige, salissures et pertes ne sont pas modélisés ; la production réelle en courant alternatif n’est pas garantie. Les quatre entités météo sont en kWh, de classe energy, sans `state_class` ; elles peuvent diminuer et restent séparées des compteurs cumulés. Elles ne fournissent pas d’intégration native aux prévisions HA ni au tableau de bord Énergie.
+*Puissance et PR en direct pour Berlin Demo.*
 
-## Capteurs de sortie
+<!-- screenshot: dashboard.png -->
 
-| Indicateur | Nom de l’entité HA | Unité |
+Consultez **Données de production** pour voir la puissance, l’irradiance et la température des modules sur les intervalles clôturés de la journée.
+
+*Production du jour et relevés des capteurs de Berlin Demo pour les intervalles clôturés.*
+
+<!-- screenshot: dashboard-generation.png -->
+
+L’**Historique de production** compare chaque jour l’énergie réelle et estimée. Choisissez **7 jours**, **30 jours** ou **Personnalisé** pour une période de 90 dates au maximum. Pour voir les sept derniers jours complets comme dans Berlin Demo, choisissez **Personnalisé**, terminez la période hier et commencez-la six jours plus tôt.
+
+*Production quotidienne de Berlin Demo sur sept jours complets.*
+
+<!-- screenshot: dashboard-history.png -->
+
+Le PR en direct est le rapport en pourcentage entre la puissance réelle et la puissance estimée. Il peut dépasser 100 %. La **Puissance optimisable** (puissance estimée moins puissance réelle) peut être négative. Une donnée manquante laisse un blanc. Un zéro mesuré reste à zéro. Si la puissance estimée est nulle, le PR affiche **—**.
+
+### Efficacité
+
+Choisissez **Aujourd’hui**, **24 heures**, **7 jours** ou **30 jours**. **Aujourd’hui** compare la production à celle d’hier jusqu’à la même heure locale. **7 jours** inclut aujourd’hui.
+
+Consultez le PR de la période, sa variation en points de pourcentage et l’écart entre l’énergie estimée et réelle. Suivez les variations dans **Évolution du PR** et **Comparaison de production**. Pour les plages calendaires, alternez entre **Résumé quotidien** et l’affichage par intervalle de règlement. Le PR sur la période est le rapport entre l’énergie réelle et l’énergie estimée sur les mêmes intervalles valides et clôturés.
+
+*Efficacité de Berlin Demo aujourd’hui, comparée à celle d’hier jusqu’à la même heure.*
+
+<!-- screenshot: efficiency.png -->
+
+### Prévisions
+
+Comparez la **Prévision originale** et la **Prévision corrigée** pour aujourd’hui et les six prochains jours. La prévision originale utilise la météo d’Open-Meteo et les paramètres de l’installation. La correction utilise le PR récent pondéré par l’énergie et nécessite au moins trois jours complets admissibles dont l’énergie estimée est positive. En attendant, les valeurs corrigées affichent **—**.
+
+Les cartes affichent la journée entière, **Reste aujourd’hui** et **Prévision de demain**. La section **Énergie prévue par jour** compare les sept jours et présente le **Total sur 7 jours**. Sélectionnez **Actualiser les prévisions** pour demander une mise à jour météo.
+
+*Prévisions d’énergie originales et corrigées de Berlin Demo, choix de la date et bouton **Exporter le CSV**.*
+
+<!-- screenshot: forecast.png -->
+
+Sélectionnez une date pour comparer les courbes de puissance. Ouvrez **Détails par 15 minutes** pour voir la puissance, l’énergie, l’irradiance et les températures par intervalle.
+
+*Courbes de puissance et détails par 15 minutes pour la date sélectionnée dans Berlin Demo.*
+
+<!-- screenshot: forecast-details.png -->
+
+Pour utiliser EMHASS avec un seul onduleur photovoltaïque, sélectionnez **Exporter le CSV**, puis la série originale ou corrigée. Alignez le début, l’intervalle et le nombre de pas sur votre optimisation. Placez `data_weather_forecast.csv` dans le `data_path` d’EMHASS et réglez `set_use_pv=true` et `weather_forecast_method=csv`. [Configuration d’EMHASS](pvyieldlens/DOCS.md#export-a-pv-power-forecast-to-emhass)
+
+### Capteurs de sortie Home Assistant
+
+| Mesure | Nom de l’entité HA | Unité |
 | --- | --- | --- |
-| Puissance estimée clôturée | `settled_estimated_power` | W |
-| Puissance réelle clôturée | `settled_actual_power` | W |
-| PR clôturé | `settled_pr` | % |
+| Puissance estimée après clôture | `settled_estimated_power` | W |
+| Puissance réelle après clôture | `settled_actual_power` | W |
+| PR après clôture | `settled_pr` | % |
 | Énergie estimée aujourd’hui | `estimated_energy_today` | kWh |
 | Énergie estimée cumulée | `estimated_energy_lifetime` | kWh |
 | Puissance estimée en direct | `live_estimated_power` | W |
@@ -119,30 +142,8 @@ Il s’agit d’une référence estimée en courant continu pour un seul champ d
 | PR en direct | `live_pr` | % |
 | Puissance optimisable en direct | `live_optimizable_power` | W |
 | Énergie prévue aujourd’hui | `forecast_energy_today` | kWh |
-| Énergie prévue restante aujourd’hui | `forecast_energy_remaining_today` | kWh |
+| Énergie prévue pour le reste de la journée | `forecast_energy_remaining_today` | kWh |
 | Énergie prévue demain | `forecast_energy_tomorrow` | kWh |
-| Énergie prévue sur 7 jours | `forecast_energy_7d` | kWh |
+| Énergie prévue sur sept jours | `forecast_energy_7d` | kWh |
 
-Le nom de l’entité HA est son nom d’affichage. L’identifiant complet est `sensor.pvyieldlens_` suivi de ce nom ; par exemple, `sensor.pvyieldlens_settled_estimated_power`.
-
-## Formule du PR
-
-La puissance estimée tient compte de la puissance maximale totale aux STC, de la température des modules et de l’irradiance :
-
-```text
-P_estimated = P_stc × [1 + (K / 100) × (T − 25)] × G / 1000
-PR = P_actual / P_estimated × 100%
-```
-
-`P_stc` : puissance maximale totale aux STC (W) ; `K` : coefficient de température de Pmax (%/°C), en pourcentage de la fiche technique, par exemple `-0,35` ; `T` : température des modules (°C) ; `G` : irradiance dans le plan des modules (W/m²). L’app divise K par 100 une seule fois.
-
-Le ratio de performance (PR) compare la puissance réelle à la puissance estimée. La puissance optimisable est la puissance estimée moins la puissance réelle ; elle peut être négative.
-
-## Comprendre les résultats
-
-- Le PR peut dépasser 100 %. Il n’est pas affiché si la puissance estimée est nulle.
-- Une puissance optimisable négative signifie que la puissance réelle dépasse la puissance estimée.
-- L’énergie est comptée quand les trois capteurs ont des données. Les périodes manquantes sont exclues.
-- L’énergie du jour revient à zéro à minuit, selon le fuseau de Home Assistant. Le total commence au premier réglage.
-
-Après une interruption, certaines périodes peuvent rester sans données. Conservez les données de l’app lors d’une mise à jour ou d’une réinstallation. Pour l’app, utilisez les sauvegardes de Home Assistant ; avec Docker autonome, arrêtez le conteneur avant de copier le dossier `/data`.
+Le tableau reprend les noms affichés dans Home Assistant. Dans les automatisations, utilisez l’identifiant complet, par exemple `sensor.pvyieldlens_settled_estimated_power`. Les quatre capteurs de prévision indiquent l’énergie de la **Prévision originale**. L’énergie estimée du jour repart de zéro à minuit dans le fuseau horaire du domicile. Le cumul commence à la première configuration.
