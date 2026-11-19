@@ -203,8 +203,9 @@ async function refreshForecast() {
     <ForecastExportDialog v-if="active" :open="exportOpen" :forecast="matchingDetail" :language="language" :home-timezone="homeTimezone"
       :stale-fetch-label="status === 'stale' ? fetchedTime : ''" @close="exportOpen = false" />
     <div class="metrics forecast-metrics">
-      <article v-for="card in [{ id: 'forecast-remaining', label: 'forecast_remaining', total: view?.remaining_today },
-        { id: 'forecast-tomorrow', label: 'forecast_tomorrow', total: view?.tomorrow }]" :key="card.id" class="metric">
+      <article v-for="(card, index) in [{ id: 'forecast-remaining', label: 'forecast_remaining', total: view?.remaining_today },
+        { id: 'forecast-tomorrow', label: 'forecast_tomorrow', total: view?.tomorrow }]"
+        :key="card.id" class="metric" :class="{ 'metric-primary': index === 0 }">
         <span class="metric-label">{{ t(card.label) }}</span>
         <div class="forecast-pair">
           <div><span>{{ t('forecast_original') }}</span><div><strong :id="card.id">{{ energy(card.total) }}</strong><span class="unit">kWh</span></div></div>

@@ -89,7 +89,7 @@ p { margin: 8px 0; }
 .metric-label { color: var(--pv-muted); font-size: 12px; }
 .metric > div { display: flex; align-items: baseline; gap: 7px; margin-top: 10px; }
 .metric strong { font-size: clamp(25px, 2.5vw, 36px); font-weight: 600; line-height: 1.2; letter-spacing: -1px; }
-.metric-primary strong { color: var(--pv-accent); }
+.metric-primary > div > strong { color: var(--pv-accent); }
 .unit { color: var(--pv-muted); font-size: 12px; font-weight: 400; }
 .metric-context { margin: 12px 0 0; overflow-wrap: anywhere; }
 .panel { padding: 22px; border: 1px solid var(--pv-line); border-radius: 13px; background: var(--pv-surface); box-shadow: 0 2px 6px var(--pv-shadow); }

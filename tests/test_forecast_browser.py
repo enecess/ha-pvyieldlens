@@ -64,6 +64,40 @@ async def forecast_page(browser_workspace):
     return page, state, web
 
 
+@pytest.mark.parametrize('theme', ['light', 'dark'])
+async def test_remaining_today_uses_the_primary_card_style(forecast_page, theme):
+    from playwright.async_api import expect
+
+    page, _, _ = forecast_page
+    await page.locator('#theme-select').select_option(theme)
+    await page.locator('#forecast-tab').click()
+    await expect(page.locator('#forecast-remaining')).to_have_text('39.68')
+    await expect(page.locator('html')).to_have_attribute('data-theme', theme)
+
+    dashboard, ordinary, efficiency, remaining, tomorrow = await page.locator(
+        '.live-metrics > .metric:nth-child(-n+2), .history-metrics > .metric:first-child, .forecast-metrics > .metric'
+    ).evaluate_all('''cards => cards.map(card => {
+        const { backgroundColor, borderTopColor } = getComputedStyle(card);
+        return [backgroundColor, borderTopColor];
+    })''')
+    assert remaining == dashboard == efficiency
+    assert tomorrow == ordinary
+    assert remaining != tomorrow
+
+    accent = await page.locator('#forecast-tab').evaluate('tab => getComputedStyle(tab).color')
+    for value in ('#live-actual', '#history-pr'):
+        await expect(page.locator(value)).to_have_css('color', accent)
+
+    chart_series = page.locator('#forecast-chart path.series')
+    await expect(chart_series).to_have_count(2)
+    series_colors = await chart_series.evaluate_all('paths => paths.map(path => getComputedStyle(path).stroke)')
+    card_colors = await page.locator(
+        '.forecast-metrics .forecast-pair strong'
+    ).evaluate_all('values => values.map(value => getComputedStyle(value).color)')
+    assert series_colors[0] != series_colors[1]
+    assert card_colors == series_colors * 2
+
+
 async def test_forecast_days_select_quarter_hour_details_and_preserve_selection(forecast_page):
     from playwright.async_api import expect
     page, state, _ = forecast_page
