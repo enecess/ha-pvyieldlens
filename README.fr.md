@@ -52,7 +52,7 @@ Choisissez **Valeur fixe** ou **Entité HA** séparément pour l’inclinaison e
 
 *L’installation Berlin Demo de 5 000 W est inclinée à 35° et orientée **Sud · 180°**.*
 
-<!-- screenshot: settings-pv-modules.png -->
+![Réglages des modules PV de Berlin Demo avec une puissance de 5 000 W, une inclinaison de 35° et une orientation sud](docs/images/settings-pv-modules.png)
 
 ### Capteurs
 
@@ -64,7 +64,7 @@ Choisissez **Valeur fixe** ou **Entité HA** séparément pour l’inclinaison e
 
 *Berlin Demo utilise des capteurs simulés de puissance, d’irradiance et de température des modules.*
 
-<!-- screenshot: settings-sensors.png -->
+![Capteurs de puissance réelle, d’irradiance et de température des modules de Berlin Demo](docs/images/settings-sensors.png)
 
 ### Prévisions
 
@@ -84,19 +84,23 @@ Comparez les puissances réelle et estimée, le **PR** et la **Puissance optimis
 
 *Puissance et PR en direct pour Berlin Demo.*
 
-<!-- screenshot: dashboard.png -->
+![Tableau de bord de Berlin Demo avec la courbe en direct, la puissance actuelle et le PR](docs/images/dashboard.png)
 
 Consultez **Données de production** pour voir la puissance, l’irradiance et la température des modules sur les intervalles clôturés de la journée.
 
 *Production du jour et relevés des capteurs de Berlin Demo pour les intervalles clôturés.*
 
-<!-- screenshot: dashboard-generation.png -->
+![Courbes de puissance, d’irradiance et de température des modules de Berlin Demo pour les intervalles clôturés](docs/images/dashboard-generation.png)
 
 L’**Historique de production** compare chaque jour l’énergie réelle et estimée. Choisissez **7 jours**, **30 jours** ou **Personnalisé** pour une période de 90 dates au maximum. Pour voir les sept derniers jours complets comme dans Berlin Demo, choisissez **Personnalisé**, terminez la période hier et commencez-la six jours plus tôt. Sélectionnez **Appliquer**.
 
+*Plage personnalisée de sept jours dans Berlin Demo avant validation.*
+
+![Plage personnalisée de Berlin Demo avec les dates de début et de fin et le bouton Appliquer la plage](docs/images/dashboard-history-range.png)
+
 *Production quotidienne de Berlin Demo sur sept jours complets.*
 
-<!-- screenshot: dashboard-history.png -->
+![Historique de production de Berlin Demo comparant les énergies réelle et estimée sur sept jours complets](docs/images/dashboard-history.png)
 
 Le PR en direct est le rapport en pourcentage entre la puissance réelle et la puissance estimée. Il peut dépasser 100 %. La **Puissance optimisable** (puissance estimée moins puissance réelle) peut être négative. Une donnée manquante laisse un blanc. Un zéro mesuré reste à zéro. Si la puissance estimée est nulle, le PR affiche **—**.
 
@@ -108,7 +112,7 @@ Consultez le PR de la période, sa variation en points de pourcentage et l’éc
 
 *Efficacité de Berlin Demo aujourd’hui, comparée à celle d’hier jusqu’à la même heure.*
 
-<!-- screenshot: efficiency.png -->
+![Vue Efficacité de Berlin Demo aujourd’hui, avec la tendance du PR et la comparaison de production avec hier](docs/images/efficiency.png)
 
 ### Prévisions
 
@@ -118,15 +122,19 @@ Les cartes du haut affichent **Reste aujourd’hui** et **Prévision de demain**
 
 *Prévisions d’énergie originales et corrigées de Berlin Demo, choix de la date et bouton **Exporter le CSV**.*
 
-<!-- screenshot: forecast.png -->
+![Vue d’ensemble des prévisions de Berlin Demo avec sept dates, les énergies originales et corrigées et le bouton Exporter le CSV](docs/images/forecast.png)
 
 Sélectionnez une date pour comparer les courbes de puissance. Ouvrez **Détails par 15 minutes** pour voir la puissance, l’énergie, l’irradiance et les températures par intervalle.
 
 *Courbes de puissance et détails par 15 minutes pour la date sélectionnée dans Berlin Demo.*
 
-<!-- screenshot: forecast-details.png -->
+![Courbes de puissance de Berlin Demo pour la date sélectionnée et tableau des détails par 15 minutes](docs/images/forecast-details.png)
 
 Pour utiliser EMHASS avec un seul onduleur photovoltaïque, sélectionnez **Exporter le CSV**, puis la série originale ou corrigée. Alignez le début, l’intervalle et le nombre de pas sur votre optimisation. Placez `data_weather_forecast.csv` dans le `data_path` d’EMHASS et réglez `set_use_pv=true` et `weather_forecast_method=csv`. [Configuration d’EMHASS](pvyieldlens/DOCS.md#export-a-pv-power-forecast-to-emhass)
+
+*Paramètres d’exportation pour une exécution EMHASS dans Berlin Demo.*
+
+![Boîte de dialogue d’exportation EMHASS de Berlin Demo avec la série, l’heure de début, l’intervalle et le nombre de pas](docs/images/forecast-export.png)
 
 ### Capteurs de sortie Home Assistant
 

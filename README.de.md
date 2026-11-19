@@ -52,7 +52,7 @@ Wählen Sie für Neigung und Ausrichtung jeweils **Fester Wert** oder **HA-Entit
 
 *Die 5.000-W-Anlage in Berlin Demo ist um 35° geneigt und nach **Süd · 180°** ausgerichtet.*
 
-<!-- screenshot: settings-pv-modules.png -->
+![PV-Modul-Einstellungen in Berlin Demo mit 5.000 W Leistung, 35° Neigung und Südausrichtung](docs/images/settings-pv-modules.png)
 
 ### Sensoren
 
@@ -64,7 +64,7 @@ Wählen Sie für Neigung und Ausrichtung jeweils **Fester Wert** oder **HA-Entit
 
 *Berlin Demo verwendet simulierte Sensoren für Leistung, Bestrahlungsstärke und Modultemperatur.*
 
-<!-- screenshot: settings-sensors.png -->
+![Sensoren für tatsächliche Leistung, Bestrahlungsstärke und Modultemperatur in Berlin Demo](docs/images/settings-sensors.png)
 
 ### Prognose
 
@@ -84,19 +84,23 @@ Vergleichen Sie tatsächliche und geschätzte Leistung, den **PR** und die **Opt
 
 *Live-Leistung und PR in Berlin Demo.*
 
-<!-- screenshot: dashboard.png -->
+![Dashboard von Berlin Demo mit Live-Diagramm, aktueller Leistung und PR](docs/images/dashboard.png)
 
 Unter **Ertragsdaten** finden Sie Leistung, Bestrahlungsstärke und Modultemperatur für die abgeschlossenen Intervalle des heutigen Tages.
 
 *Heutige Ertragsdaten und Sensorwerte für abgeschlossene Intervalle in Berlin Demo.*
 
-<!-- screenshot: dashboard-generation.png -->
+![Diagramme für Leistung, Bestrahlungsstärke und Modultemperatur in abgeschlossenen Intervallen in Berlin Demo](docs/images/dashboard-generation.png)
 
 **Bisheriger Energieertrag** vergleicht die tägliche tatsächliche und geschätzte Energie. Wählen Sie **7 Tage**, **30 Tage** oder **Benutzerdefiniert** für bis zu 90 Kalendertage. Für die letzten sieben vollständigen Tage wie in Berlin Demo wählen Sie **Benutzerdefiniert**. Setzen Sie das Ende auf gestern und den Beginn sechs Tage davor. Wählen Sie **Anwenden**.
 
+*Benutzerdefinierter Sieben-Tage-Zeitraum in Berlin Demo vor dem Anwenden.*
+
+![Benutzerdefinierte Datumsauswahl in Berlin Demo mit Startdatum, Enddatum und der Schaltfläche Bereich anwenden](docs/images/dashboard-history-range.png)
+
 *Täglicher Energieertrag in Berlin Demo für sieben vollständige Tage.*
 
-<!-- screenshot: dashboard-history.png -->
+![Ertragsverlauf in Berlin Demo mit tatsächlicher und geschätzter Energie für sieben vollständige Tage](docs/images/dashboard-history.png)
 
 Der Live-PR ist der Quotient aus tatsächlicher und geschätzter Leistung in Prozent. Er kann über 100 % liegen. Die **Optimierbare Leistung** (geschätzte minus tatsächliche Leistung) kann negativ sein. Fehlende Messwerte hinterlassen Lücken. Ein gemessener Nullwert bleibt null. Bei geschätzter Leistung von null erscheint **—** für den PR.
 
@@ -108,7 +112,7 @@ Sehen Sie den PR im Zeitraum, seine Änderung in Prozentpunkten und die Differen
 
 *Heutige Effizienz in Berlin Demo im Vergleich zu gestern bis zur gleichen Uhrzeit.*
 
-<!-- screenshot: efficiency.png -->
+![Heutige Effizienz in Berlin Demo mit PR-Verlauf und Ertragsvergleich mit gestern](docs/images/efficiency.png)
 
 ### Prognose
 
@@ -118,15 +122,19 @@ Die oberen Karten zeigen **Heute verbleibend** und **Prognose für morgen**. Unt
 
 *Ursprüngliche und korrigierte Energieprognosen in Berlin Demo mit Datumsauswahl und **CSV exportieren**.*
 
-<!-- screenshot: forecast.png -->
+![Prognoseübersicht in Berlin Demo mit sieben auswählbaren Tagen, ursprünglicher und korrigierter Energie und CSV-Export](docs/images/forecast.png)
 
 Wählen Sie ein Datum für den Vergleich der Leistungskurven. Öffnen Sie **15-Minuten-Details** für Leistung, Energie, Bestrahlungsstärke und Temperaturen je Intervall.
 
 *Leistungskurven und 15-Minuten-Details für das ausgewählte Datum in Berlin Demo.*
 
-<!-- screenshot: forecast-details.png -->
+![Leistungskurven für den ausgewählten Tag in Berlin Demo und aufgeklappte 15-Minuten-Details](docs/images/forecast-details.png)
 
 Für EMHASS mit einem einzelnen PV-Wechselrichter wählen Sie **CSV exportieren** und die ursprüngliche oder korrigierte Reihe. Stimmen Sie Start, Intervall und Schrittzahl auf den Optimierungslauf ab. Speichern Sie `data_weather_forecast.csv` im EMHASS-Verzeichnis `data_path` und setzen Sie `set_use_pv=true` sowie `weather_forecast_method=csv`. [EMHASS-Einrichtung](pvyieldlens/DOCS.md#export-a-pv-power-forecast-to-emhass)
+
+*Exporteinstellungen für einen EMHASS-Beispiellauf in Berlin Demo.*
+
+![EMHASS-Exportdialog in Berlin Demo mit Prognosereihe, Startzeit, Intervall und Schrittzahl](docs/images/forecast-export.png)
 
 ### Ausgabesensoren in Home Assistant
 

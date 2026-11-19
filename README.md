@@ -52,7 +52,7 @@ For tilt and direction, choose **Fixed value** or **HA entity** separately. Pick
 
 *Berlin Demo uses a 5,000 W array tilted at 35° and facing **South · 180°**.*
 
-<!-- screenshot: settings-pv-modules.png -->
+![Berlin Demo PV modules settings with 5,000 W capacity, a 35° tilt and a south-facing direction](docs/images/settings-pv-modules.png)
 
 ### Sensors
 
@@ -64,7 +64,7 @@ For tilt and direction, choose **Fixed value** or **HA entity** separately. Pick
 
 *Berlin Demo uses simulated power, irradiance and module temperature sensors.*
 
-<!-- screenshot: settings-sensors.png -->
+![Berlin Demo sensors for actual power, irradiance and module temperature](docs/images/settings-sensors.png)
 
 ### Forecast
 
@@ -84,19 +84,23 @@ Compare current actual and estimated power and check **PR** and **Optimizable po
 
 *Berlin Demo live power and PR.*
 
-<!-- screenshot: dashboard.png -->
+![Berlin Demo Dashboard with the Live data chart and current power and PR cards](docs/images/dashboard.png)
 
 Use **Generation data** to inspect today’s settled power, irradiance and module temperature.
 
 *Today’s settled generation and sensor readings in Berlin Demo.*
 
-<!-- screenshot: dashboard-generation.png -->
+![Berlin Demo Generation data charts for settled power, irradiance and module temperature](docs/images/dashboard-generation.png)
 
 **Historical generation** compares daily actual and estimated energy. Choose **7 days**, **30 days** or **Custom** for up to 90 calendar dates. To see the last seven complete days as in Berlin Demo, select **Custom**, end the range yesterday and start it six days before that. Select **Apply range**.
 
+*Berlin Demo’s seven-day Custom range before applying.*
+
+![Berlin Demo Custom date picker with start, end and Apply range controls](docs/images/dashboard-history-range.png)
+
 *Berlin Demo daily energy for seven complete dates.*
 
-<!-- screenshot: dashboard-history.png -->
+![Berlin Demo Historical generation chart comparing actual and estimated energy for seven full days](docs/images/dashboard-history.png)
 
 Live PR is actual power divided by estimated power, expressed as a percentage. PR can exceed 100%, and **Optimizable power** (estimated minus actual power) can be negative. Missing readings leave gaps. A measured zero stays zero. When estimated power is zero, PR shows **—**.
 
@@ -108,7 +112,7 @@ Review the range PR, its change in percentage points and estimated minus actual 
 
 *Berlin Demo efficiency today, compared with yesterday through the same time.*
 
-<!-- screenshot: efficiency.png -->
+![Berlin Demo Efficiency Today view with PR trend and generation compared with yesterday](docs/images/efficiency.png)
 
 ### Forecast
 
@@ -118,15 +122,19 @@ The top cards show **Remaining today** and **Tomorrow’s forecast**. Under **Da
 
 *Berlin Demo original and corrected energy forecasts, date selection and **Export CSV**.*
 
-<!-- screenshot: forecast.png -->
+![Berlin Demo Forecast overview with seven selectable dates, original and corrected energy, and Export CSV](docs/images/forecast.png)
 
 Select a date to compare power curves and open **15-minute details** for interval power, energy, irradiance and temperatures.
 
 *Berlin Demo power curves and 15-minute details for the selected date.*
 
-<!-- screenshot: forecast-details.png -->
+![Berlin Demo selected-day power curves and the expanded 15-minute details table](docs/images/forecast-details.png)
 
 For EMHASS with a single PV inverter, select **Export CSV** and choose the original or corrected series. Match the start, interval and step count to your optimization run. Save `data_weather_forecast.csv` in EMHASS’s `data_path`, with `set_use_pv=true` and `weather_forecast_method=csv`. [EMHASS setup details](pvyieldlens/DOCS.md#export-a-pv-power-forecast-to-emhass)
+
+*Export settings for a sample EMHASS run in Berlin Demo.*
+
+![Berlin Demo EMHASS export dialog showing the forecast series, start time, interval and step count](docs/images/forecast-export.png)
 
 ### Home Assistant output sensors
 

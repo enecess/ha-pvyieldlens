@@ -52,7 +52,7 @@ Home Assistant 应用会自动连接。使用 Docker 时，填写 **Home Assista
 
 *Berlin Demo 的光伏阵列为 5,000 W，倾角 35°，朝向为**南 · 180°**。*
 
-<!-- screenshot: settings-pv-modules.png -->
+![Berlin Demo 光伏组件设置，装机功率 5,000 W、倾角 35°、朝南](docs/images/settings-pv-modules.png)
 
 ### 传感器
 
@@ -64,7 +64,7 @@ Home Assistant 应用会自动连接。使用 Docker 时，填写 **Home Assista
 
 *Berlin Demo 使用模拟的功率、辐照度和组件温度传感器。*
 
-<!-- screenshot: settings-sensors.png -->
+![Berlin Demo 的实际功率、辐照度和组件温度传感器设置](docs/images/settings-sensors.png)
 
 ### 预测
 
@@ -84,19 +84,23 @@ Home Assistant 应用会自动连接。使用 Docker 时，填写 **Home Assista
 
 *Berlin Demo 的实时功率和 PR。*
 
-<!-- screenshot: dashboard.png -->
+![Berlin Demo 仪表盘的实时数据曲线、当前功率和 PR 卡片](docs/images/dashboard.png)
 
 在**发电数据**中查看今天已结算时段的功率、辐照度和组件温度。
 
 *Berlin Demo 当天已结算的发电数据与传感器读数。*
 
-<!-- screenshot: dashboard-generation.png -->
+![Berlin Demo 当天已结算的功率、辐照度和组件温度曲线](docs/images/dashboard-generation.png)
 
 在**历史发电量**中对比每日实际与预估电量。可以选择 **7 天**、**30 天**或**自定义**（最多 90 个自然日）。如需查看 Berlin Demo 所示的过去七个完整自然日，选择**自定义**，将结束日期设为昨天，开始日期设在结束日期的六天前。点击**应用范围**。
 
+*Berlin Demo 应用前的七天自定义范围。*
+
+![Berlin Demo 自定义范围中的开始日期、结束日期和应用范围按钮](docs/images/dashboard-history-range.png)
+
 *Berlin Demo 七个完整自然日的发电量。*
 
-<!-- screenshot: dashboard-history.png -->
+![Berlin Demo 历史发电量图，比较七个完整自然日的实际与预估电量](docs/images/dashboard-history.png)
 
 实时 PR 是实际功率除以预估功率所得的百分比，可以超过 100%。**可优化功率**为预估功率减去实际功率，可以为负。缺测会留下空白，实测为零则显示零。预估功率为零时，PR 显示 **—**。
 
@@ -108,7 +112,7 @@ Home Assistant 应用会自动连接。使用 Docker 时，填写 **Home Assista
 
 *Berlin Demo 今日能效，与昨天同一时刻的结果对比。*
 
-<!-- screenshot: efficiency.png -->
+![Berlin Demo 今日能效页面的 PR 趋势以及与昨天的发电对比](docs/images/efficiency.png)
 
 ### 预测
 
@@ -118,15 +122,19 @@ Home Assistant 应用会自动连接。使用 Docker 时，填写 **Home Assista
 
 *Berlin Demo 的原始与修正预测电量、日期选择和**导出 CSV** 按钮。*
 
-<!-- screenshot: forecast.png -->
+![Berlin Demo 预测总览，包含七个可选日期、原始与修正电量以及导出 CSV 按钮](docs/images/forecast.png)
 
 选择日期查看功率曲线，展开**每 15 分钟明细**，查看各时段的功率、电量、辐照度和温度。
 
 *Berlin Demo 所选日期的功率曲线和每 15 分钟明细。*
 
-<!-- screenshot: forecast-details.png -->
+![Berlin Demo 所选日期的功率曲线和展开后的每 15 分钟明细表](docs/images/forecast-details.png)
 
 对于使用单台光伏逆变器的 EMHASS 配置，点击**导出 CSV**，选择原始或修正后的功率序列。使开始时间、步长和步数与本次优化一致。将 `data_weather_forecast.csv` 保存到 EMHASS 的 `data_path` 中，并设置 `set_use_pv=true` 和 `weather_forecast_method=csv`。[EMHASS 配置说明](pvyieldlens/DOCS.md#export-a-pv-power-forecast-to-emhass)
+
+*Berlin Demo 中一次 EMHASS 运行的导出设置。*
+
+![Berlin Demo 的 EMHASS 导出对话框，包含预测序列、起始时间、优化间隔和步数](docs/images/forecast-export.png)
 
 ### Home Assistant 输出传感器
 

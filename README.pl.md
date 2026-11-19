@@ -52,7 +52,7 @@ Osobno dla nachylenia i kierunku wybierz **Wartość stała** lub **Encja HA**. 
 
 *Instalacja Berlin Demo o mocy 5 000 W ma nachylenie 35° i kierunek **Południe · 180°**.*
 
-<!-- screenshot: settings-pv-modules.png -->
+![Ustawienia modułów PV w Berlin Demo z mocą 5 000 W, nachyleniem 35° i kierunkiem południowym](docs/images/settings-pv-modules.png)
 
 ### Czujniki
 
@@ -64,7 +64,7 @@ Osobno dla nachylenia i kierunku wybierz **Wartość stała** lub **Encja HA**. 
 
 *Berlin Demo korzysta z symulowanych czujników mocy, natężenia promieniowania i temperatury modułu.*
 
-<!-- screenshot: settings-sensors.png -->
+![Czujniki rzeczywistej mocy, natężenia promieniowania i temperatury modułu w Berlin Demo](docs/images/settings-sensors.png)
 
 ### Prognoza
 
@@ -84,19 +84,23 @@ Porównaj bieżącą moc rzeczywistą i szacowaną, **PR** oraz wskaźnik **Moc 
 
 *Bieżąca moc i PR w Berlin Demo.*
 
-<!-- screenshot: dashboard.png -->
+![Pulpit Berlin Demo z wykresem danych na żywo oraz bieżącą mocą i PR](docs/images/dashboard.png)
 
 Sekcja **Dane produkcji** pokazuje moc, natężenie promieniowania i temperaturę modułu w zakończonych okresach rozliczeniowych dzisiejszego dnia.
 
 *Rozliczona produkcja dzisiaj i odczyty czujników w Berlin Demo.*
 
-<!-- screenshot: dashboard-generation.png -->
+![Wykresy rozliczonej mocy, natężenia promieniowania i temperatury modułu w Berlin Demo](docs/images/dashboard-generation.png)
 
 Sekcja **Historia produkcji** porównuje dzienną energię rzeczywistą i szacowaną. Wybierz **7 dni**, **30 dni** lub **Własny** zakres do 90 dni kalendarzowych. Aby zobaczyć ostatnie siedem pełnych dni jak w Berlin Demo, wybierz zakres **Własny**, ustaw wczoraj jako datę końcową i rozpocznij zakres sześć dni wcześniej. Wybierz **Zastosuj**.
 
+*Własny zakres siedmiu dni w Berlin Demo przed zastosowaniem.*
+
+![Własny zakres dat w Berlin Demo z datą początkową, datą końcową i przyciskiem Zastosuj zakres](docs/images/dashboard-history-range.png)
+
 *Dzienna produkcja energii w Berlin Demo przez siedem pełnych dni.*
 
-<!-- screenshot: dashboard-history.png -->
+![Historia produkcji w Berlin Demo porównująca energię rzeczywistą i szacowaną przez siedem pełnych dni](docs/images/dashboard-history.png)
 
 Bieżący PR to stosunek mocy rzeczywistej do szacowanej wyrażony w procentach. Może przekroczyć 100%. **Moc możliwa do optymalizacji** (moc szacowana minus rzeczywista) może być ujemna. Brak odczytu pozostawia lukę. Zmierzona wartość zero pozostaje zerem. Przy szacowanej mocy równej zero PR ma wartość **—**.
 
@@ -108,7 +112,7 @@ Sprawdź PR w okresie, jego zmianę w punktach procentowych i różnicę między
 
 *Sprawność dzisiaj w Berlin Demo w porównaniu z wczorajszą do tej samej godziny.*
 
-<!-- screenshot: efficiency.png -->
+![Dzisiejsza sprawność w Berlin Demo z trendem PR i porównaniem produkcji z wczorajszą](docs/images/efficiency.png)
 
 ### Prognoza
 
@@ -118,15 +122,19 @@ Górne karty pokazują **Pozostało dzisiaj** oraz **Prognoza na jutro**. W sekc
 
 *Oryginalna i skorygowana prognoza energii w Berlin Demo, wybór daty i przycisk **Eksportuj CSV**.*
 
-<!-- screenshot: forecast.png -->
+![Przegląd prognoz w Berlin Demo z siedmioma datami, energią oryginalną i skorygowaną oraz eksportem CSV](docs/images/forecast.png)
 
 Wybierz datę, aby porównać krzywe mocy. Otwórz **Szczegóły co 15 minut**, aby zobaczyć moc, energię, natężenie promieniowania i temperatury w każdym przedziale.
 
 *Krzywe mocy i szczegóły co 15 minut dla wybranej daty w Berlin Demo.*
 
-<!-- screenshot: forecast-details.png -->
+![Krzywe mocy dla wybranej daty i rozwinięta tabela danych co 15 minut w Berlin Demo](docs/images/forecast-details.png)
 
 W konfiguracji EMHASS z jednym falownikiem PV wybierz **Eksportuj CSV**, a następnie serię oryginalną lub skorygowaną. Dopasuj początek, interwał i liczbę kroków do przebiegu optymalizacji. Zapisz `data_weather_forecast.csv` w katalogu EMHASS wskazanym przez `data_path` i ustaw `set_use_pv=true` oraz `weather_forecast_method=csv`. [Konfiguracja EMHASS](pvyieldlens/DOCS.md#export-a-pv-power-forecast-to-emhass)
+
+*Ustawienia eksportu dla przykładowego uruchomienia EMHASS w Berlin Demo.*
+
+![Okno eksportu EMHASS w Berlin Demo z serią prognozy, czasem rozpoczęcia, interwałem i liczbą kroków](docs/images/forecast-export.png)
 
 ### Czujniki wynikowe Home Assistant
 

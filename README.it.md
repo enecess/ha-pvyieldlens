@@ -52,7 +52,7 @@ Per inclinazione e orientamento puoi scegliere separatamente **Valore fisso** o 
 
 *L’impianto Berlin Demo da 5.000 W è inclinato di 35° e orientato a **Sud · 180°**.*
 
-<!-- screenshot: settings-pv-modules.png -->
+![Impostazioni dei moduli FV di Berlin Demo con potenza di 5.000 W, inclinazione di 35° e orientamento a sud](docs/images/settings-pv-modules.png)
 
 ### Sensori
 
@@ -64,7 +64,7 @@ Per inclinazione e orientamento puoi scegliere separatamente **Valore fisso** o 
 
 *Berlin Demo usa sensori simulati per potenza, irradianza e temperatura dei moduli.*
 
-<!-- screenshot: settings-sensors.png -->
+![Sensori di potenza effettiva, irradianza e temperatura dei moduli in Berlin Demo](docs/images/settings-sensors.png)
 
 ### Previsioni
 
@@ -84,19 +84,23 @@ Confronta potenza effettiva e stimata, **PR** e **Potenza ottimizzabile**. **Dat
 
 *Potenza in tempo reale e PR in Berlin Demo.*
 
-<!-- screenshot: dashboard.png -->
+![Dashboard di Berlin Demo con grafico in tempo reale, potenza attuale e PR](docs/images/dashboard.png)
 
 In **Dati di produzione** trovi potenza, irradianza e temperatura dei moduli per gli intervalli contabilizzati della giornata.
 
 *Produzione contabilizzata di oggi e letture dei sensori in Berlin Demo.*
 
-<!-- screenshot: dashboard-generation.png -->
+![Grafici di potenza, irradianza e temperatura dei moduli per gli intervalli contabilizzati in Berlin Demo](docs/images/dashboard-generation.png)
 
 **Produzione storica** confronta l’energia giornaliera effettiva e stimata. Seleziona **7 giorni**, **30 giorni** o **Personalizzato** per un massimo di 90 giorni di calendario. Per vedere gli ultimi sette giorni completi come in Berlin Demo, seleziona **Personalizzato**, imposta ieri come data finale e inizia sei giorni prima. Seleziona **Applica**.
 
+*Intervallo personalizzato di sette giorni in Berlin Demo prima di applicarlo.*
+
+![Intervallo personalizzato in Berlin Demo con data iniziale, data finale e pulsante Applica intervallo](docs/images/dashboard-history-range.png)
+
 *Produzione giornaliera in Berlin Demo per sette giorni completi.*
 
-<!-- screenshot: dashboard-history.png -->
+![Storico della produzione in Berlin Demo con confronto tra energia effettiva e stimata per sette giorni interi](docs/images/dashboard-history.png)
 
 Il PR in tempo reale è il rapporto percentuale tra potenza effettiva e stimata. Può superare il 100%. La **Potenza ottimizzabile** (potenza stimata meno potenza effettiva) può essere negativa. I dati mancanti lasciano spazi vuoti. Un valore misurato pari a zero resta zero. Se la potenza stimata è zero, il PR mostra **—**.
 
@@ -108,7 +112,7 @@ Consulta il PR del periodo, la variazione in punti percentuali e la differenza t
 
 *Efficienza di oggi in Berlin Demo, confrontata con ieri fino alla stessa ora.*
 
-<!-- screenshot: efficiency.png -->
+![Efficienza di oggi in Berlin Demo con andamento del PR e confronto con la produzione di ieri](docs/images/efficiency.png)
 
 ### Previsioni
 
@@ -118,15 +122,19 @@ Le schede in alto mostrano **Rimanente oggi** e **Previsione di domani**. In **E
 
 *Previsioni di energia originali e corrette in Berlin Demo, selezione della data e pulsante **Esporta CSV**.*
 
-<!-- screenshot: forecast.png -->
+![Panoramica delle previsioni di Berlin Demo con sette date, energia originale e corretta ed esportazione CSV](docs/images/forecast.png)
 
 Seleziona una data per confrontare le curve di potenza. Apri **Dettagli ogni 15 minuti** per vedere potenza, energia, irradianza e temperature per ogni intervallo.
 
 *Curve di potenza e dettagli ogni 15 minuti della data selezionata in Berlin Demo.*
 
-<!-- screenshot: forecast-details.png -->
+![Curve di potenza della data selezionata e tabella dei dettagli ogni 15 minuti in Berlin Demo](docs/images/forecast-details.png)
 
 Con EMHASS e un solo inverter fotovoltaico, seleziona **Esporta CSV** e scegli la serie originale o corretta. Imposta inizio, intervallo e numero di passi in base alla tua ottimizzazione. Salva `data_weather_forecast.csv` nel `data_path` di EMHASS e imposta `set_use_pv=true` e `weather_forecast_method=csv`. [Configurazione di EMHASS](pvyieldlens/DOCS.md#export-a-pv-power-forecast-to-emhass)
+
+*Impostazioni di esportazione di esempio per EMHASS in Berlin Demo.*
+
+![Finestra di esportazione EMHASS di Berlin Demo con serie previsionale, orario di inizio, intervallo e numero di passi](docs/images/forecast-export.png)
 
 ### Sensori di uscita in Home Assistant
 
