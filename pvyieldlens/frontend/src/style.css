@@ -213,6 +213,7 @@ main.settings-active > .banner { flex-shrink: 0; }
 .sensor-fields { display: grid; gap: 16px; }
 .sensor-field { display: grid; grid-template-columns: 145px minmax(0, 1fr); align-items: center; gap: 7px 15px; min-width: 0; }
 .sensor-field > label { font-size: 12px; font-weight: 500; }
+.sensor-optional { color: var(--pv-muted); }
 .angle-field { min-width: 0; margin: 0; padding: 10px 12px 12px; border: 1px solid var(--pv-line); border-radius: 8px; }
 .angle-field legend { padding-inline: 5px; font-size: 13px; font-weight: 650; }
 .angle-controls { display: grid; gap: 12px; min-width: 0; }

@@ -10,6 +10,8 @@ const props = withDefaults(defineProps<{
 }>(), { required: true, pattern: 'sensor\\.[a-z0-9_]+' });
 const model = defineModel<string>({ required: true });
 const { t } = useI18n();
+const optionalSuffix = computed(() => props.required ? '' : t('optional_sensor_suffix'));
+const fullLabel = computed(() => props.label + optionalSuffix.value);
 const input = ref<HTMLInputElement>();
 const popup = ref<HTMLElement>();
 const open = ref(false);
@@ -100,14 +102,14 @@ async function keydown(event: KeyboardEvent) {
 
 <template>
   <div class="sensor-field">
-    <label :for="inputId">{{ label }}</label>
+    <label :for="inputId">{{ label }}<span v-if="optionalSuffix" class="sensor-optional">{{ optionalSuffix }}</span></label>
     <div class="sensor-combobox">
       <input :id="inputId" ref="input" :name="name" :value="model" role="combobox" aria-autocomplete="list"
         :aria-expanded="open" :aria-controls="listId" :aria-activedescendant="open && activeIndex >= 0 ? `${listId}-${activeIndex}` : undefined"
         :pattern="pattern" :placeholder="t(name.startsWith('forecast_') ? 'search_entities' : 'select_source')" autocomplete="off"
         :required="required" :disabled="disabled" :aria-describedby="help ? inputId + '-help' : undefined"
         @input="edit" @focus="show" @click="show" @blur="open = false" @keydown="keydown">
-      <button v-if="!disabled && model.trim()" class="sensor-clear" type="button" :aria-label="t('clear_entity', { field: label })" @click="clear">
+      <button v-if="!disabled && model.trim()" class="sensor-clear" type="button" :aria-label="t('clear_entity', { field: fullLabel })" @click="clear">
         <X :size="16" aria-hidden="true" />
       </button>
       <ChevronDown :size="14" aria-hidden="true" />
@@ -115,7 +117,7 @@ async function keydown(event: KeyboardEvent) {
     <small v-if="help" :id="inputId + '-help'" class="sensor-help">{{ help }}</small>
     <Teleport to="body">
       <div v-if="open" ref="popup" class="sensor-suggestions" :style="placement">
-        <div :id="listId" role="listbox" :aria-label="label">
+        <div :id="listId" role="listbox" :aria-label="fullLabel">
           <div v-for="(entity, index) in filtered" :id="`${listId}-${index}`" :key="entity.entity_id" role="option"
             :aria-selected="index === activeIndex" class="sensor-option" @mousedown.prevent @click="update(entity.entity_id)">
             <span class="sensor-option-heading"><span>{{ entity.name }}</span><span class="sensor-option-unit">{{ entity.unit }}</span></span>
