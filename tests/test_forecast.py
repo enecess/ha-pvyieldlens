@@ -353,11 +353,17 @@ def test_correction_scales_raw_quarter_hours_and_clipped_totals_once(pr):
     from pvyieldlens.correction import ForecastCorrection
 
     inputs = forecast_input(home_timezone='Asia/Kathmandu')
-    batch = ForecastBatch(inputs=inputs, fetched_at=10,
-        intervals=constant_intervals(-86400, 8 * 86400, interval_seconds=900), weather_samples=())
+    batch = ForecastBatch(inputs=inputs, fetched_at=10, angles_read_at=5,
+        intervals=constant_intervals(-86400 + 300, 8 * 86400, interval_seconds=900),
+        weather_samples=tuple(WeatherSample(at=at, irradiance_w_m2=800, air_temperature_c=20, weather_code=0)
+                              for at in range(-5 * 3600, 19 * 3600, 3600)))
     correction = ForecastCorrection(pr=pr, history_days=14, start=-14 * 86400, end=0)
     view = forecast_view(batch, inputs.location, 123,
-                         correction=correction)
+                         correction=correction, refreshing=True)
+    compact = forecast_view(batch, inputs.location, 123, correction=correction, refreshing=True, include_details=False)
+    assert compact.days == compact.intervals == ()
+    assert compact.model_dump(exclude={'days', 'intervals'}) == view.model_dump(exclude={'days', 'intervals'})
+    assert view.days[0].weather.quality == 'complete'
     assert view.correction == correction
     for row in view.intervals:
         assert row.corrected_forecast_power_w == (pytest.approx(row.forecast_power_w * pr / 100) if pr is not None else None)
@@ -375,8 +381,11 @@ def test_correction_preserves_missing_forecast_even_with_zero_factor():
     rows = constant_intervals(0, 8 * 86400, interval_seconds=900)
     missing = rows[0].model_copy(update={'forecast_power_w': None, 'forecast_energy_kwh': None, 'quality': 'unavailable'})
     batch = ForecastBatch(inputs=inputs, fetched_at=10, intervals=(missing, *rows[1:]), weather_samples=())
-    view = forecast_view(batch, inputs.location, 120,
-        correction=ForecastCorrection(pr=0, history_days=14, start=-14 * 86400, end=0))
+    correction = ForecastCorrection(pr=0, history_days=14, start=-14 * 86400, end=0)
+    view = forecast_view(batch, inputs.location, 120, correction=correction)
+    compact = forecast_view(batch, inputs.location, 120, correction=correction, include_details=False)
+    assert compact.days == compact.intervals == ()
+    assert compact.model_dump(exclude={'days', 'intervals'}) == view.model_dump(exclude={'days', 'intervals'})
     assert view.intervals[0].corrected_forecast_power_w is None
     assert view.intervals[0].corrected_forecast_energy_kwh is None
     assert view.today.corrected_forecast_energy_kwh is None

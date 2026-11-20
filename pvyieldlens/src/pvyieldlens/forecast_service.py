@@ -10,13 +10,16 @@ import httpx
 
 from .correction import ForecastCorrection, correction_view, physical_context
 from .forecast import (
-    FORECAST_MODEL_VERSION, ForecastAngleIssue, ForecastAxis, ForecastBatch, ForecastInput,
+    ForecastAngleIssue, ForecastAxis, ForecastBatch, ForecastInput,
     ForecastPrerequisite, ForecastView, forecast_view,
 )
 from .home_assistant import HomeAssistantClient, source_value
 from .open_meteo import OpenMeteoClient
 from .settings import ForecastSettings, HALocation, MonitoringSettings
 from .storage import Store
+
+
+_FORECAST_CACHE_KEY = 'forecast_cache_v2'
 
 
 @dataclass(frozen=True)
@@ -27,7 +30,6 @@ class ForecastContext:
     noct_c: float
     tilt: float | str
     azimuth: float | str
-    model_version: int = FORECAST_MODEL_VERSION
 
 
 class ForecastController:
@@ -40,8 +42,8 @@ class ForecastController:
         self.settings = store.forecast_settings()
         location = store.get_meta('ha_location')
         self.location = HALocation.model_validate_json(location) if location and location != 'null' else None
-        cache = store.get_meta('forecast_cache')
-        self.batch = ForecastBatch.model_validate_json(cache) if cache else None
+        cache = store.get_meta(_FORECAST_CACHE_KEY)
+        self.batch = ForecastBatch.model_validate_json(cache) if cache is not None else None
         self.context: ForecastContext | ForecastPrerequisite = 'configuration_required'
         self.monitoring_settings: MonitoringSettings | None = None
         self.origin = ''
@@ -95,7 +97,6 @@ class ForecastController:
                 noct_c=cached.noct_c,
                 tilt=self.batch.tilt_entity or cached.tilt_deg,
                 azimuth=self.batch.azimuth_entity or cached.azimuth_deg,
-                model_version=cached.model_version,
             ) != context:
                 self.batch = None
         if changed:
@@ -107,7 +108,7 @@ class ForecastController:
     def invalidate_correction(self) -> None:
         self._correction_key = None
 
-    def view(self, now: float) -> ForecastView:
+    def view(self, now: float, *, include_details: bool = True) -> ForecastView:
         correction = None
         context = self.context
         config = self.monitoring_settings
@@ -120,7 +121,8 @@ class ForecastController:
             correction = self._correction
         return forecast_view(self.batch, context.location if isinstance(context, ForecastContext) else context, now,
                              correction=correction, refreshing=self._inflight is not None,
-                             last_error=self.last_error, unavailable_angles=self.unavailable_angles)
+                             last_error=self.last_error, unavailable_angles=self.unavailable_angles,
+                             include_details=include_details)
 
     def request_refresh(self) -> bool:
         if isinstance(self.context, str):
@@ -188,7 +190,7 @@ class ForecastController:
             if self.context == context:
                 if batch is not None:
                     self.batch = batch
-                    self.store.set_meta('forecast_cache', batch.model_dump_json())
+                    self.store.set_meta(_FORECAST_CACHE_KEY, batch.model_dump_json())
                 self.last_error = error
                 self.unavailable_angles = tuple(issues)
                 self._next_refresh = asyncio.get_running_loop().time() + (900 if error else 3600)

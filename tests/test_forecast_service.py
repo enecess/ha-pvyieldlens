@@ -46,12 +46,11 @@ async def test_cache_restart_preserves_fetched_at(tmp_path):
         lambda request: httpx.Response(200, json=forecast_payload(0, weather_code=61)),
     )) as http:
         forecast = controller(store, http)
+        store.set_meta('forecast_cache', '{}')
         await forecast.refresh(now=120)
         assert forecast.view(180).fetched_at == 120
-        saved = json.loads(store.get_meta('forecast_cache'))
-        for field in ('tilt_entity', 'azimuth_entity', 'angles_read_at'):
-            saved.pop(field, None)
-        store.set_meta('forecast_cache', json.dumps(saved))
+        assert store.get_meta('forecast_cache') == '{}'
+        assert store.get_meta('forecast_cache_v2') is not None
         store.close()
         store = Store(path)
         restored = ForecastController(store)
@@ -60,13 +59,12 @@ async def test_cache_restart_preserves_fetched_at(tmp_path):
         assert restored.view(180).days[0].weather.weather_code == 61
         assert len(restored.batch.weather_samples) == 217
         assert len(restored.batch.intervals) == 864
-        assert restored.batch.inputs.model_version == 2
         assert store.revision == 1
         assert store.cursor == 60
         assert store.monitoring_settings() == settings()
         assert store.totals(180, 'UTC')['estimated_energy_lifetime_kwh'] == pytest.approx(0.062)
         assert set(restored.batch.model_dump()['inputs']) == {'location', 'total_max_power_at_stc_w',
-            'pmax_temperature_coefficient_pct_per_c', 'tilt_deg', 'azimuth_deg', 'noct_c', 'model_version'}
+            'pmax_temperature_coefficient_pct_per_c', 'tilt_deg', 'azimuth_deg', 'noct_c'}
         await restored.stop()
     store.close()
 
@@ -202,10 +200,9 @@ async def test_forecast_only_change_keeps_monitoring_revision_cursor_and_totals(
     await service.configure(settings(settlement_interval_minutes=1), now=0, origin=ORIGIN)
     store.add_observations(samples(), ORIGIN)
     await service.tick(60)
-    service.sources = [{'entity_id': 'sensor.sun', 'valid': True}]
     before_revision, before_cursor = store.revision, store.cursor
     before_totals = store.totals(60, 'UTC')
-    before_live, before_sources = service.live_window, service.sources.copy()
+    before_live = service.live_window
     before_days = list(map(tuple, store.db.execute('SELECT * FROM days')))
     before_observations = store.observations(0, 60, settings().entities, ORIGIN)
     service.forecast.configure(service.monitoring_settings, PREDICTION, ORIGIN, LOCATION)
@@ -213,7 +210,6 @@ async def test_forecast_only_change_keeps_monitoring_revision_cursor_and_totals(
     assert store.revision == before_revision
     assert store.cursor == before_cursor
     assert store.totals(60, 'UTC') == before_totals
-    assert service.sources == before_sources
     assert service.live_window == before_live
     assert list(map(tuple, store.db.execute('SELECT * FROM days'))) == before_days
     assert store.observations(0, 60, settings().entities, ORIGIN) == before_observations
@@ -300,7 +296,7 @@ async def test_changed_inputs_discard_old_inflight_result(tmp_path, field, value
         release.set()
         await refresh
         assert forecast.view(180).fetched_at is None
-        assert store.get_meta('forecast_cache') is None
+        assert store.get_meta('forecast_cache_v2') is None
     store.close()
 
 
@@ -380,13 +376,13 @@ async def test_success_failure_and_stale_deadlines(tmp_path, monkeypatch):
     store.close()
 
 
-async def test_complete_legacy_settings_fetch_forecast_automatically(tmp_path):
+async def test_complete_saved_settings_fetch_forecast_automatically(tmp_path):
     from pvyieldlens.forecast_service import ForecastController
 
     store = Store(tmp_path / 'data.sqlite')
     store.save_monitoring_settings(settings(), 0, ORIGIN)
     store.set_meta('ha_location', LOCATION.model_dump_json())
-    store.set_meta('forecast_settings', '{"enabled":false,"tilt_deg":0.0,"azimuth_deg":180.0}')
+    store.save_forecast_settings(ForecastSettings(tilt_deg=0.0, azimuth_deg=180.0))
 
     fetched = asyncio.Event()
 
@@ -409,13 +405,13 @@ async def test_complete_legacy_settings_fetch_forecast_automatically(tmp_path):
     store.close()
 
 
-async def test_partial_legacy_settings_wait_for_geometry_without_fetching(tmp_path):
+async def test_partial_saved_settings_wait_for_geometry_without_fetching(tmp_path):
     from pvyieldlens.forecast_service import ForecastController
 
     store = Store(tmp_path / 'data.sqlite')
     store.save_monitoring_settings(settings(), 0, ORIGIN)
     store.set_meta('ha_location', LOCATION.model_dump_json())
-    store.set_meta('forecast_settings', '{"enabled":false,"tilt_deg":0.0}')
+    store.save_forecast_settings(ForecastSettings(tilt_deg=0.0))
 
     async with httpx.AsyncClient(transport=httpx.MockTransport(
         lambda request: pytest.fail('Incomplete geometry should not request weather'),
@@ -563,7 +559,7 @@ async def test_stop_cancels_running_fetch_and_keeps_injected_client_open(tmp_pat
         await forecast.stop()
         assert forecast.view(120).refreshing is False
         assert forecast.view(120).fetched_at is None
-        assert store.get_meta('forecast_cache') is None
+        assert store.get_meta('forecast_cache_v2') is None
         assert not http.is_closed
     store.close()
 
@@ -641,57 +637,6 @@ async def test_forecast_remaining_updates_without_new_weather(tmp_path):
         assert after_payload['attributes']['calculated_at'] == 49200
         assert after['forecast']['today']['forecast_energy_kwh'] == before['forecast']['today']['forecast_energy_kwh'] == pytest.approx(52.08)
         assert len(requests) == 1
-    store.close()
-
-
-async def test_hourly_cache_is_ignored_without_losing_monitoring(tmp_path):
-    import json
-
-    from forecast_fixtures import constant_intervals, forecast_input
-    from pvyieldlens.engine import calculate
-    from pvyieldlens.forecast import ForecastBatch, WeatherSample
-    from pvyieldlens.forecast_service import ForecastController
-
-    path = tmp_path / 'data.sqlite'
-    store = Store(path)
-    store.save_monitoring_settings(settings(), 0, ORIGIN)
-    store.settle(calculate(settings(), samples(), 0, 60), store.revision, 'UTC')
-    store.save_forecast_settings(PREDICTION)
-    store.set_meta('ha_location', LOCATION.model_dump_json())
-    cached = ForecastBatch(
-        inputs=forecast_input(), fetched_at=120, intervals=constant_intervals(0, 9 * 86400),
-        weather_samples=tuple(WeatherSample(at=index * 3600, irradiance_w_m2=800,
-            air_temperature_c=20, weather_code=61) for index in range(217)),
-    ).model_dump()
-    cached['inputs']['model_version'] = 1
-    persisted = json.dumps(cached)
-    store.set_meta('forecast_cache', persisted)
-    before_totals = store.totals(180, 'UTC')
-    before_days = list(map(tuple, store.db.execute('SELECT * FROM days')))
-    store.close()
-
-    store = Store(path)
-    async with httpx.AsyncClient(transport=httpx.MockTransport(
-        lambda request: httpx.Response(200, json=forecast_payload(0, weather_code=61)),
-    )) as http:
-        restored = ForecastController(store, OpenMeteoClient(http))
-        assert restored.batch is None
-        assert restored.view(180).status == 'loading'
-        assert restored.view(180).today.forecast_energy_kwh is None
-        assert restored.view(180).intervals == ()
-        assert store.get_meta('forecast_cache') == persisted
-        assert store.revision == 1
-        assert store.cursor == 60
-        assert store.monitoring_settings() == settings()
-        assert store.totals(180, 'UTC') == before_totals
-        assert list(map(tuple, store.db.execute('SELECT * FROM days'))) == before_days
-        await restored.refresh(now=180)
-        assert restored.batch.inputs.model_version == 2
-        assert len(restored.batch.intervals) == 864
-        assert restored.view(180).today.forecast_energy_kwh == pytest.approx(89.28)
-        assert store.totals(180, 'UTC') == before_totals
-        assert list(map(tuple, store.db.execute('SELECT * FROM days'))) == before_days
-        await restored.stop()
     store.close()
 
 

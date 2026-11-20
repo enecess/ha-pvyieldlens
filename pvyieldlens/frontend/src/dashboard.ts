@@ -174,5 +174,5 @@ export function useDashboard() {
   });
   void loadConfiguration().catch(failure => { if (!disposed) error.value = failure instanceof ApiError ? failure.code : 'error'; })
     .then(() => { if (!disposed) { void seed(); void poll(); } });
-  return { configuration, snapshot, livePoints, liveRange, liveSeriesError, error, displayTimezone, loadConfiguration, acceptConfiguration, acceptSavedConfiguration };
+  return { configuration, snapshot, livePoints, liveRange, liveSeriesError, error, displayTimezone, acceptConfiguration, acceptSavedConfiguration };
 }

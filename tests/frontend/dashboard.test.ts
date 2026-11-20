@@ -22,7 +22,7 @@ const snapshot: Snapshot = {
     data_completeness_percent: 100, quality: 'complete', reason: null,
   },
   energy_totals: { estimated_energy_today_kwh: 0, estimated_energy_lifetime_kwh: 0, today_allocation_complete: true, day: '2026-11-14', home_timezone: 'UTC',
-    today_valid_seconds: 0, lifetime_valid_seconds: 0, settled_until: 10000 }, sources: [], home_timezone: 'UTC', location: null,
+    today_valid_seconds: 0, lifetime_valid_seconds: 0, settled_until: 10000 }, home_timezone: 'UTC', location: null,
   forecast: { status: 'configuration_required', refreshing: false, fetched_at: null, calculated_at: 10000, last_error: null,
     geometry: null, unavailable_angles: [], correction: null, home_timezone: null, today: null, remaining_today: null, tomorrow: null, seven_days: null },
 };

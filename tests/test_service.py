@@ -598,13 +598,12 @@ async def test_ha_outage_uses_cached_location(tmp_path, monkeypatch):
     store.close()
 
 
-async def test_unchanged_monitoring_configuration_keeps_live_and_sources(tmp_path):
+async def test_unchanged_monitoring_configuration_keeps_live_data(tmp_path):
     store = Store(tmp_path / 'data.sqlite')
     service = Service(store)
     await service.configure(settings(settlement_interval_minutes=1), now=0)
     store.add_observations(samples())
     await service.tick(60)
-    service.sources = [{'entity_id': 'sensor.sun', 'valid': True}]
     before = service.snapshot(60)
     changes = store.db.total_changes
     await service.configure(settings(settlement_interval_minutes=1), now=61)

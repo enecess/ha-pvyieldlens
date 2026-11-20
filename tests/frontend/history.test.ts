@@ -175,7 +175,12 @@ it.each(['success', 'error'] as const)('keeps cached Today when a pending 7d req
   let resolve!: (value: Response) => void;
   let reject!: (reason: Error) => void;
   vi.mocked(fetch).mockReturnValueOnce(new Promise<Response>((done, fail) => { resolve = done; reject = fail; }));
-  await select('7d'); await select('today');
+  await select('7d');
+  expect(host.querySelector('#history-pr')?.textContent).toBe('—');
+  expect(host.querySelector('#history-actual-energy')?.textContent).toBe('—');
+  expect(host.querySelector('#history-range-caption')?.textContent).toBe('');
+  expect(host.querySelectorAll('#daily-energy-chart .daily-column')).toHaveLength(0);
+  await select('today');
   expect(fetch).toHaveBeenCalledTimes(2);
   expect(vi.mocked(fetch).mock.calls.map(([url]) => url)).toEqual([
     'api/history?period=today&compare=true', 'api/history?period=7d&compare=true']);
@@ -209,20 +214,73 @@ it.each(['success', 'error'] as const)('keeps cached Today when a pending 7d req
   expect(fetch).toHaveBeenCalledTimes(2);
 });
 
-it('refreshes only on visible settlement, configuration and household-date changes', async () => {
+it('keeps same-range data during refresh and clears errors when returning from a failed selection', async () => {
+  await mount();
+  let resolve!: (value: Response) => void;
+  vi.mocked(fetch).mockReturnValueOnce(new Promise<Response>(done => { resolve = done; }));
+  props.snapshot = { ...props.snapshot, revision: 2 }; await flush();
+  expect(host.querySelector('#history-pr')?.textContent).toBe('112.5');
+  expect(host.querySelector('#history-range-caption')?.textContent).toBeTruthy();
+  resolve(new Response(JSON.stringify(view('today')))); await flush();
+
+  vi.mocked(fetch).mockResolvedValueOnce(new Response('{}', { status: 500 }));
+  await select('7d');
+  expect(host.querySelector('#history-page > .banner[role=status]')?.textContent).toBe('Something went wrong. Please retry.');
+  expect(host.querySelector('#history-pr')?.textContent).toBe('—');
+  expect(host.querySelector('#history-range-caption')?.textContent).toBe('');
+  expect(host.querySelector('#history-pr-change')?.textContent).toBe('—');
+  await select('today');
+  expect(host.querySelector('#history-pr')?.textContent).toBe('112.5');
+  expect(host.querySelector('#history-page > .banner[role=status]')).toBeNull();
+  expect(fetch).toHaveBeenCalledTimes(3);
+});
+
+it('hides yesterday’s Today data until a visible household-date refresh succeeds', async () => {
   await mount(); expect(fetch).toHaveBeenCalledTimes(1);
+  expect(host.querySelector('#history-pr')?.textContent).toBe('112.5');
   props.snapshot = { ...props.snapshot, calculated_at: 999 }; await flush(); expect(fetch).toHaveBeenCalledTimes(1);
   const hidden = vi.spyOn(document, 'hidden', 'get').mockReturnValue(true);
   document.dispatchEvent(new Event('visibilitychange'));
   props.snapshot = { ...props.snapshot, energy_totals: { ...props.snapshot.energy_totals, day: '2026-11-12' } };
   await flush(); expect(fetch).toHaveBeenCalledTimes(1);
+  let resolve!: (value: Response) => void;
+  vi.mocked(fetch).mockReturnValueOnce(new Promise<Response>(done => { resolve = done; }));
   hidden.mockReturnValue(false); document.dispatchEvent(new Event('visibilitychange')); await flush();
   expect(fetch).toHaveBeenCalledTimes(2);
+  expect(host.querySelector('#history-pr')?.textContent).toBe('—');
+  expect(host.querySelector('#history-range-caption')?.textContent).toBe('');
+  expect(host.querySelector('#history-chart .chart-empty')).not.toBeNull();
+  resolve(new Response('{}', { status: 500 })); await flush();
+  expect(host.querySelector('#history-page > .banner[role=status]')?.textContent).toBe('Something went wrong. Please retry.');
+  expect(host.querySelector('#history-actual-energy')?.textContent).toBe('—');
+
+  vi.mocked(fetch).mockResolvedValueOnce(new Response(JSON.stringify({ ...view('today'),
+    today: '2026-11-12', summary: { ...summary, pr: 80 } })));
+  props.snapshot = { ...props.snapshot, revision: 2 }; await flush();
+  expect(props.snapshot.calculated_at).toBe(999);
+  expect(host.querySelector('#history-pr')?.textContent).toBe('80');
+  expect(host.querySelector('#history-page > .banner[role=status]')).toBeNull();
+
+  const nextDay = { ...view('today'), today: '2026-11-13', summary: { ...summary, pr: 75 } };
+  vi.mocked(fetch).mockResolvedValueOnce(new Response(JSON.stringify(nextDay)));
+  props.snapshot = { ...props.snapshot, revision: 3 }; await flush();
+  expect(host.querySelector('#history-pr')?.textContent).toBe('—');
+  vi.mocked(fetch).mockReturnValueOnce(new Promise<Response>(done => { resolve = done; }));
+  props.snapshot = { ...props.snapshot, energy_totals: { ...props.snapshot.energy_totals, day: '2026-11-13' } };
+  await flush();
+  expect(host.querySelector('#history-pr')?.textContent).toBe('75');
+  resolve(new Response(JSON.stringify(nextDay))); await flush();
 });
 
 it('refreshes rolling history when an old whole window leaves the 24 hour range', async () => {
   const clock = vi.spyOn(Date, 'now').mockReturnValue((window.start + 86400) * 1000);
   await mount(); await select('24h');
+  let resolve!: (value: Response) => void;
+  vi.mocked(fetch).mockReturnValueOnce(new Promise<Response>(done => { resolve = done; }));
+  props.snapshot = { ...props.snapshot, home_timezone: 'UTC', energy_totals: { ...props.snapshot.energy_totals, day: '2026-11-12' } };
+  await flush();
+  expect(host.querySelector('#history-pr')?.textContent).toBe('112.5');
+  resolve(new Response(JSON.stringify({ ...view('24h'), home_timezone: 'UTC', today: '2026-11-12' }))); await flush();
   const requests = vi.mocked(fetch).mock.calls.length;
   vi.mocked(fetch).mockResolvedValue(new Response(JSON.stringify({ ...view('24h'), windows: [], summary: empty })));
   clock.mockReturnValue((window.start + 86401) * 1000);

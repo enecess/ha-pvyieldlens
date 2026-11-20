@@ -61,11 +61,12 @@ export function plot(host: HTMLElement, data: ChartPoint[], series: ChartSeries[
   const start = range?.start ?? data[0].at, end = Math.max(range?.end ?? data[data.length - 1].at, start + 1);
   const dateFields = { year: 'numeric', month: 'short', day: 'numeric' } as const;
   const timeFields = { hour: '2-digit', minute: '2-digit', second: '2-digit' } as const;
-  const dateFormat = new Intl.DateTimeFormat(language, { ...dateFields, timeZone: timezone });
+  const dateFormat = tooltip ? null : new Intl.DateTimeFormat(language, { ...dateFields, timeZone: timezone });
   const dateTimeFields = { ...dateFields, ...timeFields };
-  const defaultTitleFields = dateFormat.format(start * 1000) === dateFormat.format(end * 1000) ? timeFields : dateTimeFields;
-  const stamps = formatTimes(data.map(point => point.at), language, timezone, defaultTitleFields);
-  const labels = new Map(data.map((point, index) => [point.at, stamps[index]]));
+  const defaultTitleFields = dateFormat && dateFormat.format(start * 1000) === dateFormat.format(end * 1000)
+    ? timeFields : dateTimeFields;
+  const labels = tooltip ? null : new Map(formatTimes(data.map(point => point.at), language, timezone, defaultTitleFields)
+    .map((stamp, index) => [data[index].at, stamp]));
   const maximum = Math.max(series.some(item => item.key === 'pr') ? 100 : 1, ...valid) * 1.1;
   const minimum = Math.min(0, ...valid);
   const x = (at: number) => left + (at - start) / (end - start) * (width - left - right);
@@ -220,11 +221,13 @@ export function plot(host: HTMLElement, data: ChartPoint[], series: ChartSeries[
         marker.setAttribute('cy', String(y(value)));
       }
     });
-    const content = point ? tooltip?.(point) ?? { title: labels.get(point.at)!, rows: series.map(item => {
-      const value = point[item.key];
-      return { label: t(item.label), value: `${value == null ? '—' : number(value)} ${unit}`, color: item.color };
-    }) } : { title: formatTimes([at], language, timezone, tooltip ? dateTimeFields : defaultTitleFields)[0],
-      rows: series.map(item => ({ label: t(item.label), value: `— ${unit}`, color: item.color })) };
+    const content = point && tooltip ? tooltip(point) : {
+      title: (point && labels?.get(at)) ?? formatTimes([at], language, timezone, defaultTitleFields)[0],
+      rows: series.map(item => {
+        const value = point?.[item.key];
+        return { label: t(item.label), value: `${value == null ? '—' : number(value)} ${unit}`, color: item.color };
+      }),
+    };
     const title = document.createElement('strong');
     title.textContent = content.title;
     tip.replaceChildren(title);

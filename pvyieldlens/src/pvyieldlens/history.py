@@ -80,7 +80,7 @@ def _calendar_dates(start: float, end: float, zone: ZoneInfo) -> list[date]:
 
 
 def read_history_range(store: Store, start: float, end: float, home_timezone: str, *,
-                       now: float, include_days: bool) -> HistorySlice:
+                       now: float, include_days: bool, include_windows: bool = True) -> HistorySlice:
     """Read committed calendar data without reconstructing or modifying settlements."""
     zone = ZoneInfo(home_timezone)
     rows = store.history(start, end, include_day_allocations=True)
@@ -131,9 +131,11 @@ def read_history_range(store: Store, start: float, end: float, home_timezone: st
                                    in_progress=day == today, boundary_unavailable=day in unavailable or day in excluded_dates))
 
     summary = summarize_history(windows, start, end)
-    for window in windows:
-        window.pop('day_allocations', None)
-    return HistorySlice(windows=windows, summary=summary, requested_range=HistoryRange(start=start, end=end),
+    if include_windows:
+        for window in windows:
+            window.pop('day_allocations', None)
+    return HistorySlice(windows=windows if include_windows else [], summary=summary,
+                        requested_range=HistoryRange(start=start, end=end),
                         boundary_unavailable=bool(excluded), days=days)
 
 
@@ -144,7 +146,8 @@ def _read_rolling_range(store: Store, start: float, end: float) -> HistorySlice:
 
 
 def history_view(store: Store, period: HistoryPeriod, now: float, home_timezone: str, *,
-                 start_date: date | None = None, end_date: date | None = None, compare: bool = False) -> HistoryView:
+                 start_date: date | None = None, end_date: date | None = None, compare: bool = False,
+                 include_windows: bool = True) -> HistoryView:
     """Read one settled history view while the caller holds the service lock."""
     zone = ZoneInfo(home_timezone)
     today = datetime.fromtimestamp(now, zone).date()
@@ -159,7 +162,7 @@ def history_view(store: Store, period: HistoryPeriod, now: float, home_timezone:
     start = now - 86400 if period == '24h' else datetime.combine(first_day, time(), zone).timestamp()
     current = (_read_rolling_range(store, start, end) if period == '24h'
                else read_history_range(store, start, end, home_timezone, now=now,
-                                       include_days=period in ('7d', '30d', 'custom')))
+                                       include_days=period in ('7d', '30d', 'custom'), include_windows=include_windows))
     if (now == datetime.combine(today, time(), zone).timestamp()
             and (period in ('7d', '30d') or period == 'custom' and end_date == today)):
         current = current.model_copy(update={'days': [*current.days, HistoryDay(
@@ -173,7 +176,7 @@ def history_view(store: Store, period: HistoryPeriod, now: float, home_timezone:
                         else (datetime.fromtimestamp(current.summary.end, zone) - timedelta(days=count)).timestamp())
         previous = (_read_rolling_range(store, previous_start, previous_end) if period == '24h'
                     else read_history_range(store, previous_start, previous_end, home_timezone,
-                                            now=now, include_days=False))
+                                            now=now, include_days=False, include_windows=False))
         comparison = HistoryComparison(
             summary=previous.summary, requested_range=previous.requested_range,
             pr_change_pp=current.summary.pr - previous.summary.pr

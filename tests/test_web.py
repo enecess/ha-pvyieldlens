@@ -33,10 +33,15 @@ async def test_ingress_uses_real_peer_not_forwarded_header(service):
     app = create_app(service, Runtime(supervisor_token='super-secret'), run_background=False)
     async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app, client=('10.0.0.5', 123)), base_url='http://app') as client:
         assert (await client.get('/api/config', headers={'x-forwarded-for': '172.30.32.2'})).status_code == 403
+        assert (await client.get('/health')).status_code == 403
     async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app, client=('172.30.32.2', 123)), base_url='http://app') as client:
         response = await client.get('/api/config')
         assert response.status_code == 200
         assert 'super-secret' not in response.text
+        assert (await client.get('/health')).json() == {'status': 'ok', 'configured': False}
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app, client=('127.0.0.1', 123)), base_url='http://app') as client:
+        assert (await client.get('/health')).json() == {'status': 'ok', 'configured': False}
+        assert (await client.get('/api/config')).status_code == 403
 
 
 async def test_configuration_validation_preserves_settings_and_secrets(service):
@@ -72,8 +77,8 @@ async def test_csrf_and_empty_password_are_rejected(service):
 
 async def test_health_exposes_no_configuration(service):
     app = create_app(service, Runtime(web_password='test-pass'), run_background=False)
-    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url='http://app') as client:
-        assert (await client.get('/health')).json()['status'] == 'ok'
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app, client=('10.0.0.5', 123)), base_url='http://app') as client:
+        assert (await client.get('/health')).json() == {'status': 'ok', 'configured': False}
 
 
 async def test_large_history_gzip_preserves_response_authentication_and_ingress(service):
@@ -184,63 +189,11 @@ async def test_same_normalized_connection_reuses_saved_token(service, method, pa
             await service.client.close()
 
 
-@pytest.mark.parametrize('port', ['abc', '65536'])
-async def test_invalid_legacy_connection_keeps_app_reachable_until_correction(service, monkeypatch, port):
-    import asyncio
-    import json
-    from pvyieldlens.home_assistant import HomeAssistantClient
-    from test_engine import samples
-    from test_integration import fake_server
-
-    legacy_url = 'http://legacy-ha.test:' + port
-    saved = json.dumps({'url': legacy_url, 'token': 'private-legacy-token'})
-    await service.configure(settings(settlement_interval_minutes=1, update_interval_seconds=1), now=120, origin=legacy_url)
-    service.store.add_observations(samples(at=120), origin=legacy_url)
-    service.store.set_meta('connection', saved)
-    monkeypatch.setattr('pvyieldlens.service.time.time', lambda: 180)
-    remote_requests = []
-    request = HomeAssistantClient.request
-
-    async def record_request(client, method, path, **kwargs):
-        remote_requests.append(client.base_url)
-        return await request(client, method, path, **kwargs)
-
-    monkeypatch.setattr(HomeAssistantClient, 'request', record_request)
-    app = create_app(service, Runtime(web_password='test-pass'))
-    async with fake_server() as url, app.router.lifespan_context(app), httpx.AsyncClient(
-            transport=httpx.ASGITransport(app=app), base_url='http://app', auth=('admin', 'test-pass')) as client:
-        assert (await client.get('/')).status_code == 200
-        response = await client.get('/api/config')
-        assert response.status_code == 200
-        assert response.json()['monitoring_settings']['total_max_power_at_stc_w'] == 5000
-        assert response.json()['connection'] == {'url': '', 'token_set': False}
-        assert 'private-legacy-token' not in response.text
-        assert (await client.post('/api/connection', json=None)).json() == {'error': 'connection_required'}
-        assert (await client.put('/api/config', json={'forecast_settings': FORECAST_ANGLES, 'monitoring_settings': settings(total_max_power_at_stc_w=10000).model_dump()})).status_code == 422
-        await asyncio.sleep(0.05)
-        assert service.store.cursor == 120
-        assert service.store.history(120, 180) == []
-        assert service.store.get_meta('connection') == saved
-        assert service.monitoring_settings.total_max_power_at_stc_w == 5000
-        assert service.client is None
-        assert remote_requests == []
-        connection = {'url': url, 'token': 'simulation-token'}
-        assert (await client.post('/api/connection', json=connection)).status_code == 200
-        assert remote_requests == [url, url]
-        assert service.store.get_meta('connection') == saved
-        response = await client.put('/api/config', json={'forecast_settings': {'tilt_deg': 0.0, 'azimuth_entity': 'number.azimuth'}, 'monitoring_settings': settings().model_dump(), 'connection': connection})
-        assert response.status_code == 200
-        assert response.json()['connection'] == {'url': url, 'token_set': True}
-        assert json.loads(service.store.get_meta('connection')) == connection
-        assert service.client.base_url == url
-
-
 @pytest.mark.parametrize(('forecast_settings', 'field'), [
     ({'tilt_deg': 0.0}, 'forecast_settings'),
     ({'azimuth_deg': 180.0}, 'forecast_settings'),
     ({'tilt_deg': 0.0, 'azimuth_deg': 360}, 'forecast_settings.azimuth_deg'),
     ({**FORECAST_ANGLES, 'tilt_entity': 'number.tracker_tilt'}, 'forecast_settings'),
-    ({**FORECAST_ANGLES, 'enabled': False}, 'forecast_settings.enabled'),
 ])
 async def test_invalid_forecast_preserves_all_configuration_and_secrets(service, forecast_settings, field):
     from pvyieldlens.settings import ForecastSettings, HALocation
@@ -327,7 +280,7 @@ async def test_forecast_only_put_keeps_running_monitoring(service, monkeypatch, 
             assert service.client is ha_client
             assert service._recovery_needed is False
             after = service.snapshot(180)
-            for key in ('revision', 'energy_totals', 'live_window', 'sources', 'latest_settled_window', 'connected', 'calculated_at'):
+            for key in ('revision', 'energy_totals', 'live_window', 'latest_settled_window', 'connected', 'calculated_at'):
                 assert after[key] == before[key]
             assert service.store.cursor == cursor
             assert service.store.get_meta('started_at') == started_at
@@ -778,8 +731,7 @@ async def test_optional_temperature_config_snapshots_estimation_inputs(service, 
     await service.client.close()
 
 
-async def test_optional_temperature_routes_irradiance_through_ingest_and_diagnostics(service):
-    from pvyieldlens.home_assistant import HomeAssistantClient
+async def test_optional_temperature_routes_irradiance_through_ingest(service):
     from test_home_assistant import state
 
     await service.configure(settings(module_temperature_entity=None, settlement_interval_minutes=1),
@@ -789,28 +741,8 @@ async def test_optional_temperature_routes_irradiance_through_ingest_and_diagnos
         state('77', '°F').model_copy(update={'entity_id': 'sensor.temp'}),
         state('0.8', 'kW/m²').model_copy(update={'entity_id': 'sensor.sun'}),
     ])
-    assert [(source['entity_id'], source['valid']) for source in service.sources] == [
-        ('sensor.power', True), ('sensor.sun', True),
-    ]
     records = service.store.observations(0, 2_000_000_000, ('sensor.power', 'sensor.temp', 'sensor.sun'), service.origin)
     assert {item.entity_id: item.value for item in records} == {'sensor.power': 1500.0, 'sensor.sun': 800.0}
-
-    def respond(request):
-        return httpx.Response(200, json={'observed_at': 110.0, 'sources': [
-            {'state': '1.5', 'unit': 'kW', 'reported_at': 100},
-            {'state': '0.8', 'unit': 'kW/m²', 'reported_at': 110},
-        ]})
-
-    async with httpx.AsyncClient(transport=httpx.MockTransport(respond)) as ha_http:
-        service.client = HomeAssistantClient('http://ha.test', 'secret', http=ha_http)
-        app = create_app(service, Runtime(web_password='test-pass'), run_background=False)
-        async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url='http://app',
-                                     auth=('admin', 'test-pass')) as client:
-            response = await client.get('/api/source-diagnostics')
-    assert response.status_code == 200
-    assert [(source['entity_id'], source['valid']) for source in response.json()['sources']] == [
-        ('sensor.power', True), ('sensor.sun', True),
-    ]
 
 
 async def test_full_configuration_requires_forecast_settings_without_partial_writes(service):
@@ -823,114 +755,6 @@ async def test_full_configuration_requires_forecast_settings_without_partial_wri
     assert response.json() == {'error': 'invalid_configuration', 'fields': ['forecast_settings']}
     assert service.monitoring_settings.total_max_power_at_stc_w == 5000
     assert service.store.db.total_changes == before
-
-
-async def test_source_diagnostics_requires_authentication_and_returns_unconfigured_empty(service):
-    app = create_app(service, Runtime(web_password='test-pass'), run_background=False)
-    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url='http://app') as client:
-        assert (await client.get('/api/source-diagnostics')).status_code == 401
-        response = await client.get('/api/source-diagnostics', auth=('admin', 'test-pass'))
-    assert response.status_code == 200
-    assert response.json() == {'observed_at': None, 'sources': []}
-    assert response.headers['Cache-Control'] == 'no-store'
-
-
-async def test_source_diagnostics_reads_leave_service_store_and_outputs_unchanged(service):
-    from pvyieldlens.home_assistant import HomeAssistantClient
-    from test_engine import samples
-    from test_home_assistant import state
-
-    await service.configure(settings(settlement_interval_minutes=1), now=0, origin='http://ha.test')
-    service.store.add_observations(samples(at=0), origin=service.origin)
-    await service.ingest([state(changed='1970-01-01T00:01:00+00:00', reported='1970-01-01T00:01:10+00:00')])
-    await service.tick(now=120)
-    requests = []
-
-    def respond(request):
-        requests.append(request)
-        return httpx.Response(200, json={'observed_at': 121.25, 'sources': [
-            {'state': '2.5', 'unit': 'kW', 'reported_at': 121.0}, None, None,
-        ]})
-
-    observation_count = service.store.db.execute('SELECT COUNT(*) FROM observations').fetchone()[0]
-    cursor = service.store.cursor
-    metadata = list(service.store.db.execute('SELECT * FROM metadata ORDER BY key'))
-    changes = service.store.db.total_changes
-    snapshot = service.snapshot(now=120)
-    live_series = service.live_series(now=120)
-    async with httpx.AsyncClient(transport=httpx.MockTransport(respond)) as ha_http:
-        service.client = HomeAssistantClient('http://ha.test', 'secret', http=ha_http)
-        app = create_app(service, Runtime(web_password='test-pass'), run_background=False)
-        async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url='http://app',
-                                     auth=('admin', 'test-pass')) as client:
-            for _ in range(2):
-                response = await client.get('/api/source-diagnostics')
-                assert response.status_code == 200
-                assert response.json() == {'observed_at': 121.25, 'sources': [
-                    {'entity_id': 'sensor.power', 'state': '2.5', 'unit': 'kW', 'reported_at': 121, 'valid': True},
-                    {'entity_id': 'sensor.temp', 'state': 'unavailable', 'unit': None, 'reported_at': None, 'valid': False},
-                    {'entity_id': 'sensor.sun', 'state': 'unavailable', 'unit': None, 'reported_at': None, 'valid': False},
-                ]}
-    assert service.store.db.execute('SELECT COUNT(*) FROM observations').fetchone()[0] == observation_count
-    assert service.store.cursor == cursor
-    assert list(service.store.db.execute('SELECT * FROM metadata ORDER BY key')) == metadata
-    assert service.store.db.total_changes == changes
-    assert service.snapshot(now=120) == snapshot
-    assert service.live_series(now=120) == live_series
-    assert len(requests) == 2
-    assert all(request.method == 'POST' and request.url.path == '/api/template' for request in requests)
-    assert not any(request.method == 'POST' and '/states/' in request.url.path for request in requests)
-
-
-async def test_source_diagnostics_uses_captured_configuration_without_locking_network_io(service):
-    import json
-    from pvyieldlens.home_assistant import HomeAssistantClient
-
-    await service.configure(settings(), now=0, origin='http://ha.test')
-    requests = []
-
-    async def respond(request):
-        assert not service.lock.locked()
-        async with service.lock:
-            service.client = None
-            service.monitoring_settings = settings(actual_power_entity='sensor.replacement')
-        requests.append(request)
-        return httpx.Response(200, json={'observed_at': 110.0, 'sources': [None, None, None]})
-
-    async with httpx.AsyncClient(transport=httpx.MockTransport(respond)) as ha_http:
-        service.client = HomeAssistantClient('http://ha.test', 'secret', http=ha_http)
-        app = create_app(service, Runtime(web_password='test-pass'), run_background=False)
-        async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url='http://app',
-                                     auth=('admin', 'test-pass')) as client:
-            response = await client.get('/api/source-diagnostics')
-    assert response.status_code == 200
-    assert [row['entity_id'] for row in response.json()['sources']] == ['sensor.power', 'sensor.temp', 'sensor.sun']
-    assert len(requests) == 1
-    assert json.loads(requests[0].content)['variables']['entities'] == ['sensor.power', 'sensor.temp', 'sensor.sun']
-
-
-@pytest.mark.parametrize('failure', ['unavailable_client', 'network', 'http', 'validation'])
-async def test_source_diagnostics_ha_failures_return_bad_gateway(service, failure):
-    from pvyieldlens.home_assistant import HomeAssistantClient
-
-    await service.configure(settings(), now=0, origin='http://ha.test')
-
-    def respond(request):
-        if failure == 'network':
-            raise httpx.ConnectError('offline', request=request)
-        if failure == 'http':
-            return httpx.Response(503)
-        return httpx.Response(200, json={'observed_at': None, 'sources': [None, None, None]})
-
-    async with httpx.AsyncClient(transport=httpx.MockTransport(respond)) as ha_http:
-        if failure != 'unavailable_client':
-            service.client = HomeAssistantClient('http://ha.test', 'secret', http=ha_http)
-        app = create_app(service, Runtime(web_password='test-pass'), run_background=False)
-        async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url='http://app',
-                                     auth=('admin', 'test-pass')) as client:
-            response = await client.get('/api/source-diagnostics')
-    assert response.status_code == 502
-    assert response.json() == {'error': 'ha_connection_failed'}
 
 
 @pytest.mark.parametrize('query', [
@@ -950,6 +774,9 @@ async def test_source_diagnostics_ha_failures_return_bad_gateway(service, failur
     'start=0&end=60&start_date=2026-11-17',
     'start=0&end=60&compare=true',
     'period=today&compare=invalid',
+    'period=7d&include_windows=invalid',
+    'start=0&end=60&include_windows=false',
+    'period=24h&include_windows=false',
 ])
 async def test_history_calendar_parameters_are_validated(service, monkeypatch, query):
     from test_history import timestamp
@@ -1013,6 +840,33 @@ async def test_history_previous_period_reads_comparable_summaries_under_service_
     assert body['comparison']['pr_change_pp'] == pytest.approx(-10)
     assert body['comparison']['requested_range']['end'] == timestamp('2026-11-16T12:05:00')
     assert unrequested.json()['comparison'] is None
+
+
+async def test_calendar_history_can_omit_windows_without_changing_daily_data_or_comparison(service, monkeypatch):
+    from test_history import settle_history_windows, timestamp
+
+    settle_history_windows(service.store, [
+        ('2026-11-04T00:00:00', 120, 540, 1000),
+        ('2026-11-10T23:58:00', 300, 480, 1000),
+    ])
+    service.monitoring_settings = settings(home_timezone='Asia/Shanghai')
+    monkeypatch.setattr('pvyieldlens.web.time.time', lambda: timestamp('2026-11-17T00:00:00'))
+    app = create_app(service, Runtime(web_password='test-pass'), run_background=False)
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url='http://app',
+                                 auth=('admin', 'test-pass')) as client:
+        path = '/api/history?period=7d&compare=true'
+        full = await client.get(path)
+        explicit_full = await client.get(path + '&include_windows=true')
+        daily = await client.get(path + '&include_windows=false')
+    assert full.status_code == explicit_full.status_code == daily.status_code == 200
+    body = full.json()
+    assert explicit_full.json() == body
+    assert len(body['windows']) == 1
+    assert body['summary']['end'] == timestamp('2026-11-11T00:03:00')
+    assert body['comparison']['summary']['pr'] == pytest.approx(90)
+    assert body['days'][0]['day'] == '2026-11-11'
+    assert body['days'][-1]['in_progress']
+    assert daily.json() == {**body, 'windows': []}
 
 
 async def test_generation_data_is_authenticated_and_unconfigured_empty(service, monkeypatch):
@@ -1105,9 +959,9 @@ async def test_correction_forecast_routes_read_under_service_lock(service, monke
         service.origin, HALocation(origin=service.origin, latitude=0, longitude=0, home_timezone='UTC'))
     real_view = service.forecast.view
 
-    def locked_view(now):
+    def locked_view(now, *, include_details=True):
         assert service.lock.locked()
-        return real_view(now)
+        return real_view(now, include_details=include_details)
 
     monkeypatch.setattr(service.forecast, 'view', locked_view)
     monkeypatch.setattr(service.forecast, 'request_refresh', lambda: True)

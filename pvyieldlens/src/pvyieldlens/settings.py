@@ -12,6 +12,7 @@ ModuleTemperatureNoct = Annotated[float, Field(gt=20, le=80)]
 DEFAULT_NOCT_C = 45.0
 AMBIENT_SAMPLE_SECONDS = 900
 AMBIENT_OBSERVATION_PREFIX = 'weather:ambient:'
+_AVAILABLE_TIMEZONES = frozenset(available_timezones())
 
 
 class AmbientSite(BaseModel):
@@ -53,7 +54,7 @@ class MonitoringSettings(BaseModel):
     @field_validator("home_timezone")
     @classmethod
     def validate_timezone(cls, value: str) -> str:
-        if value not in available_timezones():
+        if value not in _AVAILABLE_TIMEZONES:
             raise ValueError("invalid_timezone")
         return value
 
@@ -151,6 +152,6 @@ class HALocation(BaseModel):
     @field_validator("home_timezone")
     @classmethod
     def validate_timezone(cls, value: str) -> str:
-        if value not in available_timezones():
+        if value not in _AVAILABLE_TIMEZONES:
             raise ValueError("invalid_timezone")
         return value

@@ -1,4 +1,4 @@
-import json
+from datetime import datetime
 
 import httpx
 import pytest
@@ -19,13 +19,18 @@ def test_units_and_report_are_distinct_observations():
     assert len(parse_state(state(), 'power', historical=True)) == 1
 
 
-@pytest.mark.parametrize('value,unit', [('unknown','W'), ('NaN','W'), ('-1','W'), ('3','kWh'), ('1e999','W')])
-def test_invalid_values_end_validity(value, unit):
-    assert all(point.value is None for point in parse_state(state(value, unit), 'power'))
-
-
-def test_fahrenheit_temperature_conversion():
-    assert parse_state(state('77', '°F'), 'temperature')[0].value == 25
+@pytest.mark.parametrize('role,value,unit,expected', [
+    ('power', '0', 'W', 0), ('power', 'unknown', 'W', None), ('power', 'NaN', 'W', None),
+    ('power', '-1', 'W', None), ('power', '3', 'kWh', None), ('power', ' 1', 'W', None),
+    ('power', '1e999', 'W', None), ('power', '1e308', 'kW', None),
+    ('temperature', '-10', '°C', -10), ('temperature', '77', '°F', 25),
+    ('temperature', '300', 'K', pytest.approx(26.85)), ('temperature', '300', 'C', None),
+    ('irradiance', '800', 'W/m²', 800), ('irradiance', '.8', 'kW / m^2', 800),
+    ('irradiance', '-1', 'W/m2', None), ('irradiance', '1', None, None),
+    ('irradiance', 'unknown', 'W/m2', None),
+])
+def test_parse_state_normalizes_supported_units_and_ends_invalid_readings(role, value, unit, expected):
+    assert [point.value for point in parse_state(state(value, unit), role)] == [expected, expected]
 
 
 @pytest.mark.parametrize('value,unit,role,expected', [
@@ -53,6 +58,28 @@ async def test_selected_states_read_live_reports_and_keep_missing_sources_unavai
         assert selected[1].state == 'unavailable'
 
 
+async def test_state_discovery_accepts_non_string_attributes_alongside_valid_sensor():
+    unusual = state().model_dump(mode='json')
+    unusual['attributes'] = {'friendly_name': {'name': 'Power'}, 'unit_of_measurement': ['kW']}
+    temperature = state('77', '°F').model_dump(mode='json')
+    temperature.update(entity_id='sensor.temperature', attributes={'friendly_name': 'Temperature', 'unit_of_measurement': '°F'})
+    async with httpx.AsyncClient(transport=httpx.MockTransport(lambda request: httpx.Response(
+        200, json=[unusual, temperature],
+    ))) as http:
+        power, temp = await HomeAssistantClient('http://ha.test', 'secret', http=http).states()
+
+    assert power.entity_id == 'sensor.power'
+    assert power.state == '1.5'
+    assert power.last_changed.timestamp() == power.last_updated.timestamp() == 1793145600
+    assert power.last_reported.timestamp() == 1793146200
+    assert power.attributes.friendly_name is None
+    assert power.attributes.unit_of_measurement is None
+    assert parse_state(power, 'power')[0].value is None
+    assert temp.attributes.friendly_name == 'Temperature'
+    assert temp.attributes.unit_of_measurement == '°F'
+    assert [(point.at, point.value) for point in parse_state(temp, 'temperature')] == [(1793145600, 25), (1793146200, 25)]
+
+
 async def test_supervisor_urls_auth_history_and_publish():
     requests = []
     def respond(request):
@@ -71,6 +98,24 @@ async def test_supervisor_urls_auth_history_and_publish():
     assert requests[0].url.params['skip_initial_state'] == '1'
     assert requests[1].url.path == '/core/api/states/sensor.pvyieldlens_settled_pr'
     await http.aclose()
+
+
+async def test_recorder_history_keeps_a_real_state_at_the_lower_bound():
+    rows = [(recorded_at, state(value, changed=stamp, reported=None).model_dump(mode='json'))
+            for recorded_at, value, stamp in (
+        (1793145599.9999993, '1', '2026-10-27T23:59:59.999999+00:00'),
+        (1793145600, '2', '2026-10-28T00:00:00+00:00'),
+        (1793146200, '3', '2026-10-28T00:10:00+00:00'),
+    )]
+
+    def respond(request):
+        start = datetime.fromisoformat(request.url.path.rsplit('/', 1)[-1]).timestamp()
+        end = datetime.fromisoformat(request.url.params['end_time']).timestamp()
+        return httpx.Response(200, json=[[row for recorded_at, row in rows if start < recorded_at < end]])
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(respond)) as http:
+        history = await HomeAssistantClient('http://ha.test', 'secret', http=http).history(['sensor.power'], 1793145600, 1793146200)
+    assert [(row.last_updated.timestamp(), row.state) for row in history] == [(1793145600, '2')]
 
 
 def test_thirteen_outputs_use_scoped_names_and_keep_night_pr_unavailable():
@@ -196,143 +241,3 @@ def test_forecast_entities_have_no_state_class(fetched_at, status):
         assert attributes['data_completeness_percent'] == pytest.approx(coverage)
         assert attributes['quality'] == quality
         assert attributes['status'] == status
-
-
-async def test_source_diagnostics_batches_configured_sources_and_reads_unchanged_reports():
-    requests = []
-    reports = iter((1793146200.0, 1793146201.0))
-
-    def respond(request):
-        requests.append(request)
-        reported_at = next(reports)
-        return httpx.Response(200, json={'observed_at': reported_at + 0.25, 'sources': [
-            {'state': '1.500', 'unit': 'kW', 'reported_at': reported_at},
-            {'state': '77', 'unit': '°F', 'reported_at': 1793145600},
-            {'state': '0.8', 'unit': 'kW / m²', 'reported_at': None},
-        ]})
-
-    async with httpx.AsyncClient(transport=httpx.MockTransport(respond)) as http:
-        client = HomeAssistantClient('http://ha.test', 'secret', http=http)
-        first = await client.source_diagnostics(('sensor.power', 'sensor.temp', 'sensor.sun'))
-        second = await client.source_diagnostics(('sensor.power', 'sensor.temp', 'sensor.sun'))
-    assert first == {'observed_at': 1793146200.25, 'sources': [
-        {'entity_id': 'sensor.power', 'state': '1.500', 'unit': 'kW', 'reported_at': 1793146200, 'valid': True},
-        {'entity_id': 'sensor.temp', 'state': '77', 'unit': '°F', 'reported_at': 1793145600, 'valid': True},
-        {'entity_id': 'sensor.sun', 'state': '0.8', 'unit': 'kW / m²', 'reported_at': None, 'valid': True},
-    ]}
-    assert second['observed_at'] == 1793146201.25
-    assert second['sources'][0] == {**first['sources'][0], 'reported_at': 1793146201}
-    assert len(requests) == 2
-    assert all(request.method == 'POST' and request.url.path == '/api/template' for request in requests)
-    assert all(json.loads(request.content)['variables'] == {
-        'entities': ['sensor.power', 'sensor.temp', 'sensor.sun'],
-    } for request in requests)
-    assert all(request.headers['Authorization'] == 'Bearer secret' for request in requests)
-
-
-async def test_source_diagnostics_with_two_monitoring_roles():
-    def respond(request):
-        assert json.loads(request.content)['variables']['entities'] == ['sensor.power', 'sensor.sun']
-        return httpx.Response(200, json={'observed_at': 110.0, 'sources': [
-            {'state': '1.5', 'unit': 'kW', 'reported_at': 100},
-            {'state': '0.8', 'unit': 'kW/m²', 'reported_at': 110},
-        ]})
-
-    async with httpx.AsyncClient(transport=httpx.MockTransport(respond)) as http:
-        client = HomeAssistantClient('http://ha.test', 'secret', http=http)
-        result = await client.source_diagnostics(('sensor.power', 'sensor.sun'), roles=('power', 'irradiance'))
-    assert result == {'observed_at': 110.0, 'sources': [
-        {'entity_id': 'sensor.power', 'state': '1.5', 'unit': 'kW', 'reported_at': 100, 'valid': True},
-        {'entity_id': 'sensor.sun', 'state': '0.8', 'unit': 'kW/m²', 'reported_at': 110, 'valid': True},
-    ]}
-
-
-@pytest.mark.parametrize('role,value,unit,valid', [
-    ('power', '0', 'W', True), ('power', '1.5', 'kW', True),
-    ('power', '-1', 'W', False), ('power', '3', 'kWh', False),
-    ('power', ' 1', 'W', False), ('power', 'NaN', 'W', False),
-    ('power', '1e999', 'W', False), ('power', '1e308', 'kW', False),
-    ('temperature', '-10', '°C', True), ('temperature', '77', '°F', True),
-    ('temperature', '300', 'K', True), ('temperature', '300', 'C', False),
-    ('irradiance', '800', 'W/m²', True), ('irradiance', '.8', 'kW / m^2', True),
-    ('irradiance', '-1', 'W/m2', False), ('irradiance', '1', None, False),
-    ('irradiance', 'unknown', 'W/m2', False),
-])
-async def test_source_diagnostics_validity_matches_native_source_units(role, value, unit, valid):
-    roles = ('power', 'temperature', 'irradiance')
-    rows = [{'state': 'unavailable', 'unit': None, 'reported_at': None} for _ in roles]
-    rows[roles.index(role)] = {'state': value, 'unit': unit, 'reported_at': 100.0}
-    async with httpx.AsyncClient(transport=httpx.MockTransport(lambda request: httpx.Response(
-        200, json={'observed_at': 110.0, 'sources': rows},
-    ))) as http:
-        diagnostics = await HomeAssistantClient('http://ha.test', 'secret', http=http).source_diagnostics(
-            ('sensor.power', 'sensor.temp', 'sensor.sun'))
-    assert diagnostics['sources'][roles.index(role)]['valid'] is valid
-    assert (parse_state(state(value, unit), role)[0].value is not None) is valid
-
-
-async def test_source_diagnostics_missing_entities_have_no_synthetic_report_time():
-    async with httpx.AsyncClient(transport=httpx.MockTransport(lambda request: httpx.Response(
-        200, json={'observed_at': 123.5, 'sources': [None, None, None]},
-    ))) as http:
-        result = await HomeAssistantClient('http://ha.test', 'secret', http=http).source_diagnostics(
-            ('sensor.power', 'sensor.temp', 'sensor.sun'))
-    assert result == {'observed_at': 123.5, 'sources': [
-        {'entity_id': 'sensor.power', 'state': 'unavailable', 'unit': None, 'reported_at': None, 'valid': False},
-        {'entity_id': 'sensor.temp', 'state': 'unavailable', 'unit': None, 'reported_at': None, 'valid': False},
-        {'entity_id': 'sensor.sun', 'state': 'unavailable', 'unit': None, 'reported_at': None, 'valid': False},
-    ]}
-
-
-@pytest.mark.parametrize('field,value', [
-    ('observed_at', None), ('observed_at', 'invalid'), ('observed_at', '123'), ('observed_at', True),
-    ('observed_at', float('nan')), ('observed_at', float('inf')), ('observed_at', -float('inf')),
-    ('reported_at', 'invalid'), ('reported_at', '123'), ('reported_at', False),
-    ('reported_at', float('nan')), ('reported_at', float('inf')), ('reported_at', -float('inf')),
-    ('state', 123), ('unit', 123),
-])
-async def test_source_diagnostics_rejects_invalid_boundary_values(field, value):
-    row = {'state': '1', 'unit': 'W', 'reported_at': 100.0}
-    payload = {'observed_at': 110.0, 'sources': [row, None, None]}
-    if field == 'observed_at':
-        payload[field] = value
-    else:
-        row[field] = value
-    async with httpx.AsyncClient(transport=httpx.MockTransport(lambda request: httpx.Response(
-        200, content=json.dumps(payload), headers={'Content-Type': 'application/json'},
-    ))) as http:
-        with pytest.raises(ValueError):
-            await HomeAssistantClient('http://ha.test', 'secret', http=http).source_diagnostics(
-                ('sensor.power', 'sensor.temp', 'sensor.sun'))
-
-
-@pytest.mark.parametrize('rows', [[], [None], [None, None, None, None]])
-async def test_source_diagnostics_rejects_incomplete_or_extra_source_rows(rows):
-    async with httpx.AsyncClient(transport=httpx.MockTransport(lambda request: httpx.Response(
-        200, json={'observed_at': 110.0, 'sources': rows},
-    ))) as http:
-        with pytest.raises(ValueError):
-            await HomeAssistantClient('http://ha.test', 'secret', http=http).source_diagnostics(
-                ('sensor.power', 'sensor.temp', 'sensor.sun'))
-
-
-async def test_source_diagnostics_ha_simulator_supports_missing_configured_sources():
-    import fake_ha
-
-    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=fake_ha.app)) as http:
-        client = HomeAssistantClient('http://ha.test', 'simulation-token', http=http)
-        result = await client.source_diagnostics(('sensor.power', 'sensor.temp', 'sensor.missing'))
-        selected = await client.states(('sensor.power', 'sensor.temp'))
-    assert result['observed_at'] > 0
-    assert [source['entity_id'] for source in result['sources']] == ['sensor.power', 'sensor.temp', 'sensor.missing']
-    assert result['sources'][0]['unit'] == 'W'
-    assert result['sources'][0]['valid'] is True
-    assert result['sources'][0]['reported_at'] == pytest.approx(result['observed_at'], rel=0, abs=1e-6)
-    assert result['sources'][1]['state'] == '45'
-    assert result['sources'][1]['unit'] == '°C'
-    assert result['sources'][1]['valid'] is True
-    assert result['sources'][2] == {
-        'entity_id': 'sensor.missing', 'state': 'unavailable', 'unit': None, 'reported_at': None, 'valid': False,
-    }
-    assert [source.entity_id for source in selected] == ['sensor.power', 'sensor.temp']
-    assert selected[1].state == '45'

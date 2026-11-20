@@ -539,7 +539,7 @@ async def test_dashboard_and_efficiency_remove_quality_copy_in_both_languages(la
         await page.locator('#language-select').select_option(language)
         for destination in ['live', 'history']:
             await page.locator(f'#{destination}-tab').click()
-            await expect(page.locator('#live-data-completeness, #history-data-completeness, #source-diagnostics')).to_have_count(0)
+            await expect(page.locator('#live-data-completeness, #history-data-completeness')).to_have_count(0)
             text = await page.locator(f'#{destination}-page').inner_text()
             assert not any(term in text for term in ['Data completeness', 'Data quality', 'Included settled', '完整率', '数据质量', '纳入时段'])
 
@@ -548,7 +548,6 @@ async def test_empty_generation_charts_and_language_changes(layout_page, layout_
     from playwright.async_api import expect
 
     page, _ = layout_page
-    await expect(page.locator('#source-diagnostics')).to_have_count(0)
     for selector in ['#generation-power-chart', '#generation-irradiance-chart', '#generation-temperature-chart']:
         await expect(page.locator(selector + ' .chart-empty')).to_be_visible()
     await page.locator('#language-select').select_option('zh')

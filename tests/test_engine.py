@@ -33,19 +33,13 @@ def test_datasheet_percent_and_roundtrip():
 
 
 def test_optional_temperature_source_preserves_ha_roles():
-    legacy = MonitoringSettings.model_validate_json("""{
-        "total_max_power_at_stc_w": 5000,
-        "pmax_temperature_coefficient_pct_per_c": -0.35,
-        "actual_power_entity": "sensor.power",
-        "module_temperature_entity": "sensor.temp",
-        "irradiance_entity": "sensor.sun"
-    }""")
-    assert legacy.entities == ('sensor.power', 'sensor.temp', 'sensor.sun')
-    assert legacy.module_temperature_noct_c == 45.0
-    assert legacy.ambient_site is None
-    assert MonitoringSettings.model_validate_json(legacy.model_dump_json()) == legacy
+    assert settings().ha_sources == (
+        ('power', 'sensor.power', 900), ('temperature', 'sensor.temp', 900), ('irradiance', 'sensor.sun', 900),
+    )
 
     config = settings(module_temperature_entity=None)
+    assert config.module_temperature_noct_c == 45.0
+    assert config.ambient_site is None
     assert config.ha_sources == (('power', 'sensor.power', 900), ('irradiance', 'sensor.sun', 900))
     assert config.entities == ('sensor.power', 'sensor.sun')
     assert config.max_ages == (900, 900)

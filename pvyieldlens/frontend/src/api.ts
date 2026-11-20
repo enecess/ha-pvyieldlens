@@ -1,4 +1,4 @@
-import type { Configuration, ConfigurationSaveResult, ConfigurationUpdate, ConnectionInput, ConnectionResult, ForecastRefreshResult, ForecastView, GenerationView, HistoryPeriod, HistorySelection, HistoryResponse, HistoryView, LiveSeriesResponse, Snapshot, SourceDiagnostics } from './models';
+import type { Configuration, ConfigurationSaveResult, ConfigurationUpdate, ConnectionInput, ConnectionResult, ForecastRefreshResult, ForecastView, GenerationView, HistorySelection, HistoryView, LiveSeriesResponse, Snapshot } from './models';
 
 export class ApiError extends Error {
   constructor(public code: string, public fields: string[] = []) {
@@ -41,26 +41,18 @@ export const api = {
     return await request('connection', { method: 'POST', body: JSON.stringify(connection) }) as ConnectionResult;
   },
   async getSnapshot(): Promise<Snapshot> { return await request('snapshot') as Snapshot; },
-  async getSourceDiagnostics(signal?: AbortSignal): Promise<SourceDiagnostics> {
-    return await request('source-diagnostics', { signal }) as SourceDiagnostics;
-  },
   async getLiveSeries(): Promise<LiveSeriesResponse> { return await request('live-series') as LiveSeriesResponse; },
   async getForecast(): Promise<ForecastView> { return await request('forecast') as ForecastView; },
   async refreshForecast(): Promise<ForecastRefreshResult> {
     return await request('forecast/refresh', { method: 'POST' }) as ForecastRefreshResult;
   },
-  async getHistory(start: number, end: number): Promise<HistoryResponse> {
-    return await request(`history?${new URLSearchParams({ start: String(start), end: String(end) })}`) as HistoryResponse;
-  },
   async getGenerationData(): Promise<GenerationView> {
     return await request('generation-data') as GenerationView;
   },
-  async getHistoryView(selection: HistorySelection, compare = false): Promise<HistoryView> {
+  async getHistoryView(selection: HistorySelection, { compare = false, includeWindows = true } = {}): Promise<HistoryView> {
     const query = new URLSearchParams(selection);
     if (compare) query.set('compare', 'true');
+    if (!includeWindows) query.set('include_windows', 'false');
     return await request('history?' + query) as HistoryView;
-  },
-  async getHistoryPeriod(period: Exclude<HistoryPeriod, 'custom'>): Promise<HistoryView> {
-    return await request(`history?${new URLSearchParams({ period })}`) as HistoryView;
   },
 };

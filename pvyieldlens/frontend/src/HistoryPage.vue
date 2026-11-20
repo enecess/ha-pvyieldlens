@@ -16,14 +16,26 @@ const props = defineProps<{
 }>();
 const { t } = useI18n();
 const selection = ref<HistorySelection>({ period: 'today' });
+const selectionKey = computed(() => JSON.stringify(selection.value));
 const aggregation = ref<'day' | 'settlement'>('settlement');
-const view = shallowRef<HistoryView | null>(null);
+const accepted = shallowRef<{ selectionKey: string; requestKey: string; result: HistoryView } | null>(null);
+const view = computed(() => {
+  if (accepted.value?.selectionKey !== selectionKey.value) return null;
+  const { result } = accepted.value;
+  if (selection.value.period === '24h') return result;
+  const timezone = props.snapshot?.home_timezone ?? props.configuration?.monitoring_settings?.home_timezone;
+  return result.today === props.snapshot?.energy_totals.day && result.home_timezone === timezone ? result : null;
+});
 const summary = computed(() => view.value?.summary);
-const points = computed(() => view.value?.windows.filter(window => window.start >= view.value!.requested_range.start && window.end <= view.value!.requested_range.end)
-  .map((window, index, windows) => ({ ...window, at: window.end, window, breakBefore: index > 0 && window.start > windows[index - 1].end })) ?? []);
+const points = computed(() => {
+  if (!view.value) return [];
+  const { windows, requested_range: { start, end } } = view.value;
+  return windows.filter(window => window.start >= start && window.end <= end)
+    .map((window, index, windows) => ({ ...window, at: window.end, window, breakBefore: index > 0 && window.start > windows[index - 1].end }));
+});
 const calendar = computed(() => selection.value.period === '7d' || selection.value.period === '30d');
 const daily = computed(() => calendar.value && aggregation.value === 'day');
-const error = ref<string | null>(null);
+const error = shallowRef<{ key: string; code: string } | null>(null);
 const visible = ref(!document.hidden);
 const updateVisibility = () => { visible.value = !document.hidden; };
 document.addEventListener('visibilitychange', updateVisibility);
@@ -36,7 +48,6 @@ const powerSeries: ChartSeries[] = [
   { key: 'actual_power_w', label: 'actual_power', color: 'var(--pv-actual)' },
 ];
 const prSeries: ChartSeries[] = [{ key: 'pr', label: 'pr', color: 'var(--pv-actual)' }];
-let lastKey: string | null = null;
 let pendingRequest: { key: string } | null = null;
 const number = (value: number | null | undefined, digits = 1) => value == null ? '—' :
   new Intl.NumberFormat(props.language, { maximumFractionDigits: digits }).format(value);
@@ -66,25 +77,27 @@ function selectRange(value: HistorySelection) {
 }
 const context = computed(() => props.snapshot && props.configuration?.monitoring_settings ? JSON.stringify([
   props.snapshot.revision, props.snapshot.latest_settled_window?.revision, props.snapshot.latest_settled_window?.end,
-  props.snapshot.energy_totals.day, props.snapshot.home_timezone, props.configuration.monitoring_settings, selection.value,
+  props.snapshot.energy_totals.day, props.snapshot.home_timezone, props.configuration.monitoring_settings, selectionKey.value,
 ]) : null);
-watch([() => props.active, visible, context, () => props.snapshot], async ([active, isVisible, key], previous) => {
+watch([() => props.active, visible, context, selectionKey, () => props.snapshot], async ([active, isVisible, key, selected], previous) => {
+  if (selected !== previous?.[3]) error.value = null;
   if (!active || !isVisible || !key) { pendingRequest = null; return; }
-  const rollingWindowExpired = selection.value.period === '24h' && points.value.some(point =>
-    point.start < Date.now() / 1000 - 86400);
   if (pendingRequest?.key === key) return;
   pendingRequest = null;
-  if (key === lastKey && (error.value ? previous?.[0] && previous?.[1] : !rollingWindowExpired)) return;
+  if (key === error.value?.key && previous?.[0] && previous?.[1]) return;
+  const rollingWindowExpired = selection.value.period === '24h' && points.value.some(point =>
+    point.start < Date.now() / 1000 - 86400);
+  if (key === accepted.value?.requestKey && !rollingWindowExpired) { error.value = null; return; }
   const request = { key };
   pendingRequest = request;
   try {
-    const result = await api.getHistoryView(selection.value, true);
+    const result = await api.getHistoryView(selection.value, { compare: true });
     if (pendingRequest !== request) return;
-    view.value = result; error.value = null; lastKey = key;
+    accepted.value = { selectionKey: selected, requestKey: key, result };
+    error.value = null;
   } catch (failure) {
     if (pendingRequest === request) {
-      error.value = failure instanceof ApiError ? failure.code : 'error';
-      lastKey = key;
+      error.value = { key, code: failure instanceof ApiError ? failure.code : 'error' };
     }
   } finally {
     if (pendingRequest === request) pendingRequest = null;
@@ -97,12 +110,12 @@ watch([() => props.active, visible, context, () => props.snapshot], async ([acti
     <div class="section-heading"><div><p class="eyebrow">{{ t('pv_modules') }} / {{ t('history') }}</p><h1 id="history-heading">{{ t('history') }}</h1></div>
       <HistoryRangeControl id="history-range" :model-value="selection" @update:model-value="selectRange" :presets="['today', '24h', '7d', '30d']" :today="snapshot?.energy_totals.day ?? ''" /></div>
     <p v-if="selection.period !== '24h' && homeTimezone !== displayTimezone" id="history-home-timezone" class="muted">{{ t('history_home_time', { timezone: homeTimezone }) }}</p>
-    <p v-if="error" class="banner" role="status">{{ t(error) }}</p>
+    <p v-if="error" class="banner" role="status">{{ t(error.code) }}</p>
     <div class="metrics history-metrics">
-      <MetricCard :label="t('range_pr')" :value="number(summary?.pr)" unit="%" :context="t('range_pr_formula')" primary><span id="history-pr">{{ number(summary?.pr) }}</span></MetricCard>
-      <MetricCard :label="t('pr_change')" :value="number(prChange)" :unit="t('percentage_points')" :context="t(selection.period === 'today' ? 'compare_yesterday' : selection.period === '24h' ? 'compare_24h' : 'compare_days', { days: selection.period === '30d' ? 30 : 7 })">
+      <MetricCard :label="t('range_pr')" unit="%" :context="t('range_pr_formula')" primary><span id="history-pr">{{ number(summary?.pr) }}</span></MetricCard>
+      <MetricCard :label="t('pr_change')" :unit="t('percentage_points')" :context="t(selection.period === 'today' ? 'compare_yesterday' : selection.period === '24h' ? 'compare_24h' : 'compare_days', { days: selection.period === '30d' ? 30 : 7 })">
         <span id="history-pr-change">{{ prChange == null ? '—' : (prChange > 0 ? '+' : '') + number(prChange) }}</span></MetricCard>
-      <MetricCard :label="t('energy_gap')" :value="number(energyGap, 3)" unit="kWh" :context="t('estimated_minus_actual_energy')"><span id="history-energy-gap">{{ number(energyGap, 3) }}</span></MetricCard>
+      <MetricCard :label="t('energy_gap')" unit="kWh" :context="t('estimated_minus_actual_energy')"><span id="history-energy-gap">{{ number(energyGap, 3) }}</span></MetricCard>
     </div>
     <div class="history-toolbar"><p id="history-range-caption" class="muted">{{ boundaries }}</p>
       <div v-if="calendar" id="history-aggregation" class="segmented" role="group" :aria-label="t('aggregation')">

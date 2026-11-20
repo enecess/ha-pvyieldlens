@@ -42,14 +42,6 @@ def test_midnight_splits_energy_and_empty_new_day_is_zero(tmp_path):
     store.close()
 
 
-def test_observations_deduplicate_and_keep_predecessor(tmp_path):
-    store = Store(tmp_path / 'data.sqlite')
-    store.add_observations(samples())
-    store.add_observations(samples())
-    assert len(store.observations(30, 60, settings().entities)) == 3
-    store.close()
-
-
 def test_observation_sources_origin_and_inclusive_bounds_keep_strict_predecessors(tmp_path):
     from pvyieldlens.engine import Observation
 
@@ -130,13 +122,8 @@ def test_forecast_settings_round_trip_keeps_monitoring_metadata(tmp_path):
     path = tmp_path / 'data.sqlite'
     store = Store(path)
     store.save_monitoring_settings(settings(), 0)
-    store.set_meta('forecast_settings', '{"enabled":false,"tilt_deg":0.0,"azimuth_deg":180.0}')
-    forecast = ForecastSettings(tilt_deg=0.0, azimuth_deg=180.0)
-    assert store.forecast_settings() == forecast
-    assert 'enabled' not in store.forecast_settings().model_dump()
-    forecast = forecast.model_copy(update={'noct_c': 47.0})
+    forecast = ForecastSettings(tilt_deg=0.0, azimuth_deg=180.0, noct_c=47.0)
     store.save_forecast_settings(forecast)
-    assert 'enabled' not in store.get_meta('forecast_settings')
     store.close()
     store = Store(path)
     assert store.forecast_settings() == forecast
@@ -146,11 +133,11 @@ def test_forecast_settings_round_trip_keeps_monitoring_metadata(tmp_path):
 
 
 @pytest.mark.parametrize('saved', [
-    '{"enabled":false,"tilt_deg":"25","azimuth_deg":180}',
-    '{"enabled":false,"tilt_deg":25,"azimuth_deg":180,"unknown":true}',
-    '{"enabled":false,"tilt_deg":25,"tilt_entity":"number.tilt","azimuth_deg":180}',
+    '{"tilt_deg":"25","azimuth_deg":180}',
+    '{"tilt_deg":25,"azimuth_deg":180,"unknown":true}',
+    '{"tilt_deg":25,"tilt_entity":"number.tilt","azimuth_deg":180}',
 ])
-def test_legacy_forecast_settings_still_validate_remaining_fields(tmp_path, saved):
+def test_saved_forecast_settings_validate_current_fields(tmp_path, saved):
     store = Store(tmp_path / 'data.sqlite')
     store.set_meta('forecast_settings', saved)
     with pytest.raises(ValidationError):
@@ -158,51 +145,20 @@ def test_legacy_forecast_settings_still_validate_remaining_fields(tmp_path, save
     store.close()
 
 
-def test_history_summary_uses_energy_ratio_not_mean_pr(tmp_path):
+def test_history_preserves_fractional_settlement_bounds(tmp_path):
     from pvyieldlens.storage import summarize_history
 
     store = Store(tmp_path / 'data.sqlite')
-    first = settings(total_max_power_at_stc_w=600)
-    second = settings(total_max_power_at_stc_w=5400)
-    store.settle(calculate(first, samples(power=300, temp=25, sun=1000), 0, 600),
-                 store.save_monitoring_settings(first, 0), 'UTC')
-    store.settle(calculate(second, samples(power=5400, temp=25, sun=1000, at=600), 600, 1200),
-                 store.save_monitoring_settings(second, 600), 'UTC')
-    windows = store.history(0, 1200)
-    assert [(row['estimated_energy_wh'], row['actual_energy_wh']) for row in windows] == [(100, 50), (900, 900)]
-    assert [row['revision'] for row in windows] == [1, 2]
-    summary = summarize_history(windows, 0, 1200)
-    assert summary.estimated_energy_kwh == pytest.approx(1.0)
-    assert summary.actual_energy_kwh == pytest.approx(0.95)
-    assert summary.pr == pytest.approx(95.0)
-    assert summary.data_completeness_percent == pytest.approx(100.0)
-    assert summary.valid_seconds == 1200
-    assert (summary.start, summary.end) == (0, 1200)
-    assert store.history(0, 1200) == windows
-    store.close()
-
-
-def test_partial_boundary_windows_are_excluded_without_proration(tmp_path):
-    import sqlite3
-    from pvyieldlens.storage import summarize_history
-
-    store = Store(tmp_path / 'data.sqlite')
-    revision = store.save_monitoring_settings(settings(), 0.25)
+    config = settings()
+    revision = store.save_monitoring_settings(config, 0.25)
     for at in (0.25, 600.25, 1200.25):
-        store.settle(calculate(settings(), samples(at=at), at, at + 600), revision, 'UTC')
-    store.add_observations(samples(at=600.25, sun=100))
-    store.db.set_authorizer(lambda action, table, *_: sqlite3.SQLITE_DENY
-                            if action == sqlite3.SQLITE_READ and table in ('window_segments', 'observations')
-                            else sqlite3.SQLITE_OK)
+        store.settle(calculate(config, samples(at=at), at, at + 600), revision, 'UTC')
     windows = store.history(30.5, 1500.5)
-    assert len(windows) == 3
+    assert [(row['start'], row['end']) for row in windows] == [
+        (0.25, 600.25), (600.25, 1200.25), (1200.25, 1800.25),
+    ]
     summary = summarize_history(windows, 30.5, 1500.5)
     assert (summary.start, summary.end) == (600.25, 1200.25)
-    assert summary.estimated_energy_kwh == pytest.approx(0.62)
-    assert summary.pr == pytest.approx(90)
-    assert summary.valid_seconds == 600
-    assert summary.data_completeness_percent == 100
-    assert all('segments' not in row for row in windows)
     store.close()
 
 

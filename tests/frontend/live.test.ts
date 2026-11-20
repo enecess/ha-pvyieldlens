@@ -2,7 +2,6 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { createApp, h, nextTick, reactive } from 'vue';
 import { setImmediate } from 'node:timers';
 import LivePage from '../../pvyieldlens/frontend/src/LivePage.vue';
-import { api } from '../../pvyieldlens/frontend/src/api';
 import { useI18n } from '../../pvyieldlens/frontend/src/i18n';
 import type { Configuration, Snapshot } from '../../pvyieldlens/frontend/src/models';
 
@@ -38,16 +37,11 @@ beforeEach(() => {
 });
 afterEach(() => { cleanup.splice(0).forEach(dispose => dispose()); vi.restoreAllMocks(); vi.unstubAllGlobals(); });
 
-it('renders the approved dashboard charts without diagnostics or quality displays', async () => {
-  const diagnostics = vi.spyOn(api, 'getSourceDiagnostics');
-  const historyRead = vi.spyOn(api, 'getHistoryView');
+it('renders the dashboard charts without quality displays', async () => {
   const { host } = mount(); await flush();
-  expect(host.querySelector('#source-diagnostics')).toBeNull();
-  expect(diagnostics).not.toHaveBeenCalled();
-  expect(historyRead).toHaveBeenCalledWith({ period: '7d' }, false);
   ['generation-power-chart', 'generation-irradiance-chart', 'generation-temperature-chart', 'dashboard-energy-chart'].forEach(id =>
     expect(host.querySelectorAll('#' + id)).toHaveLength(1));
-  expect(fetch).toHaveBeenCalledWith('api/history?period=7d', expect.anything());
+  expect(fetch).toHaveBeenCalledWith('api/history?period=7d&include_windows=false', expect.anything());
   expect(host.querySelector('#live-actual')?.textContent).toBe('2,100');
   expect(host.querySelector('#live-pr')?.textContent).toBe('105');
   expect(host.querySelector('#generation-data')?.textContent).not.toMatch(/Today|Settled power|quality|completeness/i);
@@ -96,11 +90,75 @@ it('applies valid inclusive custom dates, rejects invalid drafts and cancels wit
   await click('#dashboard-energy-range [data-value=custom]');
   await setDate('start', '2026-11-01'); await setDate('end', '2026-11-17');
   await click('#dashboard-energy-range-apply');
-  expect(fetch).toHaveBeenLastCalledWith('api/history?period=custom&start_date=2026-11-01&end_date=2026-11-17', expect.anything());
+  expect(fetch).toHaveBeenLastCalledWith('api/history?period=custom&start_date=2026-11-01&end_date=2026-11-17&include_windows=false', expect.anything());
   expect(host.querySelector('#dashboard-energy-range [data-value=custom]')?.textContent).toContain('2026-11-01');
   await click('#dashboard-energy-range [data-value=custom]');
   await setDate('end', '2026-11-18');
   expect(host.querySelector<HTMLButtonElement>('#dashboard-energy-range-apply')!.disabled).toBe(true);
+});
+
+it.each([
+  ['start', '2026-11-03', '2026-11-17'],
+  ['end', '2026-11-15', '2026-11-16'],
+])('hides accepted Dashboard history when a custom %s date changes', async (suffix, value, endDate) => {
+  const saved = history('custom');
+  const day = { day: endDate, start: 100, end: 400, summary: saved.summary,
+    in_progress: endDate === saved.today, boundary_unavailable: false };
+  const loaded = { ...saved, days: [day] };
+  const pending = deferred();
+  const originalQuery = 'period=custom&start_date=2026-11-01&end_date=' + endDate;
+  let originalReply = () => Promise.resolve(new Response(JSON.stringify(loaded)));
+  vi.mocked(fetch).mockImplementation(async url => {
+    const query = String(url);
+    if (query.includes('generation-data')) return new Response(JSON.stringify(generation()));
+    if (query.includes(originalQuery)) return originalReply();
+    if (query.includes('period=custom')) return pending.promise;
+    return new Response(JSON.stringify(history()));
+  });
+  const { props, host } = mount(); await flush();
+  const click = async (selector: string) => { host.querySelector<HTMLElement>(selector)!.click(); await flush(); };
+  const setDate = async (field: string, date: string) => {
+    const input = host.querySelector<HTMLInputElement>('#dashboard-energy-range-' + field)!;
+    input.value = date; input.dispatchEvent(new Event('input')); await flush();
+  };
+  const open = () => click('#dashboard-energy-range [data-value=custom]');
+  const apply = () => click('#dashboard-energy-range-apply');
+  const summary = () => host.querySelector('.dashboard-history .energy-summary')?.textContent;
+  const error = () => host.querySelector('.dashboard-history > [role=status]');
+  await open(); await setDate('start', '2026-11-01'); await setDate('end', endDate); await apply();
+  expect(summary()).toContain('12 kWh');
+  expect(host.querySelectorAll('#dashboard-energy-chart .daily-column')).toHaveLength(1);
+  expect(host.querySelectorAll('#dashboard-energy-chart .daily-cutoff')).toHaveLength(day.in_progress ? 1 : 0);
+  await open(); await setDate(suffix, value); await apply();
+  expect(host.querySelector('#dashboard-energy-range [data-value=custom]')?.textContent).toContain(value);
+  expect(summary()).toContain('— kWh');
+  expect(host.querySelectorAll('#dashboard-energy-chart .daily-column')).toHaveLength(0);
+  pending.resolve(new Response('{}', { status: 500 })); await flush();
+  expect(error()?.textContent).toBe('Something went wrong. Please retry.');
+  expect(summary()).toContain('— kWh');
+  await open(); await setDate(suffix, suffix === 'start' ? '2026-11-01' : endDate); await apply();
+  expect(summary()).toContain('12 kWh');
+  expect(host.querySelectorAll('#dashboard-energy-chart .daily-column')).toHaveLength(1);
+  expect(error()).toBeNull();
+  expect(vi.mocked(fetch).mock.calls.filter(([url]) => String(url).includes(originalQuery))).toHaveLength(1);
+
+  const rollover = deferred();
+  originalReply = () => rollover.promise;
+  props.snapshot = { ...props.snapshot, energy_totals: { ...props.snapshot.energy_totals, day: '2026-11-18' } };
+  await flush();
+  expect(summary()).toContain('12 kWh');
+  expect(host.querySelectorAll('#dashboard-energy-chart .daily-column')).toHaveLength(1);
+  const past = { ...loaded, today: '2026-11-18', days: [{ ...day, in_progress: false }] };
+  rollover.resolve(new Response(JSON.stringify(past))); await flush();
+  expect(host.querySelector('#dashboard-energy-chart .daily-cutoff')).toBeNull();
+
+  const timezoneChange = deferred();
+  originalReply = () => timezoneChange.promise;
+  props.snapshot = { ...props.snapshot, home_timezone: 'Asia/Shanghai' }; await flush();
+  expect(summary()).toContain('— kWh');
+  expect(host.querySelectorAll('#dashboard-energy-chart .daily-column')).toHaveLength(0);
+  timezoneChange.resolve(new Response(JSON.stringify({ ...past, home_timezone: 'Asia/Shanghai' })));
+  await flush(); expect(summary()).toContain('12 kWh');
 });
 
 it('fetches only for visible active dataset contexts and ignores live-only updates', async () => {
@@ -126,13 +184,43 @@ it('ignores_old_generation_response_after_context_changes', async () => {
   await flush(); expect(host.querySelector('#generation-irradiance-chart .chart-tooltip')?.textContent).toContain('900 W/m²');
 });
 
-it('refreshes both household datasets at midnight with a fixed offline measurement timestamp', async () => {
-  const { props } = mount(); await flush();
+it.each(['7d', '30d'])('replaces Dashboard %s history at midnight with a fixed offline measurement timestamp', async period => {
+  const previous = history(period);
+  const day = { day: previous.today, start: 100, end: 400, summary: previous.summary,
+    in_progress: true, boundary_unavailable: false };
+  let dailyReply = () => Promise.resolve(new Response(JSON.stringify({ ...previous, days: [day] })));
+  vi.mocked(fetch).mockImplementation(async url =>
+    String(url).includes('generation-data') ? new Response(JSON.stringify(generation())) : dailyReply());
+  const { props, host } = mount(); await flush();
+  if (period === '30d') {
+    host.querySelector<HTMLElement>('#dashboard-energy-range [data-value="30d"]')!.click();
+    await flush();
+  }
+  const summary = () => host.querySelector('.dashboard-history .energy-summary')?.textContent;
+  expect(summary()).toContain('12 kWh');
+  expect(host.querySelectorAll('#dashboard-energy-chart .daily-column')).toHaveLength(1);
+  const requests = vi.mocked(fetch).mock.calls.length;
+  const midnight = deferred();
+  dailyReply = () => midnight.promise;
   const calculated = props.snapshot.calculated_at;
   props.snapshot = { ...props.snapshot, connected: false, energy_totals: { ...props.snapshot.energy_totals, day: '2026-11-18' } };
   await flush();
+  expect(fetch).toHaveBeenCalledTimes(requests + 2);
+  expect(summary()).toContain('— kWh');
+  expect(host.querySelectorAll('#dashboard-energy-chart .daily-column')).toHaveLength(0);
+  midnight.resolve(new Response('{}', { status: 500 })); await flush();
+  expect(host.querySelector('.dashboard-history > [role=status]')?.textContent).toBe('Something went wrong. Please retry.');
+  expect(summary()).toContain('— kWh');
+
+  const currentSummary = { ...previous.summary, actual_energy_kwh: 8 };
+  dailyReply = () => Promise.resolve(new Response(JSON.stringify({ ...previous, today: '2026-11-18',
+    summary: currentSummary, days: [{ ...day, day: '2026-11-18', summary: currentSummary }] })));
+  props.snapshot = { ...props.snapshot, revision: 2 }; await flush();
   expect(props.snapshot.calculated_at).toBe(calculated);
-  expect(fetch).toHaveBeenCalledTimes(4);
+  expect(summary()).toContain('8 kWh');
+  expect(host.querySelectorAll('#dashboard-energy-chart .daily-column')).toHaveLength(1);
+  expect(host.querySelector('.dashboard-history > [role=status]')).toBeNull();
+  expect(fetch).toHaveBeenCalledTimes(requests + 4);
   props.snapshot = { ...props.snapshot }; await flush();
-  expect(fetch).toHaveBeenCalledTimes(4);
+  expect(fetch).toHaveBeenCalledTimes(requests + 4);
 });

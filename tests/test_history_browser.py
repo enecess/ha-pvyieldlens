@@ -31,7 +31,8 @@ async def test_daily_slots_zero_gaps_cutoff_and_viewport(browser_workspace, widt
 
     async def history(route):
         selected = parse_qs(urlsplit(route.request.url).query)['period'][0]
-        payload = history_payload([window], summary, {'start': end-180, 'end': end}, selected)
+        payload = history_payload([window], summary, {'start': end-180, 'end': end}, selected,
+                                  evaluated_at=datetime.now(timezone.utc).timestamp())
         if payload['days']:
             payload['days'][1]['summary'] = {**summary, 'estimated_energy_kwh': 0, 'actual_energy_kwh': 0, 'pr': None}
             payload['days'][2]['boundary_unavailable'] = True
@@ -262,7 +263,7 @@ async def test_daily_touch_columns_preserve_vertical_scroll(browser_workspace):
     page, _, _ = browser_workspace
     payload = history_payload([], {'start': None, 'end': None, 'estimated_energy_kwh': None,
         'actual_energy_kwh': None, 'pr': None, 'data_completeness_percent': None, 'valid_seconds': 0},
-        {'start': 1793740800, 'end': 1794326580}, '7d')
+        {'start': 1793740800, 'end': 1794326580}, '7d', evaluated_at=datetime.now(timezone.utc).timestamp())
     context = await page.context.browser.new_context(has_touch=True, is_mobile=True,
         viewport={'width': 390, 'height': 600}, http_credentials={'username': 'admin', 'password': 'browser-test'})
     touch = await context.new_page()
@@ -299,6 +300,9 @@ async def test_dashboard_midnight_uses_household_day_with_fixed_offline_measurem
     import pvyieldlens.service as service_module
 
     page, service, _ = browser_workspace
+    dashboard_url = page.url
+    # Retire the fixture's dashboard requests before watching the fresh navigation.
+    await page.goto('about:blank')
     await service.configure(service.monitoring_settings.model_copy(update={'home_timezone': 'Asia/Shanghai'}))
     now = datetime(2026, 11, 10, 15, 59, 59, tzinfo=timezone.utc).timestamp()
     clock = SimpleNamespace(time=lambda: now)
@@ -306,18 +310,19 @@ async def test_dashboard_midnight_uses_household_day_with_fixed_offline_measurem
     monkeypatch.setattr(service_module, 'time', clock)
     service._mark_offline()
     calculated = service.snapshot(now=now)['calculated_at']
-    async with page.expect_response('**/api/generation-data') as first_generation, page.expect_response('**/api/history?period=7d') as first_history:
-        await page.reload()
+    daily_history_url = '**/api/history?period=7d&include_windows=false'
+    async with page.expect_response('**/api/generation-data') as first_generation, page.expect_response(daily_history_url) as first_history:
+        await page.goto(dashboard_url)
     before_generation = await (await first_generation.value).json()
     before_history = await (await first_history.value).json()
-    clock.time = lambda: now + 2
-    async with page.expect_response('**/api/generation-data') as next_generation, page.expect_response('**/api/history?period=7d') as next_history:
-        pass
+    async with page.expect_response('**/api/generation-data') as next_generation, page.expect_response(daily_history_url) as next_history:
+        clock.time = lambda: now + 2
     after_generation = await (await next_generation.value).json()
     after_history = await (await next_history.value).json()
     assert service.snapshot(now=now+2)['calculated_at'] == calculated
     assert before_history['today'] == '2026-11-10'
     assert after_history['today'] == '2026-11-11'
+    assert before_history['windows'] == after_history['windows'] == []
     assert after_history['days'][-1]['day'] == '2026-11-11'
     assert after_history['days'][-1]['summary']['estimated_energy_kwh'] is None
     assert after_generation['requested_range']['start'] == now + 1

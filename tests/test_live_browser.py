@@ -25,8 +25,7 @@ async def live_page(browser_workspace, monkeypatch):
     await service.tick(now)
     service.connected = True
     service._recovery_needed = False
-    state = {'now': now, 'seeds': 0, 'snapshots': 0, 'fail_seed': False,
-             'diagnostics': 0, 'reported_at': now - 10}
+    state = {'now': now, 'seeds': 0, 'fail_seed': False}
     monkeypatch.setattr(web_module, 'time', SimpleNamespace(time=lambda: state['now']))
 
     async def seed(route):
@@ -37,26 +36,10 @@ async def live_page(browser_workspace, monkeypatch):
             await route.fulfill(json=service.live_series(now=state['now']))
 
     async def snapshot(route):
-        state['snapshots'] += 1
-        payload = service.snapshot(now=state['now'])
-        payload['sources'] = [{'entity_id': 'sensor.power', 'state': '3348', 'unit': 'W',
-                               'reported_at': now, 'valid': True}]
-        await route.fulfill(json=payload)
-
-    async def diagnostics(route):
-        state['diagnostics'] += 1
-        await route.fulfill(json={'observed_at': state['now'], 'sources': [
-            {'entity_id': 'sensor.power', 'state': '3.348', 'unit': 'kW',
-             'reported_at': state['reported_at'], 'valid': True},
-            {'entity_id': 'sensor.temp', 'state': '40', 'unit': '°C',
-             'reported_at': state['reported_at'], 'valid': True},
-            {'entity_id': 'sensor.sun', 'state': 'unavailable', 'unit': None,
-             'reported_at': None, 'valid': False},
-        ]})
+        await route.fulfill(json=service.snapshot(now=state['now']))
 
     await page.route('**/api/live-series', seed)
     await page.route('**/api/snapshot', snapshot)
-    await page.route('**/api/source-diagnostics', diagnostics)
     await page.clock.install(time=datetime.fromtimestamp(now, timezone.utc))
     await page.reload()
     await expect(page.locator('#live-actual')).to_have_text('3,348')
@@ -101,7 +84,6 @@ async def test_unavailable_interval_remains_a_break_and_inspects_raw_values(live
     for _ in range(6):
         await page.keyboard.press('ArrowRight')
     await expect(page.locator('#live-chart .chart-tooltip')).to_contain_text('— W')
-    await expect(page.locator('#live-chart .chart-tooltip')).to_contain_text('— W')
     await page.screenshot(path='artifacts/task-4-live/tooltip-gap.png')
 
 
@@ -122,27 +104,8 @@ async def test_uncovered_live_range_inspects_unavailable_instead_of_distant_samp
     for fraction in [0.1, 0.9]:
         await page.mouse.move(box['x'] + fraction * box['width'], box['y'] + 3)
         await expect(chart.locator('.chart-tooltip')).to_contain_text('— W')
-        await expect(chart.locator('.chart-tooltip')).to_contain_text('— W')
         assert await chart.locator('.active-series-marker[visibility=visible]').count() == 0
 
-
-async def test_dashboard_does_not_request_source_diagnostics(live_page):
-    from playwright.async_api import expect
-
-    page, _, state = live_page
-    await expect(page.locator('#source-diagnostics')).to_have_count(0)
-    await page.clock.fast_forward(3000)
-    assert state['diagnostics'] == 0
-    await expect(page.locator('#generation-power-chart')).to_have_count(1)
-    await expect(page.locator('#generation-irradiance-chart')).to_have_count(1)
-    await expect(page.locator('#generation-temperature-chart')).to_have_count(1)
-    await page.locator('#settings-button').click()
-    await page.locator('[data-settings-category=modules]').click()
-    await page.locator('[name=total_max_power_at_stc_w]').fill('6100')
-    async with page.expect_response(lambda response: response.url.endswith('/api/snapshot')):
-        await page.clock.fast_forward(60000)
-    assert state['diagnostics'] == 0
-    await expect(page.locator('[name=total_max_power_at_stc_w]')).to_have_value('6100')
 
 async def test_seed_failure_is_chart_local_and_keeps_live_metrics(live_page):
     from playwright.async_api import expect
@@ -176,7 +139,6 @@ async def test_resume_gap_survives_duplicate_snapshots_until_seed_fills_it(live_
     box = await chart.locator('.chart-hit-area').bounding_box()
     await page.mouse.move(box['x'] + 0.7 * box['width'], box['y'] + 3)
     await expect(chart.locator('.chart-tooltip')).to_contain_text('— W')
-    await expect(chart.locator('.chart-tooltip')).to_contain_text('— W')
     async with page.expect_response(lambda response: response.url.endswith('/api/snapshot')):
         await page.clock.fast_forward(60000)
     await expect(page.locator('#live-chart path.series').first).to_have_attribute('d', re.compile(r'^M[^M]+M[^M]+$'))
@@ -188,7 +150,7 @@ async def test_resume_gap_survives_duplicate_snapshots_until_seed_fills_it(live_
 async def test_dashboard_generation_ranges_legends_and_visuals(live_page, width, theme):
     from playwright.async_api import expect
 
-    page, _, state = live_page
+    page, _, _ = live_page
     await page.set_viewport_size({'width': width, 'height': 1000 if width == 1440 else 844})
     await page.locator('#language-select').select_option('zh')
     await page.locator('#theme-select').select_option(theme)
@@ -198,7 +160,6 @@ async def test_dashboard_generation_ranges_legends_and_visuals(live_page, width,
     await expect(page.locator('#generation-data')).not_to_contain_text('已结算功率')
     await expect(page.locator('#generation-data')).not_to_contain_text('今天')
     await expect(page.locator('#dashboard-energy-range [data-value="7d"]')).to_have_attribute('aria-pressed', 'true')
-    assert state['diagnostics'] == 0
     artifacts = Path('artifacts/task-5-dashboard')
     artifacts.mkdir(parents=True, exist_ok=True)
     await page.screenshot(path=str(artifacts / f'dashboard-{width}-{theme}-top.png'))
@@ -217,9 +178,10 @@ async def test_dashboard_generation_ranges_legends_and_visuals(live_page, width,
     await page.screenshot(path=str(artifacts / f'dashboard-{width}-{theme}-custom.png'))
     panel = await page.locator('#dashboard-energy-range-panel').bounding_box()
     assert panel['x'] >= 0 and panel['x'] + panel['width'] <= width
-    async with page.expect_response(lambda response: '/api/history?period=custom&' in response.url) as pending:
+    async with page.expect_response('**/api/history?period=custom&*&include_windows=false') as pending:
         await page.locator('#dashboard-energy-range-apply').click()
     payload = await (await pending.value).json()
+    assert payload['windows'] == []
     assert len(payload['days']) == 1
     assert payload['days'][0]['day'] == today
     await expect(page.locator('#dashboard-energy-range [data-value=custom]')).to_contain_text(today)

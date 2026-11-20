@@ -50,7 +50,8 @@ async def test_singleton_glyph_pixel_picking(browser_workspace, scenario, chart_
                         'actual_energy_kwh': record['actual_energy_wh'] / 1000,
                         'estimated_energy_kwh': record['estimated_energy_wh'] / 1000,
                         'pr': record['pr'], 'data_completeness_percent': 100, 'valid_seconds': 60},
-            {'start': records[0]['start'], 'end': records[-1]['end']}, parse_qs(urlsplit(route.request.url).query).get('period', ['today'])[0]))
+            {'start': records[0]['start'], 'end': records[-1]['end']}, parse_qs(urlsplit(route.request.url).query).get('period', ['today'])[0],
+            evaluated_at=now))
 
     async def live(route):
         await route.fulfill(json={
@@ -193,7 +194,8 @@ async def chart_page(browser_workspace):
         await route.fulfill(json=history_payload(windows,
             {'start': 0, 'end': ends[-1], 'estimated_energy_kwh': 0.005, 'actual_energy_kwh': 0.005,
              'pr': 125, 'data_completeness_percent': 100, 'valid_seconds': 900},
-            {'start': 0, 'end': ends[-1]}, parse_qs(urlsplit(route.request.url).query).get('period', ['today'])[0]))
+            {'start': 0, 'end': ends[-1]}, parse_qs(urlsplit(route.request.url).query).get('period', ['today'])[0],
+            evaluated_at=time.time()))
 
     await page.route('**/api/history?*', history)
     # Keep the fixture's early-epoch windows inside the rolling query range.

@@ -16,7 +16,7 @@ from fastapi import FastAPI, Query, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel, ConfigDict, SecretStr, ValidationError, field_validator
+from pydantic import BaseModel, ConfigDict, SecretStr, field_validator
 from starlette.middleware.gzip import GZipMiddleware
 
 from .generation import generation_view
@@ -76,10 +76,7 @@ def create_app(service: Service, runtime: Runtime, run_background=True) -> FastA
             return Connection(url='http://supervisor/core', token=runtime.supervisor_token)
         stored = service.store.get_meta('connection')
         if stored:
-            try:
-                return Connection.model_validate_json(stored)
-            except ValidationError:
-                return None
+            return Connection.model_validate_json(stored)
         return Connection(url=runtime.ha_url, token=runtime.ha_token) if runtime.ha_url else None
 
     def config_response():
@@ -108,12 +105,12 @@ def create_app(service: Service, runtime: Runtime, run_background=True) -> FastA
 
     @app.middleware('http')
     async def authenticate(request: Request, call_next):
-        if request.url.path == '/health':
-            return await call_next(request)
+        is_health = request.url.path == '/health'
         if runtime.supervisor_token:
-            if not request.client or request.client.host != '172.30.32.2':
+            peer = request.client.host if request.client else None
+            if peer != '172.30.32.2' and (not is_health or peer != '127.0.0.1'):
                 return JSONResponse({'error': 'ingress_only'}, status_code=403)
-        else:
+        elif not is_health:
             header = request.headers.get('authorization', '')
             decoded = ''
             if header.startswith('Basic '):
@@ -128,6 +125,8 @@ def create_app(service: Service, runtime: Runtime, run_background=True) -> FastA
             if request.method not in ('GET', 'HEAD') and origin and urlsplit(origin).netloc != request.headers.get('host'):
                 return JSONResponse({'error': 'origin_mismatch'}, status_code=403)
         response = await call_next(request)
+        if is_health:
+            return response
         response.headers['Cache-Control'] = 'no-store'
         response.headers['X-Content-Type-Options'] = 'nosniff'
         response.headers['Content-Security-Policy'] = "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; object-src 'none'; base-uri 'self'"
@@ -224,22 +223,6 @@ def create_app(service: Service, runtime: Runtime, run_background=True) -> FastA
         async with service.lock:
             return service.snapshot()
 
-    @app.get('/api/source-diagnostics')
-    async def source_diagnostics():
-        async with service.lock:
-            client = service.client
-            monitoring_settings = service.monitoring_settings
-        if monitoring_settings is None:
-            return {'observed_at': None, 'sources': []}
-        if client is None:
-            return JSONResponse({'error': 'ha_connection_failed'}, status_code=502)
-        try:
-            sources = monitoring_settings.ha_sources
-            return await client.source_diagnostics(tuple(entity for _, entity, _ in sources),
-                                                   roles=tuple(role for role, _, _ in sources))
-        except NETWORK_ERRORS:
-            return JSONResponse({'error': 'ha_connection_failed'}, status_code=502)
-
     @app.get('/api/live-series')
     async def live_series():
         async with service.lock:
@@ -260,7 +243,8 @@ def create_app(service: Service, runtime: Runtime, run_background=True) -> FastA
             if forecast.context == 'location_unavailable':
                 return JSONResponse({'error': 'forecast_location_required'}, status_code=422)
             scheduled = forecast.request_refresh()
-            return JSONResponse({'scheduled': scheduled, 'status': forecast.view(time.time()).status}, status_code=202)
+            status = forecast.view(time.time(), include_details=False).status
+            return JSONResponse({'scheduled': scheduled, 'status': status}, status_code=202)
 
     @app.get('/api/generation-data')
     async def generation_data():
@@ -274,9 +258,10 @@ def create_app(service: Service, runtime: Runtime, run_background=True) -> FastA
                       start: float | None = Query(default=None, ge=0, allow_inf_nan=False),
                       end: float | None = Query(default=None, ge=0, allow_inf_nan=False),
                       start_date: date | None = None, end_date: date | None = None,
-                      compare: bool | None = None):
+                      compare: bool | None = None, include_windows: bool | None = None):
         if period is not None:
             if (start is not None or end is not None
+                    or period == '24h' and include_windows is not None
                     or period != 'custom' and (start_date is not None or end_date is not None)
                     or period == 'custom' and (start_date is None or end_date is None or compare)):
                 return JSONResponse({'error': 'invalid_time_range'}, status_code=422)
@@ -290,8 +275,9 @@ def create_app(service: Service, runtime: Runtime, run_background=True) -> FastA
                     if end_date < start_date or (end_date - start_date).days >= 90 or end_date > today:
                         return JSONResponse({'error': 'invalid_time_range'}, status_code=422)
                 return history_view(store, period, now, home_timezone, start_date=start_date,
-                                    end_date=end_date, compare=bool(compare)).model_dump(mode='json')
-        if (start_date is not None or end_date is not None or compare is not None
+                                    end_date=end_date, compare=bool(compare),
+                                    include_windows=include_windows is not False).model_dump(mode='json')
+        if (start_date is not None or end_date is not None or compare is not None or include_windows is not None
                 or start is None or end is None or end <= start or end - start > 90 * 86400):
             return JSONResponse({'error': 'invalid_time_range'}, status_code=422)
         async with service.lock:

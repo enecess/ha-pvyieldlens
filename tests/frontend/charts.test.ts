@@ -2,6 +2,7 @@ import { afterEach, expect, it, vi } from 'vitest';
 import { createApp, h, nextTick, reactive } from 'vue';
 import { plot, type ChartPoint, type ChartOptions, type ChartSeries } from '../../pvyieldlens/frontend/src/charts';
 import PowerChart from '../../pvyieldlens/frontend/src/PowerChart.vue';
+import * as timezones from '../../pvyieldlens/frontend/src/timezones';
 
 const series = [{ key: 'actual_power_w' as const, label: 'Power', color: 'blue' }];
 const options = { language: 'en' as const, timezone: 'UTC', translate: (key: string) => key };
@@ -20,6 +21,17 @@ function inspect(host: HTMLElement, at: number, start: number, end: number) {
     clientX: 48 + (at - start) / (end - start) * 1140, clientY: 20,
   }));
 }
+
+it('formats axis ticks without formatting default point titles for a custom tooltip', () => {
+  const formatTimes = vi.spyOn(timezones, 'formatTimes');
+  const points = [{ at: 13, actual_power_w: 10 }, { at: 27, actual_power_w: 20 }];
+  const { host } = chart(points, { range: { start: 0, end: 100 },
+    tooltip: point => ({ title: 'Custom at ' + point.at, rows: [] }) });
+  inspect(host, 13, 0, 100);
+  expect(host.querySelector('.chart-tooltip strong')?.textContent).toBe('Custom at 13');
+  expect(host.querySelector('.time-tick')?.textContent).toBeTruthy();
+  expect(formatTimes.mock.calls.some(([instants]) => instants.includes(13) || instants.includes(27))).toBe(false);
+});
 
 it('picks the nearest original singleton within six CSS pixels after SVG scaling', () => {
   const points = [{ at: 40, actual_power_w: 0 }, { at: 41, actual_power_w: 17.3, breakBefore: true }];

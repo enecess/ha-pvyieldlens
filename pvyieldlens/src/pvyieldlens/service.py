@@ -36,7 +36,6 @@ class Service:
         self.live_window = None
         self.connected = False
         self.error = None
-        self.sources = []
         self.tasks = []
         self.calculated_at = None
         self.history_available = True
@@ -65,7 +64,6 @@ class Service:
                 self.store.save_monitoring_settings(monitoring_settings, now, origin)
             self.monitoring_settings = monitoring_settings
             self.origin = origin
-            self.sources = []
             self.live_window = None
             self._recovery_needed = True
             if previous_target != self._ambient_target():
@@ -212,29 +210,24 @@ class Service:
 
     def snapshot(self, now: float | None = None):
         now = time.time() if now is None else now
+        forecast = self.forecast.view(now, include_details=False)
         return {'configured': self.monitoring_settings is not None, 'connected': self.connected, 'error': self.error,
                 'history_available': self.history_available, 'calculated_at': self.calculated_at,
                 'revision': self.store.revision, 'latest_settled_window': self.store.latest_settled_window(), 'live_window': self.live_window,
                 'energy_totals': self.store.totals(now, self.monitoring_settings.home_timezone if self.monitoring_settings else 'UTC'),
-                'sources': self.sources, 'home_timezone': self.monitoring_settings.home_timezone if self.monitoring_settings else 'UTC',
+                'home_timezone': self.monitoring_settings.home_timezone if self.monitoring_settings else 'UTC',
                 'location': self.forecast.location.model_dump() if self.forecast.location else None,
-                'forecast': self.forecast.view(now).model_dump(mode='json', exclude={'days', 'intervals'})}
+                'forecast': forecast.model_dump(mode='json', exclude={'days', 'intervals'})}
 
     async def ingest(self, states, historical=False, monitoring_settings: MonitoringSettings | None = None, origin: str | None = None):
         async with self.lock:
             if not self.monitoring_settings:
                 return
             roles = {entity: role for role, entity, _ in (monitoring_settings or self.monitoring_settings).ha_sources}
-            parsed = [(state, parse_state(state, roles[state.entity_id], historical)) for state in states if state.entity_id in roles]
-            items = [item for _, points in parsed for item in points]
-            self.store.add_observations(items, self.origin if origin is None else origin)
-            if not historical:
-                previous = {source['entity_id']: source for source in self.sources}
-                for state, points in parsed:
-                    previous[state.entity_id] = {'entity_id': state.entity_id, 'state': state.state,
-                        'unit': state.attributes.unit_of_measurement, 'reported_at': points[-1].at,
-                        'valid': points[-1].value is not None}
-                self.sources = [previous[entity] for entity in self.monitoring_settings.entities if entity in previous]
+            items = [item for state in states if state.entity_id in roles
+                     for item in parse_state(state, roles[state.entity_id], historical)]
+            if items:
+                self.store.add_observations(items, self.origin if origin is None else origin)
 
     async def recover(self):
         if not self.client or not self.monitoring_settings:

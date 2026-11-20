@@ -95,6 +95,21 @@ async def exercise(client, directory):
     assert parse_state(selected[-1], 'power')[0].value is None
     checks['rest_states_units_404'] = True
 
+    unusual = 'sensor.compat_non_string_attributes'
+    await client.request('POST', 'states/' + unusual, json={'state': '3',
+        'attributes': {'friendly_name': {'name': 'Unusual sensor'}, 'unit_of_measurement': ['W']}})
+    unusual_event = await event(unusual)
+    discovered = {item.entity_id: item for item in await client.states()}
+    unusual_selected, temperature = await client.states((unusual, temp))
+    for item in (unusual_event, discovered[unusual], unusual_selected):
+        assert item.state == '3'
+        assert item.attributes.friendly_name is None and item.attributes.unit_of_measurement is None
+        assert item.last_updated == unusual_event.last_updated
+        assert parse_state(item, 'power')[0].value is None
+    assert discovered[temp].attributes.unit_of_measurement == temperature.attributes.unit_of_measurement == '°F'
+    assert parse_state(temperature, 'temperature')[0].value == 25
+    checks['non_string_attributes_preserve_rest_and_websocket_states'] = True
+
     tilt, azimuth = 'sensor.compat_tracker_tilt', 'input_number.compat_tracker_azimuth'
     await post(tilt, '0', '°')
     await post(azimuth, '90', '°')
@@ -164,6 +179,9 @@ async def exercise(client, directory):
     assert unit_change.last_changed == changed.last_changed
     assert unit_change.attributes.unit_of_measurement == 'W'
     assert parse_state(unit_change, 'power', historical=True)[0].value == 2.5
+    exact = await client.history([power], unit_change.last_updated.timestamp(), end)
+    assert exact[0] == unit_change
+    checks['recorder_real_state_at_exact_lower_bound'] = True
     boundary = attributes.last_updated.timestamp() + .000123
     raw = await client.request('GET', 'history/period/' + datetime.fromtimestamp(boundary, timezone.utc).isoformat(),
         params={'filter_entity_id': power, 'end_time': datetime.fromtimestamp(end, timezone.utc).isoformat(),

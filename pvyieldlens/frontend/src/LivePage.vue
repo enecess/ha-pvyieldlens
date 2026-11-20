@@ -22,8 +22,16 @@ const { t } = useI18n();
 const live = computed(() => props.snapshot?.live_window);
 const settings = computed(() => props.configuration?.monitoring_settings);
 const generation = shallowRef<GenerationView | null>(null);
-const history = shallowRef<HistoryView | null>(null);
 const selection = ref<HistorySelection>({ period: '7d' });
+const selectionKey = computed(() => JSON.stringify(selection.value));
+const acceptedHistory = shallowRef<{ selectionKey: string; requestKey: string; result: HistoryView } | null>(null);
+const history = computed(() => {
+  if (acceptedHistory.value?.selectionKey !== selectionKey.value) return null;
+  const { result } = acceptedHistory.value;
+  const timezone = props.snapshot?.home_timezone ?? settings.value?.home_timezone;
+  return result.home_timezone === timezone && (selection.value.period === 'custom' || result.today === props.snapshot?.energy_totals.day)
+    ? result : null;
+});
 const generationError = ref<string | null>(null);
 const historyError = ref<string | null>(null);
 const visible = ref(!document.hidden);
@@ -34,9 +42,8 @@ const context = computed(() => props.snapshot && settings.value ? JSON.stringify
   props.snapshot.revision, props.snapshot.latest_settled_window?.revision, props.snapshot.latest_settled_window?.end,
   props.snapshot.energy_totals.day, props.snapshot.home_timezone, settings.value,
 ]) : null);
-const historyKey = computed(() => JSON.stringify([context.value, selection.value]));
+const historyKey = computed(() => JSON.stringify([context.value, selectionKey.value]));
 let generationKey: string | null = null;
-let lastHistoryKey: string | null = null;
 let generationRequest: object | null = null;
 let historyRequest: object | null = null;
 watch([() => props.active, visible, context], async ([active, isVisible, key]) => {
@@ -52,15 +59,18 @@ watch([() => props.active, visible, context], async ([active, isVisible, key]) =
     if (generationRequest === request) generationError.value = failure instanceof ApiError ? failure.code : 'error';
   }
 }, { immediate: true });
-watch([() => props.active, visible, historyKey], async ([active, isVisible, key]) => {
+watch([() => props.active, visible, historyKey, selectionKey], async ([active, isVisible, key, selected], previous) => {
+  if (selected !== previous?.[3]) historyError.value = null;
   historyRequest = null;
-  if (!active || !isVisible || !context.value || key === lastHistoryKey) return;
+  if (!active || !isVisible || !context.value) return;
+  if (key === acceptedHistory.value?.requestKey) { historyError.value = null; return; }
   const request = {};
   historyRequest = request;
   try {
-    const result = await api.getHistoryView(selection.value, false);
+    const result = await api.getHistoryView(selection.value, { includeWindows: false });
     if (historyRequest !== request) return;
-    history.value = result; historyError.value = null; lastHistoryKey = key;
+    acceptedHistory.value = { selectionKey: selected, requestKey: key, result };
+    historyError.value = null;
   } catch (failure) {
     if (historyRequest === request) historyError.value = failure instanceof ApiError ? failure.code : 'error';
   }
@@ -114,10 +124,10 @@ const tooltip = (point: ChartPoint): ChartTooltip => ({ title: pointLabels.value
     </div>
     <div class="dashboard-grid">
       <div class="metrics live-metrics">
-        <MetricCard :label="t('actual_power')" :value="number(live?.actual_power_w)" unit="W" :context="t('rolling_average', { seconds: settings?.live_window_seconds ?? 60 })" primary><span id="live-actual">{{ number(live?.actual_power_w) }}</span></MetricCard>
-        <MetricCard :label="t('estimated_power')" :value="number(live?.estimated_power_w)" unit="W" :context="t('rolling_average', { seconds: settings?.live_window_seconds ?? 60 })"><span id="live-estimated">{{ number(live?.estimated_power_w) }}</span></MetricCard>
-        <MetricCard :label="t('pr')" :value="number(live?.pr)" unit="%" :context="t('actual_over_estimated')"><span id="live-pr">{{ number(live?.pr) }}</span></MetricCard>
-        <MetricCard :label="t('optimizable_power')" :value="number(live?.optimizable_power_w)" unit="W" :context="t('estimated_minus_actual')"><span id="live-optimizable-power">{{ number(live?.optimizable_power_w) }}</span></MetricCard>
+        <MetricCard :label="t('actual_power')" unit="W" :context="t('rolling_average', { seconds: settings?.live_window_seconds ?? 60 })" primary><span id="live-actual">{{ number(live?.actual_power_w) }}</span></MetricCard>
+        <MetricCard :label="t('estimated_power')" unit="W" :context="t('rolling_average', { seconds: settings?.live_window_seconds ?? 60 })"><span id="live-estimated">{{ number(live?.estimated_power_w) }}</span></MetricCard>
+        <MetricCard :label="t('pr')" unit="%" :context="t('actual_over_estimated')"><span id="live-pr">{{ number(live?.pr) }}</span></MetricCard>
+        <MetricCard :label="t('optimizable_power')" unit="W" :context="t('estimated_minus_actual')"><span id="live-optimizable-power">{{ number(live?.optimizable_power_w) }}</span></MetricCard>
       </div>
       <article class="panel live-panel">
         <div class="panel-heading"><h2>{{ t('live_data') }}</h2><div class="legend"><span class="estimated-dot">{{ t('estimated_power') }}</span><span class="actual-dot">{{ t('actual_power') }}</span></div></div>

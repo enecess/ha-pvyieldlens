@@ -2,12 +2,12 @@ import asyncio
 import json
 import math
 import re
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Literal
 from urllib.parse import urlsplit, urlunsplit
 
 import httpx
-from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, JsonValue, TypeAdapter, ValidationError
+from pydantic import AwareDatetime, BaseModel, Field, JsonValue, TypeAdapter, ValidationError, field_validator
 from websockets.asyncio.client import connect
 
 from .engine import Observation
@@ -18,6 +18,11 @@ class StateAttributes(BaseModel):
     unit_of_measurement: str | None = None
     friendly_name: str | None = None
 
+    @field_validator('unit_of_measurement', 'friendly_name', mode='plain')
+    @classmethod
+    def optional_string(cls, value: object) -> str | None:
+        return value if isinstance(value, str) else None
+
 
 class HAState(BaseModel):
     entity_id: str
@@ -26,21 +31,6 @@ class HAState(BaseModel):
     last_updated: AwareDatetime
     last_changed: AwareDatetime
     last_reported: AwareDatetime | None = None
-
-
-class SourceReport(BaseModel):
-    model_config = ConfigDict(strict=True, allow_inf_nan=False)
-
-    state: str
-    unit: str | None
-    reported_at: float | None
-
-
-class SourceReports(BaseModel):
-    model_config = ConfigDict(strict=True, allow_inf_nan=False)
-
-    observed_at: float
-    sources: list[SourceReport | None]
 
 
 class HAConfig(BaseModel):
@@ -146,29 +136,15 @@ class HomeAssistantClient:
         return [state or HAState(entity_id=entity, state='unavailable', last_changed=now, last_updated=now)
                 for entity, state in zip(entities, result, strict=True)]
 
-    async def source_diagnostics(self, entities: tuple[str, ...], *,
-                                 roles: tuple[MonitoringRole, ...] = ('power', 'temperature', 'irradiance')):
-        result = SourceReports.model_validate(await self.request('POST', 'template', json={
-            'template': '''{"observed_at": {{ as_timestamp(now()) | to_json }}, "sources": [
-                {% for entity in entities %}{% set s = states[entity] %}
-                {% if s is not none %}{{ dict(state=s.state, unit=s.attributes.get('unit_of_measurement'),
-                    reported_at=as_timestamp(s.last_reported) if s.last_reported is not none else none) | to_json }}
-                {% else %}null{% endif %}{% if not loop.last %},{% endif %}{% endfor %}]}''',
-            'variables': {'entities': entities},
-        }))
-        return {'observed_at': result.observed_at, 'sources': [
-            {'entity_id': entity, **source.model_dump(), 'valid': source_value(source.state, source.unit, role) is not None}
-            if source is not None else
-            {'entity_id': entity, 'state': 'unavailable', 'unit': None, 'reported_at': None, 'valid': False}
-            for entity, source, role in zip(entities, result.sources, roles, strict=True)]}
-
     async def history(self, entities: list[str], start: float, end: float) -> list[HAState]:
-        stamp = datetime.fromtimestamp(start, timezone.utc).isoformat()
+        requested_start = datetime.fromtimestamp(start, timezone.utc)
+        # Recorder uses a strict lower bound, so start one microsecond before the first included timestamp.
+        stamp = (requested_start - timedelta(microseconds=1)).isoformat()
         result = TypeAdapter(list[list[HAState]]).validate_python(await self.request('GET', 'history/period/' + stamp, params={
             'filter_entity_id': ','.join(entities), 'end_time': datetime.fromtimestamp(end, timezone.utc).isoformat(),
             'significant_changes_only': '0', 'skip_initial_state': '1',
         }))
-        return [state for group in result for state in group]
+        return [state for group in result for state in group if state.last_updated >= requested_start]
 
     async def events(self):
         async with connect(self.websocket_url, open_timeout=20, max_size=8_388_608, proxy=None) as socket:

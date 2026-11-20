@@ -9,7 +9,6 @@ from .correction import ForecastCorrection
 from .engine import estimated_power, noct_temperature
 from .settings import AngleEntityId, HALocation
 
-FORECAST_MODEL_VERSION = 2
 ForecastAxis = Literal['tilt', 'azimuth']
 ForecastPrerequisite = Literal['configuration_required', 'location_unavailable']
 
@@ -25,8 +24,6 @@ class ForecastInput(_ForecastModel):
     tilt_deg: float = Field(ge=0, le=90)
     azimuth_deg: float = Field(ge=0, lt=360)
     noct_c: float = Field(gt=20, le=80)
-    # Decode hourly caches so normal input matching can discard them.
-    model_version: Literal[1, 2] = FORECAST_MODEL_VERSION
 
 
 class WeatherSample(_ForecastModel):
@@ -137,7 +134,8 @@ class ForecastView(_ForecastModel):
 
 def forecast_view(batch: ForecastBatch | None, site: HALocation | ForecastPrerequisite, now: float, *,
                   correction: ForecastCorrection | None = None, refreshing: bool = False,
-                  last_error: str | None = None, unavailable_angles: tuple[ForecastAngleIssue, ...] = ()) -> ForecastView:
+                  last_error: str | None = None, unavailable_angles: tuple[ForecastAngleIssue, ...] = (),
+                  include_details: bool = True) -> ForecastView:
     if isinstance(site, str):
         return ForecastView(
             status=site, refreshing=False, fetched_at=None, calculated_at=now, last_error=last_error,
@@ -146,27 +144,19 @@ def forecast_view(batch: ForecastBatch | None, site: HALocation | ForecastPrereq
         )
     ratio = correction.pr / 100 if correction is not None and correction.pr is not None else None
     zone = ZoneInfo(site.home_timezone)
-    today = datetime.fromtimestamp(now, zone).date()
-    boundaries = tuple(datetime.combine(today + timedelta(days=offset), time.min, zone).timestamp()
+    local_today = datetime.fromtimestamp(now, zone).date()
+    boundaries = tuple(datetime.combine(local_today + timedelta(days=offset), time.min, zone).timestamp()
                        for offset in range(8))
     usable = batch
-    intervals = tuple(row.model_copy(update={
-        'start': max(row.start, boundaries[0]), 'end': min(row.end, boundaries[-1]),
-        'forecast_energy_kwh': row.forecast_power_w * (min(row.end, boundaries[-1]) - max(row.start, boundaries[0])) / 3_600_000
-        if row.forecast_power_w is not None else None,
-    }) for row in usable.intervals if row.end > boundaries[0] and row.start < boundaries[-1]) if usable else ()
-    if last_error == 'forecast_angle_unavailable' and not any(row.forecast_power_w is not None for row in intervals):
+    rows = tuple(row for row in usable.intervals if row.end > boundaries[0] and row.start < boundaries[-1]) if usable else ()
+    if last_error == 'forecast_angle_unavailable' and not any(row.forecast_power_w is not None for row in rows):
         usable = None
-        intervals = ()
-
-    intervals = tuple(CorrectedForecastInterval(**row.model_dump(),
-        corrected_forecast_power_w=row.forecast_power_w * ratio if row.forecast_power_w is not None and ratio is not None else None,
-        corrected_forecast_energy_kwh=row.forecast_energy_kwh * ratio if row.forecast_energy_kwh is not None and ratio is not None else None,
-    ) for row in intervals)
+        rows = ()
 
     def total(start: float, end: float) -> EnergyForecast:
-        parts = tuple((row.forecast_power_w, min(row.end, end) - max(row.start, start))
-                      for row in intervals if row.forecast_power_w is not None and row.end > start and row.start < end)
+        overlap_start, overlap_end = max(start, boundaries[0]), min(end, boundaries[-1])
+        parts = tuple((row.forecast_power_w, min(row.end, overlap_end) - max(row.start, overlap_start))
+                      for row in rows if row.forecast_power_w is not None and row.end > overlap_start and row.start < overlap_end)
         covered_seconds = sum(seconds for _, seconds in parts)
         complete = abs(covered_seconds - (end - start)) < 1e-6
         energy = sum(power * seconds for power, seconds in parts) / 3_600_000 if complete else None
@@ -178,24 +168,39 @@ def forecast_view(batch: ForecastBatch | None, site: HALocation | ForecastPrereq
             quality='complete' if complete else 'partial' if covered_seconds else 'unavailable',
         )
 
-    days = []
-    for offset, (start, end) in enumerate(zip(boundaries, boundaries[1:])):
-        samples = {sample.at: sample for sample in usable.weather_samples if start <= sample.at < end} if usable else {}
-        expected = tuple(range(ceil(start / 3600) * 3600, ceil(end / 3600) * 3600, 3600))
-        temperatures = tuple(samples[at].air_temperature_c for at in expected
-                             if at in samples and samples[at].air_temperature_c is not None)
-        codes = tuple(samples[at].weather_code for at in expected
-                      if at in samples and samples[at].weather_code is not None)
-        weather = DailyWeather(
-            weather_code=max(codes) if len(codes) == len(expected) else None,
-            air_temperature_min_c=min(temperatures) if len(temperatures) == len(expected) else None,
-            air_temperature_max_c=max(temperatures) if len(temperatures) == len(expected) else None,
-            quality='complete' if len(codes) == len(temperatures) == len(expected) else
-            'partial' if codes or temperatures else 'unavailable',
-        ) if samples else None
-        days.append(ForecastDay(day=(today + timedelta(days=offset)).isoformat(), weather=weather,
-                                **total(start, end).model_dump()))
+    today = total(boundaries[0], boundaries[1])
+    tomorrow = total(boundaries[1], boundaries[2])
     seven_days = total(boundaries[0], boundaries[-1])
+    days = []
+    intervals = []
+    if include_details:
+        day_totals = (today, tomorrow, *(total(start, end) for start, end in zip(boundaries[2:], boundaries[3:])))
+        for offset, day_total in enumerate(day_totals):
+            start, end = day_total.start, day_total.end
+            samples = {sample.at: sample for sample in usable.weather_samples if start <= sample.at < end} if usable else {}
+            expected = tuple(range(ceil(start / 3600) * 3600, ceil(end / 3600) * 3600, 3600))
+            temperatures = tuple(samples[at].air_temperature_c for at in expected
+                                 if at in samples and samples[at].air_temperature_c is not None)
+            codes = tuple(samples[at].weather_code for at in expected
+                          if at in samples and samples[at].weather_code is not None)
+            weather = DailyWeather(
+                weather_code=max(codes) if len(codes) == len(expected) else None,
+                air_temperature_min_c=min(temperatures) if len(temperatures) == len(expected) else None,
+                air_temperature_max_c=max(temperatures) if len(temperatures) == len(expected) else None,
+                quality='complete' if len(codes) == len(temperatures) == len(expected) else
+                'partial' if codes or temperatures else 'unavailable',
+            ) if samples else None
+            days.append(ForecastDay(day=(local_today + timedelta(days=offset)).isoformat(), weather=weather,
+                                    **day_total.model_dump()))
+        for row in rows:
+            start, end = max(row.start, boundaries[0]), min(row.end, boundaries[-1])
+            power = row.forecast_power_w
+            energy = power * (end - start) / 3_600_000 if power is not None else None
+            intervals.append(CorrectedForecastInterval(
+                **(row.model_dump() | {'start': start, 'end': end, 'forecast_energy_kwh': energy}),
+                corrected_forecast_power_w=power * ratio if power is not None and ratio is not None else None,
+                corrected_forecast_energy_kwh=energy * ratio if energy is not None and ratio is not None else None,
+            ))
     if usable is None:
         status = 'unavailable' if last_error else 'loading'
     elif last_error or now - usable.fetched_at >= 7200:
@@ -205,10 +210,9 @@ def forecast_view(batch: ForecastBatch | None, site: HALocation | ForecastPrereq
     return ForecastView(
         status=status, refreshing=refreshing, fetched_at=usable.fetched_at if usable else None,
         calculated_at=now, last_error=last_error, home_timezone=site.home_timezone,
-        today=EnergyForecast(**days[0].model_dump(exclude={'day', 'weather'})),
+        today=today,
         remaining_today=total(now, boundaries[1]),
-        tomorrow=EnergyForecast(**days[1].model_dump(exclude={'day', 'weather'})),
-        seven_days=seven_days, days=tuple(days), intervals=intervals, correction=correction,
+        tomorrow=tomorrow, seven_days=seven_days, days=tuple(days), intervals=tuple(intervals), correction=correction,
         geometry=ForecastGeometry(tilt_deg=usable.inputs.tilt_deg, azimuth_deg=usable.inputs.azimuth_deg,
                                   read_at=usable.angles_read_at) if usable and usable.angles_read_at is not None else None,
         unavailable_angles=unavailable_angles,
