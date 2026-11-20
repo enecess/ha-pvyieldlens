@@ -16,9 +16,9 @@ Die Ertragsprognose umfasst heute und die nächsten sechs Tage und weist die noc
 
 Die App benötigt Home Assistant 2025.9.0 oder neuer.
 
-[![PVYieldLens-App-Repository hinzufügen](https://my.home-assistant.io/badges/supervisor_add_addon_repository.svg)](https://my.home-assistant.io/redirect/supervisor_add_addon_repository/?repository_url=https%3A%2F%2Fgithub.com%2Fenecess%2Fha-pvyieldlens%23dev_v0)
+[![PVYieldLens-App-Repository hinzufügen](https://my.home-assistant.io/badges/supervisor_add_addon_repository.svg)](https://my.home-assistant.io/redirect/supervisor_add_addon_repository/?repository_url=https%3A%2F%2Fgithub.com%2Fenecess%2Fha-pvyieldlens)
 
-1. Klicken Sie oben auf die Schaltfläche und bestätigen Sie **Hinzufügen** in Home Assistant. Zum manuellen Hinzufügen öffnen Sie **Einstellungen > Apps > App installieren > ⋮ > Repositorys** und geben `https://github.com/enecess/ha-pvyieldlens#dev_v0` ein.
+1. Klicken Sie oben auf die Schaltfläche und bestätigen Sie **Hinzufügen** in Home Assistant. Zum manuellen Hinzufügen öffnen Sie **Einstellungen > Apps > App installieren > ⋮ > Repositorys** und geben `https://github.com/enecess/ha-pvyieldlens` ein.
 2. Suchen Sie **PVYieldLens** im **App-Store** und wählen Sie **Installieren**.
 3. Wählen Sie **Starten** und dann **Benutzeroberfläche öffnen**.
 

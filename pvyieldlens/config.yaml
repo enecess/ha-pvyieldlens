@@ -1,5 +1,5 @@
 name: PVYieldLens
-version: "0.1.0-beta.1"
+version: "0.1.0"
 image: ghcr.io/enecess/pvyieldlens
 slug: pvyieldlens
 description: Compare estimated and actual PV power
@@ -10,7 +10,7 @@ arch:
 startup: application
 boot: auto
 init: true
-stage: experimental
+stage: stable
 homeassistant_api: true
 homeassistant: "2025.9.0"
 backup: cold

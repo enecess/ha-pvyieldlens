@@ -16,9 +16,9 @@ PVYieldLens 是一款用于在 Home Assistant 中监测光伏发电的应用。�
 
 本应用要求 Home Assistant 2025.9.0 或更新版本。
 
-[![添加 PVYieldLens 应用仓库](https://my.home-assistant.io/badges/supervisor_add_addon_repository.svg)](https://my.home-assistant.io/redirect/supervisor_add_addon_repository/?repository_url=https%3A%2F%2Fgithub.com%2Fenecess%2Fha-pvyieldlens%23dev_v0)
+[![添加 PVYieldLens 应用仓库](https://my.home-assistant.io/badges/supervisor_add_addon_repository.svg)](https://my.home-assistant.io/redirect/supervisor_add_addon_repository/?repository_url=https%3A%2F%2Fgithub.com%2Fenecess%2Fha-pvyieldlens)
 
-1. 点击上方按钮，在 Home Assistant 中确认**添加**。如需手动添加仓库，打开**设置 > 应用 > 安装应用 > ⋮ > 仓库**，输入 `https://github.com/enecess/ha-pvyieldlens#dev_v0`。
+1. 点击上方按钮，在 Home Assistant 中确认**添加**。如需手动添加仓库，打开**设置 > 应用 > 安装应用 > ⋮ > 仓库**，输入 `https://github.com/enecess/ha-pvyieldlens`。
 2. 在**应用商店**找到 **PVYieldLens**，点击**安装**。
 3. 点击**启动**，然后选择**打开网页界面**。
 

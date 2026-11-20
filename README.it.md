@@ -16,9 +16,9 @@ La previsione copre oggi e i prossimi sei giorni e indica quanta energia è anco
 
 L’app richiede Home Assistant 2025.9.0 o una versione successiva.
 
-[![Aggiungi il repository di app PVYieldLens](https://my.home-assistant.io/badges/supervisor_add_addon_repository.svg)](https://my.home-assistant.io/redirect/supervisor_add_addon_repository/?repository_url=https%3A%2F%2Fgithub.com%2Fenecess%2Fha-pvyieldlens%23dev_v0)
+[![Aggiungi il repository di app PVYieldLens](https://my.home-assistant.io/badges/supervisor_add_addon_repository.svg)](https://my.home-assistant.io/redirect/supervisor_add_addon_repository/?repository_url=https%3A%2F%2Fgithub.com%2Fenecess%2Fha-pvyieldlens)
 
-1. Usa il pulsante qui sopra e conferma con **Aggiungi** in Home Assistant. Per aggiungere il repository a mano, apri **Impostazioni > Applicazioni > Installa app > ⋮ > Archivi digitali** e inserisci `https://github.com/enecess/ha-pvyieldlens#dev_v0`.
+1. Usa il pulsante qui sopra e conferma con **Aggiungi** in Home Assistant. Per aggiungere il repository a mano, apri **Impostazioni > Applicazioni > Installa app > ⋮ > Archivi digitali** e inserisci `https://github.com/enecess/ha-pvyieldlens`.
 2. Cerca **PVYieldLens** nella **Raccolta delle app** e seleziona **Installa**.
 3. Seleziona **Avvia**, poi **Apri interfaccia utente Web**.
 

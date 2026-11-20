@@ -16,9 +16,9 @@ Prognoza produkcji obejmuje dzisiaj i kolejnych sześć dni. Osobno pokazuje, il
 
 Aplikacja wymaga Home Assistant 2025.9.0 lub nowszego.
 
-[![Dodaj repozytorium aplikacji PVYieldLens](https://my.home-assistant.io/badges/supervisor_add_addon_repository.svg)](https://my.home-assistant.io/redirect/supervisor_add_addon_repository/?repository_url=https%3A%2F%2Fgithub.com%2Fenecess%2Fha-pvyieldlens%23dev_v0)
+[![Dodaj repozytorium aplikacji PVYieldLens](https://my.home-assistant.io/badges/supervisor_add_addon_repository.svg)](https://my.home-assistant.io/redirect/supervisor_add_addon_repository/?repository_url=https%3A%2F%2Fgithub.com%2Fenecess%2Fha-pvyieldlens)
 
-1. Użyj przycisku powyżej i potwierdź wybór przyciskiem **Dodaj** w Home Assistant. Aby dodać repozytorium ręcznie, otwórz **Ustawienia > Aplikacje > Zainstaluj aplikację > ⋮ > Repozytoria** i wpisz `https://github.com/enecess/ha-pvyieldlens#dev_v0`.
+1. Użyj przycisku powyżej i potwierdź wybór przyciskiem **Dodaj** w Home Assistant. Aby dodać repozytorium ręcznie, otwórz **Ustawienia > Aplikacje > Zainstaluj aplikację > ⋮ > Repozytoria** i wpisz `https://github.com/enecess/ha-pvyieldlens`.
 2. Znajdź **PVYieldLens** na stronie **Sklep z aplikacjami** i wybierz **Zainstaluj**.
 3. Wybierz **Uruchom**, a następnie **Otwórz interfejs użytkownika**.
 
